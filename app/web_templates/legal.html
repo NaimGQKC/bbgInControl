@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block body %}
+<div class="wrap" style="max-width:760px">
+<p><a href="/">← Sparrow AI</a></p>
+{% if page == "privacidad" %}
+<h1>Política de privacidad</h1>
+<p class="muted">Última actualización: septiembre de 2026. Borrador pendiente de revisión legal.</p>
+<h2>Quiénes somos</h2>
+<p>Sparrow AI (en adelante, "Sparrow") ofrece a agentes inmobiliarios un asistente que escribe por WhatsApp a sus contactos y agenda citas en su Google Calendar. Contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+<h2>Qué datos tratamos</h2>
+<ul>
+<li><b>Del agente (nuestro cliente):</b> nombre, inmobiliaria, zonas, email, teléfono, y los permisos que concede sobre su WhatsApp Business (Meta) y su Google Calendar.</li>
+<li><b>De los contactos del agente:</b> nombre, teléfono, datos del inmueble, mensajes de WhatsApp intercambiados y la cita agendada.</li>
+<li><b>Del calendario:</b> solo la disponibilidad (libre/ocupado) y los eventos que crea Sparrow.</li>
+</ul>
+<h2>Para qué</h2>
+<p>Para prestar el servicio: enviar y responder mensajes en nombre del agente, proponer huecos libres, crear la cita, enviar recordatorios y avisar al agente cuando un contacto le necesita. No vendemos datos ni los usamos para publicidad.</p>
+<h2>Papel de cada parte</h2>
+<p>El agente es el responsable del tratamiento de los datos de sus contactos y decide a quién se escribe. Sparrow actúa como encargado del tratamiento siguiendo sus instrucciones.</p>
+<h2>Con quién se comparten</h2>
+<p>Proveedores necesarios para el servicio: Meta (WhatsApp Business Platform), Google (Calendar), Microsoft Azure OpenAI (modelo de IA que redacta las respuestas), y nuestro proveedor de base de datos y alojamiento en la UE.</p>
+<h2>Datos de Google</h2>
+<p>El uso de la información recibida de las API de Google se ajusta a la <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos de usuario de los servicios de API de Google</a>, incluidos los requisitos de uso limitado.</p>
+<h2>Conservación y derechos</h2>
+<p>Conservamos los datos mientras el agente use el servicio y hasta 12 meses después, salvo obligación legal. Puedes pedir acceso, rectificación o supresión en <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> o en <a href="/eliminar-datos">Eliminación de datos</a>, y reclamar ante la AEPD.</p>
+<h2>Inteligencia artificial</h2>
+<p>Los mensajes los redacta un asistente virtual, que se identifica como tal al inicio de cada conversación.</p>
+{% elif page == "terminos" %}
+<h1>Términos del servicio</h1>
+<p class="muted">Última actualización: septiembre de 2026. Borrador pendiente de revisión legal.</p>
+<ul>
+<li>Sparrow configura y opera un asistente de WhatsApp para el agente, conectado a su WhatsApp Business, su CRM y su Google Calendar.</li>
+<li>El agente decide qué contactos incluye y es responsable de tener base legal para escribirles. Sparrow no escribe a quien pida no recibir más mensajes.</li>
+<li>Precio del piloto: 30 € por cita agendada (cita aceptada por el contacto y creada en el calendario). No cuenta si el contacto la cancela con más de 24 h de antelación. Las tarifas de mensajes de Meta las paga el agente directamente a Meta.</li>
+<li>El agente puede desconectar el servicio en cualquier momento desde Meta, Google o escribiéndonos.</li>
+<li>Sparrow no garantiza un número de citas y no responde de decisiones comerciales del agente.</li>
+</ul>
+{% else %}
+<h1>Eliminación de datos</h1>
+<p>Para borrar tus datos (o los de tu cuenta de agente) escribe a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> con el asunto "Eliminar datos" e indica tu número de teléfono. Los borramos en un máximo de 30 días y te confirmamos por email.</p>
+<p>Si recibiste un WhatsApp de un asistente de Sparrow, responde <b>BAJA</b> y no volverás a recibir mensajes.</p>
+<p>Para retirar los permisos concedidos: Facebook → Configuración → Integraciones empresariales, y Google → Tu cuenta → Seguridad → Aplicaciones de terceros.</p>
+{% endif %}
+</div>
+{% endblock %}

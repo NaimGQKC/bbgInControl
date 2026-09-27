@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.name or lead.phone }} · Sparrow Ops{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="10">
+<style>
+  .bubble { padding:8px 11px; border-radius:12px; margin:6px 0; max-width:80%; white-space:pre-line; }
+  .in { background:#fff; border:1px solid var(--line); }
+  .out { background:#DCF3DD; margin-left:auto; }
+  .agent { background:#DCE8F7; margin-left:auto; }
+</style>{% endblock %}
+{% block body %}
+<div class="wrap">
+  <p><a href="/admin/accounts/{{ a.id }}">← {{ a.agent_name }}</a></p>
+  <h1>{{ lead.name or lead.phone }} <span class="pill">{{ lead.status }}</span></h1>
+  {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+  <div class="grid">
+    <div class="card" style="grid-column: span 2">
+      <h2>Conversación <span class="small muted">(se refresca cada 10 s)</span></h2>
+      {% for m in msgs %}
+        <div class="bubble {{ 'in' if m.direction == 'in' else ('agent' if m.sender == 'agent' else 'out') }}">
+          <div class="small muted">{{ m.sender }}{% if m.template_name %} · {{ m.template_name }}{% endif %} · {{ m.created_at.strftime('%d/%m %H:%M:%S') }} UTC {% if m.status %}· {{ m.status }}{% endif %}</div>
+          {{ m.text }}{% if m.error %}<div class="small" style="color:var(--bad)">{{ m.error }}</div>{% endif %}
+        </div>
+      {% else %}<p class="muted">Sin mensajes</p>{% endfor %}
+    </div>
+    <div>
+      <div class="card">
+        <h2>Lead</h2>
+        <p class="small">{{ lead.phone }} · {{ lead.source }} {{ lead.source_ref }}<br>{{ lead.property_type }} · {{ lead.zone }} {% if lead.price %}· {{ lead.price|int }} €{% endif %}<br>{{ lead.address }}</p>
+        <p class="small">Datos: {{ lead.facts }}</p>
+        <p class="small">{% if lead.is_test %}<span class="pill">TEST</span> {% endif %}{% if lead.human_owned %}<span class="pill">lo lleva el agente</span> {% endif %}{% if lead.do_not_contact %}<span class="pill bad">no contactar</span>{% endif %}</p>
+        {% if meeting %}<p><span class="pill ok">Cita</span> {{ meeting.start.strftime('%d/%m %H:%M') }} UTC · {{ meeting.type }} · {{ meeting.status }}</p>{% endif %}
+        <form method="post" action="/admin/leads/{{ lead.id }}/action" class="row">
+          <button class="btn secondary" name="action" value="pause_ai">Pausar IA</button>
+          <button class="btn secondary" name="action" value="resume_ai">Reanudar IA</button>
+          <button class="btn secondary" name="action" value="handoff">Handoff</button>
+          <button class="btn secondary" name="action" value="do_not_contact">No contactar</button>
+        </form>
+      </div>
+      <div class="card"><h2>Eventos</h2><table>{% for e in events %}<tr><td class="small">{{ e.at.strftime('%d/%m %H:%M:%S') }}</td><td class="small">{{ e.name }} {{ e.data if e.data else '' }}</td></tr>{% endfor %}</table></div>
+      <div class="card"><h2>Jobs</h2><table>{% for j in jobs %}<tr><td class="small">{{ j.type }}</td><td class="small">{{ j.status }}</td><td class="small">{{ j.run_at.strftime('%d/%m %H:%M:%S') }}</td></tr>{% endfor %}</table></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Últimos turnos de la IA</h2>
+    {% for t in turns %}
+      <details><summary class="small">{{ t.created_at.strftime('%d/%m %H:%M:%S') }} · {{ t.model }} · {{ t.latency_ms }} ms {% if t.error %}· <b style="color:var(--bad)">error</b>{% endif %}</summary>
+      <pre class="small" style="white-space:pre-wrap">{{ t.transcript|tojson(indent=2) }}
+{{ t.error }}</pre></details>
+    {% else %}<p class="muted">Ninguno</p>{% endfor %}
+  </div>
+</div>
+{% endblock %}

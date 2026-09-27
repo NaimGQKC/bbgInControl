@@ -1,0 +1,35 @@
+{
+  "_note": "SYNTHETIC seller leads for development only. Use your own/test phone numbers (Meta test number can only message up to 5 verified numbers). Replace with real leads from pilot agencies.",
+  "leads": [
+    {
+      "source": "lystos",
+      "source_ref": "LYS-TEST-001",
+      "name": "Laura Martínez",
+      "phone": "+34600000001",
+      "property_type": "piso",
+      "zone": "Delicias, Zaragoza",
+      "price": 185000,
+      "listing_url": "https://www.idealista.com/inmueble/000000001/"
+    },
+    {
+      "source": "google_ads",
+      "source_ref": "GADS-TEST-002",
+      "name": "Javier Ruiz",
+      "phone": "+34600000002",
+      "property_type": "piso",
+      "zone": "Actur, Zaragoza",
+      "price": null,
+      "listing_url": null
+    },
+    {
+      "source": "inmovilla",
+      "source_ref": "INMO-TEST-003",
+      "name": "Carmen López",
+      "phone": "+34600000003",
+      "property_type": "casa",
+      "zone": "Cuarte de Huerva",
+      "price": 320000,
+      "listing_url": "https://www.fotocasa.es/es/comprar/vivienda/000000003"
+    }
+  ]
+}

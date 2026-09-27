@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ a.agent_name }} · Sparrow Ops{% endblock %}
+{% block body %}
+<div class="wrap">
+  <p><a href="/admin">← Ops</a></p>
+  <h1>{{ a.agent_name or "(sin nombre)" }} <span class="pill {{ 'ok' if a.status == 'live' else '' }}">{{ a.status }}</span></h1>
+  {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+
+  <div class="grid">
+    <div class="card">
+      <h2>Datos</h2>
+      <p class="small">{{ a.agency }} · {{ a.city }}<br>Zonas: {{ a.zones }}<br>Avisos a: {{ a.personal_whatsapp or "—" }}<br>Email: {{ a.email or "—" }}</p>
+      <p class="small">Onboarding: <a href="/o/{{ a.public_token }}">{{ base_url }}/o/{{ a.public_token }}</a></p>
+      <p class="small">Entrada de leads (POST JSON): <code>{{ base_url }}/intake/{{ a.intake_key }}</code></p>
+      <form method="post" action="/admin/accounts/{{ a.id }}/action" class="row">
+        <button class="btn secondary" name="action" value="go_live">Activar</button>
+        <button class="btn secondary" name="action" value="pause">Pausar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Conexiones</h2>
+      {% for p in ["google", "meta", "lystos"] %}
+        <p>{{ p }}: {% if integ.get(p) %}<span class="pill ok">{{ integ[p].status }}</span> <span class="small muted">{{ integ[p] }}</span>{% else %}<span class="pill bad">no</span>{% endif %}</p>
+      {% endfor %}
+      <form method="post" action="/admin/accounts/{{ a.id }}/action">
+        <button class="btn secondary" name="action" value="link_test_number">Usar el número de prueba de Meta</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>1 · Enviar un mensaje de WhatsApp</h2>
+      <p class="small muted">Para el vídeo de App Review de <code>whatsapp_business_messaging</code>: envía y enseña que llega al móvil.</p>
+      <form method="post" action="/admin/accounts/{{ a.id }}/send" style="display:grid; gap:8px">
+        <input name="to" placeholder="+34 600 000 000" required>
+        <select name="kind"><option value="hello_world">Plantilla hello_world</option><option value="text">Texto libre (solo si te escribieron en 24 h)</option></select>
+        <textarea name="text" rows="2" placeholder="Texto (si eliges texto libre)"></textarea>
+        <button class="btn">Enviar</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>2 · Plantillas de mensajes</h2>
+      <p class="small muted">Para el vídeo de <code>whatsapp_business_management</code>: crea las plantillas desde aquí y enséñalas en WhatsApp Manager.</p>
+      <form method="post" action="/admin/accounts/{{ a.id }}/action"><button class="btn" name="action" value="submit_templates">Crear plantillas en Meta</button></form>
+      {% if tpl_error %}<p class="small" style="color:var(--bad)">{{ tpl_error }}</p>{% endif %}
+      <table style="margin-top:10px">
+        {% for t in tpl_status %}<tr><td>{{ t.name }}</td><td><span class="pill {{ 'ok' if t.status == 'APPROVED' else ('bad' if t.status == 'REJECTED' else '') }}">{{ t.status }}</span></td></tr>{% endfor %}
+      </table>
+      <details class="small"><summary>Textos</summary>{% for t in agent_templates %}<p><b>{{ t.name }}</b> ({{ t.category }})<br>{{ t.body }}</p>{% endfor %}</details>
+    </div>
+
+    <div class="card">
+      <h2>3 · Lead de prueba</h2>
+      <p class="small muted">Simula un lead nuevo de Lystos. Usa un móvil verificado como destinatario de prueba.</p>
+      <form method="post" action="/admin/accounts/{{ a.id }}/test_lead" style="display:grid; gap:8px">
+        <input name="name" placeholder="Nombre" required>
+        <input name="phone" placeholder="+34 600 000 000" required>
+        <input name="zone" placeholder="Zona" value="{{ (a.zones or '').split(',')[0] }}">
+        <input name="property_type" placeholder="Tipo" value="piso">
+        <label class="small"><input type="checkbox" name="test" checked style="width:auto"> Marcar como prueba (funciona aunque la cuenta no esté activa)</label>
+        <button class="btn">Crear lead</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Leads</h2>
+    <table><tr><th>Lead</th><th>Estado</th><th>Flags</th></tr>
+    {% for l in leads %}
+      <tr><td><a href="/admin/leads/{{ l.id }}">{{ l.name or l.phone }}</a> <span class="small muted">{{ l.phone }} · {{ l.source }}</span></td><td><span class="pill">{{ l.status }}</span></td>
+      <td class="small">{% if l.is_test %}TEST {% endif %}{% if l.human_owned %}agente {% endif %}{% if l.do_not_contact %}NO CONTACTAR{% endif %}</td></tr>
+    {% else %}<tr><td class="muted">Ninguno</td></tr>{% endfor %}
+    </table>
+  </div>
+</div>
+{% endblock %}

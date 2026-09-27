@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Ops · Sparrow AI{% endblock %}
+{% block body %}
+<div class="wrap">
+  <h1>Sparrow · Ops</h1>
+  {% if msg %}<div class="flash">{{ msg }}</div>{% endif %}
+
+  <div class="card">
+    <h2>Embudo (todas las cuentas)</h2>
+    <div class="row">{% for n, c in funnel %}<span class="pill">{{ n }}: <b>{{ c }}</b></span>{% endfor %}</div>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Agentes</h2>
+      <table><tr><th>#</th><th>Agente</th><th>Estado</th><th>Onboarding</th></tr>
+      {% for a in accounts %}
+        <tr><td>{{ a.id }}</td><td><a href="/admin/accounts/{{ a.id }}">{{ a.agent_name or "(sin nombre)" }}</a><br><span class="small muted">{{ a.agency }}</span></td>
+        <td><span class="pill {{ 'ok' if a.status == 'live' else ('bad' if a.status == 'paused' else '') }}">{{ a.status }}</span></td>
+        <td class="small">{{ a.onboarding_step }}</td></tr>
+      {% else %}<tr><td colspan="4" class="muted">Ninguno todavía</td></tr>{% endfor %}
+      </table>
+    </div>
+    <div class="card">
+      <h2>Crear agente a mano</h2>
+      <form method="post" action="/admin/accounts" style="display:grid; gap:8px">
+        <input name="agent_name" placeholder="Nombre del agente" required>
+        <input name="agency" placeholder="Inmobiliaria">
+        <input name="zones" placeholder="Zonas (Delicias, Actur)">
+        <input name="personal_whatsapp" placeholder="Móvil personal para avisos">
+        <button class="btn">Crear</button>
+      </form>
+      <p class="small muted">O comparte el onboarding: <a href="/">{{ base_url }}/</a></p>
+      <form method="post" action="/admin/sparrow/templates"><button class="btn secondary">Enviar plantillas del número Sparrow a Meta</button></form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Leads recientes</h2>
+    <table><tr><th>Lead</th><th>Agente</th><th>Estado</th><th>Flags</th><th>Actualizado</th></tr>
+    {% for l in leads %}
+      <tr><td><a href="/admin/leads/{{ l.id }}">{{ l.name or l.phone }}</a> <span class="small muted">{{ l.phone }}</span></td><td>{{ l.account_id }}</td>
+      <td><span class="pill">{{ l.status }}</span></td>
+      <td class="small">{% if l.is_test %}TEST {% endif %}{% if l.human_owned %}agente {% endif %}{% if l.do_not_contact %}NO CONTACTAR{% endif %}</td>
+      <td class="small muted">{{ l.updated_at.strftime('%d/%m %H:%M') }} UTC</td></tr>
+    {% else %}<tr><td colspan="5" class="muted">Ninguno todavía</td></tr>{% endfor %}
+    </table>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Citas</h2>
+      <table>{% for m in meetings %}<tr><td><a href="/admin/leads/{{ m.lead_id }}">lead {{ m.lead_id }}</a></td><td>{{ m.start.strftime('%d/%m %H:%M') }} UTC</td><td>{{ m.type }}</td><td><span class="pill">{{ m.status }}</span>{% if m.is_test %} TEST{% endif %}</td></tr>
+      {% else %}<tr><td class="muted">Ninguna todavía</td></tr>{% endfor %}</table>
+    </div>
+    <div class="card">
+      <h2>Jobs fallidos</h2>
+      <table>{% for j in failed_jobs %}<tr><td>{{ j.type }}</td><td class="small">{{ j.last_error[:160] }}</td></tr>
+      {% else %}<tr><td class="muted">Ninguno 👍</td></tr>{% endfor %}</table>
+    </div>
+  </div>
+</div>
+{% endblock %}

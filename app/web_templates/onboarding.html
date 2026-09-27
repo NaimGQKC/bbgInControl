@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Configura tu asistente · Sparrow AI{% endblock %}
+{% block head %}
+<style>
+  body { background:#EFE7DC; }
+  .chat { max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
+  .top { padding:14px 16px; border-bottom:1px solid var(--line); font-weight:700; display:flex; justify-content:space-between; align-items:center; background:var(--card); position:sticky; top:0; }
+  .msgs { flex:1; padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .b { max-width:86%; padding:10px 13px; border-radius:14px; white-space:pre-line; }
+  .bot { background:var(--card); border:1px solid var(--line); align-self:flex-start; border-bottom-left-radius:4px; }
+  .me { background:#1C2433; color:#F6F2EA; align-self:flex-end; border-bottom-right-radius:4px; }
+  .actions { padding:12px 16px 20px; border-top:1px solid var(--line); background:var(--card); position:sticky; bottom:0; }
+  .actions .row input { flex:1; min-width:0; }
+  .coach { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; align-self:stretch; }
+  .coach ol { margin:6px 0 0; padding-left:20px; } .coach li { margin:4px 0; }
+  .err { color:var(--bad); font-size:14px; margin-top:6px; }
+  .progress { font-size:12px; color:var(--muted); font-weight:400; }
+</style>
+{% endblock %}
+{% block body %}
+<div class="chat">
+  <div class="top"><span>Sparrow AI</span><span class="progress" id="progress"></span></div>
+  <div class="msgs" id="msgs" aria-live="polite"></div>
+  <div class="actions" id="actions"></div>
+</div>
+
+<script>
+const TOKEN = {{ token|tojson }};
+const FAKE = {{ 'true' if fake else 'false' }};
+const META = { appId: {{ meta_app_id|tojson }}, configId: {{ meta_config_id|tojson }}, version: {{ graph_version|tojson }} };
+let state = {{ state_json|safe }};
+const skipped = new Set();
+const params = new URLSearchParams(location.search);
+
+const QUESTIONS = [
+  { f:"agent_name", q:"¡Hola! Soy Sparrow 👋 En unos minutos dejamos listo tu asistente de WhatsApp.\n\n¿Cómo te llamas? (nombre y apellido)", ph:"Laura García" },
+  { f:"agency", q:"¿En qué inmobiliaria trabajas?", ph:"RE/MAX Confort" },
+  { f:"city", q:"¿En qué ciudad?", ph:"Zaragoza", optional:true },
+  { f:"zones", q:"¿En qué zonas o barrios captas? (separados por comas)", ph:"Delicias, Actur, Centro" },
+  { f:"email", q:"¿Tu email? Te llegará ahí el resumen mensual de citas.", ph:"laura@remax.es", optional:true, type:"email" },
+  { f:"extra_context", q:"¿Algo que tu asistente deba saber? (opcional)\nEj.: \"Prefiero visitas por la tarde\" o \"También hago locales\".", ph:"Opcional", optional:true },
+  { f:"personal_whatsapp", q:"Última: ¿a qué móvil te aviso si un cliente te necesita? Solo te escribiremos para eso.", ph:"600 000 000", type:"tel" },
+];
+const STEP_ORDER = ["questions","google","lystos","wa_check","whatsapp","waiting_templates","done"];
+
+const $msgs = document.getElementById("msgs"), $actions = document.getElementById("actions");
+function bubble(text, who="bot") { const d=document.createElement("div"); d.className="b "+who; d.textContent=text; $msgs.appendChild(d); return d; }
+function html(el, h) { const d=document.createElement("div"); d.className=el; d.innerHTML=h; $msgs.appendChild(d); return d; }
+function scroll() { window.scrollTo(0, document.body.scrollHeight); }
+async function api(path, body) {
+  const r = await fetch(`/api/o/${TOKEN}${path}`, { method: body ? "POST":"GET", headers:{"Content-Type":"application/json"}, body: body ? JSON.stringify(body) : undefined });
+  const data = await r.json().catch(() => ({ ok:false, error:"Error de conexión" }));
+  if (data.step) state = data;
+  return data;
+}
+function inputRow({ ph="", type="text", button="Enviar", onSubmit, optional=false }) {
+  $actions.innerHTML = `<form class="row" id="f"><input id="i" type="${type}" placeholder="${ph}" autocomplete="on" ${optional?"":"required"}>
+    <button class="btn" type="submit">${button}</button>${optional?'<button class="btn secondary" type="button" id="skip">Saltar</button>':""}</form><div class="err" id="err"></div>`;
+  const i = document.getElementById("i"); i.focus();
+  document.getElementById("f").onsubmit = async (e) => { e.preventDefault(); await onSubmit(i.value.trim(), false); };
+  if (optional) document.getElementById("skip").onclick = () => onSubmit("", true);
+}
+function buttons(list) {
+  $actions.innerHTML = `<div class="row">${list.map((b,k)=>`<button class="btn ${b.secondary?"secondary":""}" data-k="${k}">${b.label}</button>`).join("")}</div><div class="err" id="err"></div>`;
+  $actions.querySelectorAll("button").forEach(el => el.onclick = () => list[+el.dataset.k].onClick(el));
+}
+function err(t) { const e=document.getElementById("err"); if (e) e.textContent=t||""; }
+
+function render() {
+  $msgs.innerHTML = ""; $actions.innerHTML = "";
+  const stepIdx = STEP_ORDER.indexOf(state.step);
+  document.getElementById("progress").textContent = `Paso ${Math.min(stepIdx+1,6)} de 6`;
+  const a = state.answers;
+  // Questions (history + current)
+  for (const q of QUESTIONS) {
+    const v = a[q.f];
+    if (v) { bubble(q.q); bubble(v, "me"); continue; }
+    if (state.step === "questions" && !(q.optional && skipped.has(q.f))) {
+      bubble(q.q);
+      inputRow({ ph:q.ph, type:q.type||"text", optional:q.optional, onSubmit: async (val, skip) => {
+        if (skip) { skipped.add(q.f); render(); return; }
+        if (!val) return;
+        const r = await api("/answers", { [q.f]: val });
+        if (r.ok === false) return err(r.error);
+        render();
+      }});
+      return scroll();
+    }
+    if (state.step === "questions" && q.optional) continue;
+  }
+  if (state.step === "questions") { // only optional ones left
+    api("/answers", {}).then(render); return;
+  }
+
+  // Google
+  bubble("Perfecto. Primero, tu Google Calendar: de ahí saco tus huecos libres y ahí aparecerán las citas, con todos los datos del cliente.");
+  if (state.integrations.google) bubble("✅ Calendario conectado", "me");
+  else if (state.step === "google") {
+    if (params.get("google") === "denied") bubble("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
+    buttons([{ label:"Conectar Google Calendar", onClick: () => location.href = `/oauth/google/start?t=${TOKEN}` }]);
+    return scroll();
+  }
+
+  // Lystos
+  bubble("Ahora Lystos, de donde llegan tus leads. Lo conectamos juntos en la llamada de configuración.\nSi ya tienes tu clave API de Lystos, pégala aquí.");
+  if (stepIdx > STEP_ORDER.indexOf("lystos")) bubble(state.integrations.lystos && state.integrations.lystos.status === "active" ? "✅ Clave de Lystos guardada" : "Lo vemos en la llamada", "me");
+  else {
+    inputRow({ ph:"Clave API (opcional)", button:"Continuar", optional:true, onSubmit: async (val) => { await api("/step", { done:"lystos", lystos_key: val }); render(); } });
+    return scroll();
+  }
+
+  // WhatsApp Business check
+  bubble("Tu asistente escribe desde tu propio número de WhatsApp. Tus chats y tu app siguen igual.\n\n¿Usas WhatsApp Business? (el icono verde con una B)");
+  if (stepIdx > STEP_ORDER.indexOf("wa_check")) bubble("Sí, uso WhatsApp Business", "me");
+  else {
+    buttons([
+      { label:"Sí, tiene la B", onClick: async () => { await api("/step", { done:"wa_check" }); render(); } },
+      { label:"No / no lo sé", secondary:true, onClick: () => {
+          bubble("No / no lo sé", "me");
+          bubble("Sin problema, son 2 minutos:\n1. Descarga \"WhatsApp Business\" en tu móvil.\n2. Ábrelo y elige tu mismo número. Tus chats se pasan solos.\n3. Vuelve aquí.");
+          buttons([{ label:"Ya lo tengo", onClick: async () => { await api("/step", { done:"wa_check" }); render(); } }]);
+          scroll();
+      }},
+    ]);
+    return scroll();
+  }
+
+  // Meta Embedded Signup
+  bubble("Último paso: conectar tu WhatsApp. Se abrirá una ventana de Meta (Facebook) encima de esta página. Tenlo a mano: tu móvil con WhatsApp Business y una tarjeta (WhatsApp cobra céntimos por conversación).");
+  if (stepIdx > STEP_ORDER.indexOf("whatsapp")) bubble("✅ WhatsApp conectado", "me");
+  else {
+    html("coach", `<b>Qué vas a ver:</b><ol>
+      <li>Inicia sesión en Facebook y pulsa <b>Continuar</b>.</li>
+      <li>Tus datos de empresa ya están rellenados: revisa y pulsa <b>Siguiente</b>.</li>
+      <li>Elige <b>conectar tu app de WhatsApp Business</b> y escribe tu número.</li>
+      <li>En tu móvil: WhatsApp Business → Ajustes → Dispositivos vinculados → <b>escanea el código QR</b>.</li>
+      <li>Añade tu tarjeta y pulsa <b>Finalizar</b>.</li></ol>`);
+    if (!FAKE) loadFB();  // load the SDK now so the popup opens straight from the click (no popup blocker)
+    buttons([{ label:"Conectar WhatsApp", onClick: (el) => launchSignup(el) }]);
+    return scroll();
+  }
+
+  // Waiting / done
+  if (state.status !== "live") {
+    bubble("Tu asistente se activará solo en cuanto WhatsApp apruebe tus mensajes (suele tardar unas horas). No tienes que hacer nada: te avisamos.");
+    return scroll();
+  }
+  bubble("Listo 🎉 Tu asistente ya está activo.\n\nNo tienes que volver aquí: cada nuevo lead de Lystos recibirá un WhatsApp en 30 segundos, y las citas aparecerán en tu Google Calendar.");
+  bubble("¿Quieres verlo en acción? Escribe el móvil de un amigo o compañero (no el tuyo: es el que envía).");
+  inputRow({ ph:"600 000 000", type:"tel", button:"Enviar prueba", optional:true, onSubmit: async (val, skip) => {
+    if (skip || !val) { $actions.innerHTML = ""; return; }
+    const r = await api("/test", { phone: val });
+    if (r.ok === false) return err(r.error);
+    bubble(val, "me"); bubble("Enviado. En unos segundos le llegará el primer mensaje. La cita de prueba saldrá en tu calendario marcada como TEST.");
+    $actions.innerHTML = ""; scroll();
+  }});
+  scroll();
+}
+
+// ---- Meta Embedded Signup (WhatsApp Business app onboarding = Coexistence) ----
+let signup = {};
+window.addEventListener("message", (event) => {
+  if (!event.origin.endsWith("facebook.com")) return;
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type !== "WA_EMBEDDED_SIGNUP") return;
+    if (data.event && data.event.startsWith("FINISH")) signup = { waba_id: data.data.waba_id, phone_number_id: data.data.phone_number_id };
+    else api("/meta_event", { event: data.event, current_step: data.data && data.data.current_step });
+  } catch (e) {}
+});
+function loadFB() {
+  if (fbPromise) return fbPromise;
+  return fbPromise = new Promise((resolve) => {
+    if (window.FB) return resolve();
+    window.fbAsyncInit = () => { FB.init({ appId: META.appId, autoLogAppEvents: true, xfbml: false, version: META.version }); fbReady = true; resolve(); };
+    const s = document.createElement("script"); s.src = "https://connect.facebook.net/es_ES/sdk.js"; s.async = true; s.crossOrigin = "anonymous";
+    document.body.appendChild(s);
+  });
+}
+async function finishSignup(code) {
+  bubble("Conectando…", "me"); scroll();
+  const r = await api("/meta", { code, waba_id: signup.waba_id, phone_number_id: signup.phone_number_id });
+  if (r.ok === false) { bubble(r.error || "Algo falló. Vuelve a intentarlo."); buttons([{ label:"Reintentar", onClick: (el) => launchSignup(el) }]); return scroll(); }
+  render();
+}
+let fbPromise = null, fbReady = false;
+function launchSignup(el) {
+  if (FAKE) { el.disabled = true; signup = { waba_id:"fake-waba", phone_number_id:"fake-phone-" + TOKEN.slice(0,6) }; return finishSignup("fake-code"); }
+  if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
+  el.disabled = true;
+  const a = state.answers;
+  const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
+  FB.login((response) => {
+    el.disabled = false;
+    if (response.authResponse && response.authResponse.code) {
+      const code = response.authResponse.code;  // expires in ~30s: send it right away
+      // Coexistence only returns waba_id (the server looks up the phone number)
+      const wait = (n) => signup.waba_id ? finishSignup(code) : (n > 0 ? setTimeout(() => wait(n-1), 300) : finishSignup(code));
+      wait(20);
+    } else {
+      bubble("La ventana se cerró antes de terminar. Puedes volver a intentarlo cuando quieras."); scroll();
+    }
+  }, {
+    config_id: META.configId,
+    response_type: "code",
+    override_default_response_type: true,
+    extras: {
+      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined,
+               phone: digits ? { code: 34, number: digits.replace(/^34/, "") } : undefined } },
+      featureType: "whatsapp_business_app_onboarding",
+      sessionInfoVersion: "3",
+    },
+  });
+}
+
+render();
+</script>
+{% endblock %}
