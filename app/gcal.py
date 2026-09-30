@@ -25,6 +25,8 @@ def redirect_uri() -> str:
 
 def auth_url(state: str) -> str:
     s = get_settings()
+    if s.calendar_mode == "fake":  # demo / preview: "Google" approves instantly
+        return redirect_uri() + "?" + urlencode({"state": state, "code": "fake-code"})
     q = {
         "client_id": s.google_client_id,
         "redirect_uri": redirect_uri(),
@@ -40,6 +42,8 @@ def auth_url(state: str) -> str:
 
 def exchange_code(code: str) -> dict:
     s = get_settings()
+    if s.calendar_mode == "fake":
+        return {"access_token": "fake", "refresh_token": "fake", "expires_in": 3600, "scope": ""}
     r = httpx.post(
         "https://oauth2.googleapis.com/token",
         data={

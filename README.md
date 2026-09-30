@@ -20,7 +20,7 @@ Design: `sparrow-ai-design.md` (in the Claude project). Rules for Claude Code: `
 | `app/web.py` + `web_templates/onboarding.html` | The one-chat onboarding with a named, openly-AI guide (Google → 2 questions → optional €90 payment → WhatsApp Embedded Signup with Coexistence) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |
 | `app/jobs.py` | Job queue in Postgres (the worker runs inside the web process) |
-| `tests/` | 42 tests covering guardrails G1–G14 and the full flow |
+| `tests/` | 43 tests covering guardrails G1–G14 and the full flow |
 
 ## Run locally (5 min, no accounts needed)
 

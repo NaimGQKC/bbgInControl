@@ -446,6 +446,17 @@ def test_onboarding_flow_goes_live(clock):
     assert "ya está activo" in [m for m in sent("+34611111111") if m["from"] == "sparrow"][-1]["text"]  # they hear it from us, not by checking
 
 
+def test_google_step_completes_in_fake_mode(clock):  # the demo/preview must be usable end to end
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        r = c.get(f"/oauth/google/start?t={token}", follow_redirects=True)
+        assert r.url.path == f"/o/{token}" and r.url.params.get("google") == "ok"
+        st = c.get(f"/api/o/{token}").json()
+        assert st["integrations"]["google"]["status"] == "active" and st["step"] == "questions"
+
+
 def test_calendar_check_reports_a_missing_permission(clock, monkeypatch):
     from app import web
     from app.gcal import CalendarError
