@@ -241,6 +241,16 @@ def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:0
     return next_allowed_time(account, to_utc_naive(datetime.combine(d, parse_hm(hhmm), tzinfo=tz)))
 
 
+def first_contact_values(account: Account, lead_name: str, zone: str) -> list[str]:
+    return [
+        first_name(lead_name) or "buenas",
+        account.agent_name or "tu agente",
+        account.agency or "tu inmobiliaria",
+        zone or (account.zones.split(",")[0].strip() if account.zones else "tu zona"),
+        first_name(account.agent_name) or "el agente",
+    ]
+
+
 @jobs.handler("first_contact")
 def job_first_contact(s, job):
     account, lead = _load(s, job)
@@ -256,15 +266,7 @@ def job_first_contact(s, job):
             lead.status = "skipped"
         log_event(s, "first_contact_blocked", account.id, lead.id, reason=why)
         return
-    agent_first = first_name(account.agent_name)
-    values = [
-        first_name(lead.name) or "buenas",
-        account.agent_name or "tu agente",
-        account.agency or "tu inmobiliaria",
-        lead.zone or (account.zones.split(",")[0].strip() if account.zones else "tu zona"),
-        agent_first or "el agente",
-    ]
-    if send_to_lead(s, account, lead, kind="first", template=T.LEAD_FIRST_CONTACT, values=values):
+    if send_to_lead(s, account, lead, kind="first", template=T.LEAD_FIRST_CONTACT, values=first_contact_values(account, lead.name, lead.zone)):
         lead.status = "contacted"
         lead.introduced = True
         latency = (utcnow() - lead.created_at).total_seconds()

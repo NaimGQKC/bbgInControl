@@ -20,7 +20,7 @@ Design: `sparrow-ai-design.md` (in the Claude project). Rules for Claude Code: `
 | `app/web.py` + `web_templates/onboarding.html` | The one-chat onboarding with a named, openly-AI guide (Google → 2 questions → optional €90 payment → WhatsApp Embedded Signup with Coexistence) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |
 | `app/jobs.py` | Job queue in Postgres (the worker runs inside the web process) |
-| `tests/` | 43 tests covering guardrails G1–G14 and the full flow |
+| `tests/` | 46 tests covering guardrails G1–G14 and the full flow |
 
 ## Run locally (5 min, no accounts needed)
 
@@ -100,7 +100,7 @@ Submit once business verification is approved.
 ## Known gaps / next
 
 - **Payment (optional):** set `STRIPE_PAYMENT_LINK` (a Stripe Payment Link) and `STRIPE_WEBHOOK_SECRET` (webhook → `/webhooks/stripe`, event `checkout.session.completed`). Without the link the payment step is skipped (free pilots). Prices shown in the chat: `INTEGRATION_FEE_EUR` (90) and `MEETING_FEE_EUR` (30).
-- **Help button:** set `OPS_WHATSAPP` to your mobile and submit the Sparrow templates from `/admin`: "Necesito ayuda" then WhatsApps you who is stuck and where. Requests also show at the top of `/admin`.
+- **Help button:** set `OPS_WHATSAPP` to your mobile and submit the Sparrow templates from `/admin`: "Hablar con una persona" (call or message) then WhatsApps you who wants what, and where they are. Requests also show at the top of `/admin`.
 - **Onboarding guide name:** `ASSISTANT_NAME` (default Lucía).
 - **Lystos:** `/intake/{key}?source=lystos` accepts a generic JSON lead (English or Spanish field names). Write the real adapter in `app/intake.py` once we see their API.
 - **Echo handover (J3/J5):** can only be tested end to end with Coexistence (a real agent number after Tech Provider approval).

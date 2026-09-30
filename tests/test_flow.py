@@ -522,6 +522,50 @@ def test_help_button_alerts_the_operator(clock, monkeypatch):
         assert s.execute(select(Event).where(Event.name == "onboarding_help_requested")).first()
 
 
+def test_help_button_can_ask_for_a_call(clock, monkeypatch):
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("OPS_WHATSAPP", "699 000 111")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        c.post(f"/api/o/{token}/help", json={"kind": "call", "phone": "611 222 333", "message": "mañana por la mañana"})
+    assert "QUIERE QUE LE LLAMEN" in sent("+34699000111")[-1]["text"]
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "onboarding_help_requested")).scalar_one().data["kind"] == "call"
+
+
+def test_preferences_reach_the_ai_prompt_without_beating_the_rules(clock):
+    from app.main import app
+    from app.prompt import build_system_prompt
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        _google_connected(token)
+        st = c.post(f"/api/o/{token}/answers", json={"agency": "RE/MAX", "zones": "Delicias", "extra_context": "No agendes los viernes"}).json()
+        assert st["answers"]["extra_context"] == "No agendes los viernes"
+    with db.session_scope() as s:
+        acc = s.execute(select(Account).where(Account.public_token == token)).scalar_one()
+        lead = Lead(account_id=acc.id, phone="+34600000009")
+        prompt = build_system_prompt(acc, lead, must_introduce=True)
+    assert "No agendes los viernes" in prompt and "nunca anulan presentarte como asistente virtual" in prompt
+
+
+def test_onboarding_preview_is_exactly_what_a_lead_receives(clock, account):
+    from app import templates as T
+    from app.main import app
+
+    with db.session_scope() as s:
+        token = s.get(Account, account).public_token
+    with TestClient(app) as c:
+        preview = c.get(f"/api/o/{token}").json()["first_message"]
+    ingest(account, {"name": "Marta Gómez", "phone": "600 000 001", "source": "lystos"})  # no zone: falls back to the agent's first zone
+    clock.advance(seconds=31)
+    run_jobs()
+    assert sent(M)[0]["text"] == preview and "BAJA" in preview
+
+
 def test_old_onboarding_steps_are_put_back_on_track(clock):
     from app import onboarding
 

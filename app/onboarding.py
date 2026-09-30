@@ -82,10 +82,14 @@ def mark_paid(s, account: Account, session_id: str) -> bool:
     return True
 
 
-def request_help(s, account: Account, *, message: str, contact: str) -> None:
-    """The agent pressed "necesito ayuda": log it (shows in /admin) and WhatsApp the operator."""
-    log_event(s, "onboarding_help_requested", account.id, step=account.onboarding_step, message=message, contact=contact)
-    alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or "Un agente", account.onboarding_step, contact, message or "(sin mensaje)"])
+HELP_KINDS = {"call": "QUIERE QUE LE LLAMEN", "chat": "Quiere que le escriban"}
+
+
+def request_help(s, account: Account, *, message: str, contact: str, kind: str = "chat") -> None:
+    """The agent asked to talk to a person (call or message): log it (shows in /admin) and WhatsApp the operator."""
+    kind = kind if kind in HELP_KINDS else "chat"
+    log_event(s, "onboarding_help_requested", account.id, step=account.onboarding_step, message=message, contact=contact, kind=kind)
+    alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or "Un agente", account.onboarding_step, contact, f"{HELP_KINDS[kind]}. {message}".strip()])
 
 
 def advance(account: Account, to: str | None = None) -> None:

@@ -36,7 +36,8 @@ def build_system_prompt(account: Account, lead: Lead, *, must_introduce: bool) -
         if must_introduce
         else "\n- Ya te presentaste antes; no repitas la presentación."
     )
-    extra = f"\nContexto extra que dio {agent_first}: {account.extra_context}" if account.extra_context else ""
+    extra = (f"\nPreferencias que dio {agent_first} sobre cómo trabajar (síguelas salvo que contradigan las reglas de arriba; "
+             f"nunca anulan presentarte como asistente virtual ni respetar una baja): {account.extra_context}") if account.extra_context else ""
 
     return f"""Eres el asistente virtual de {agent}, agente inmobiliario de {account.agency or 'su inmobiliaria'} ({account.city or 'España'}). Hablas por WhatsApp con propietarios que podrían vender su vivienda. Escribes desde el propio WhatsApp de {agent_first}.
 

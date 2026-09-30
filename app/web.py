@@ -10,11 +10,11 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 
-from . import gcal, onboarding
+from . import gcal, onboarding, templates as T
 from .gcal import CalendarError
 from .config import get_settings
 from .db import session_scope
-from .engine import compute_free_slots, ingest_lead, log_event
+from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
 from .guards import normalize_phone
 from .intake import from_lystos, normalize
 from .models import Account
@@ -51,7 +51,10 @@ def _state(s, acc: Account) -> dict:
             "zones": acc.zones,
             "email": acc.email,
             "personal_whatsapp": acc.personal_whatsapp,
+            "extra_context": acc.extra_context,
         },
+        # what a new owner will receive from their number, with a made-up lead name
+        "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, "Marta", "")) if acc.agent_name else "",
         "integrations": integrations,
         "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
                     "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
@@ -109,7 +112,7 @@ async def api_answers(token: str, request: Request):
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
-        for f in ("agent_name", "agency", "zones", "email"):
+        for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
                 setattr(acc, f, str(data[f]).strip()[:500])
         if "personal_whatsapp" in data:
@@ -179,7 +182,7 @@ def api_calendar_check(token: str):
 
 @router.post("/api/o/{token}/help")
 async def api_help(token: str, request: Request):
-    """The "necesito ayuda" button: tells you (the operator) who is stuck, where, and how to reach them."""
+    """Talk to a person: tells you (the operator) who wants a call or a message, where they are stuck, and how to reach them."""
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
@@ -189,7 +192,7 @@ async def api_help(token: str, request: Request):
         contact = phone or acc.personal_whatsapp or acc.email
         if not contact:
             return JSONResponse({"ok": False, "error": "Déjame un móvil para poder escribirte."}, 400)
-        onboarding.request_help(s, acc, message=str(data.get("message") or "").strip()[:300], contact=contact)
+        onboarding.request_help(s, acc, message=str(data.get("message") or "").strip()[:300], contact=contact, kind=str(data.get("kind") or "chat"))
         return {"ok": True, "contact": contact}
 
 
