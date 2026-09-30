@@ -547,3 +547,67 @@ def test_openai_message_translation():
     call = SimpleNamespace(id="c2", function=SimpleNamespace(name="book_slot", arguments='{"slot_id": "x", "meeting_type": "visit"}'))
     res = OpenAIBackend.from_openai(SimpleNamespace(content=None, tool_calls=[call]))
     assert res["stop_reason"] == "tool_use" and res["content"][0]["input"]["slot_id"] == "x"
+
+
+# ------------------------------------------------------------------ cleanup pass: rules that were leaking
+
+def test_admin_manual_send_cannot_reach_a_lead(clock, account):  # G2: leads are only messaged through send_to_lead
+    from app.main import app
+
+    lid = start_conversation(clock, account)
+    engine_out = len(sent(M))
+    with db.session_scope() as s:
+        lead = s.get(Lead, lid)
+        lead.do_not_contact = True
+    with TestClient(app) as c:
+        r = c.post(f"/admin/accounts/{account}/send", data={"to": M, "kind": "text", "text": "hola otra vez"},
+                   auth=("admin", "change-me"), follow_redirects=False)
+        assert "es un lead" in r.headers["location"].replace("%20", " ")
+        c.post(f"/admin/accounts/{account}/send", data={"to": "+34699999999", "kind": "text", "text": "prueba"},
+               auth=("admin", "change-me"), follow_redirects=False)
+    assert len(sent(M)) == engine_out
+    assert sent("+34699999999")[-1]["text"] == "prueba"  # a non-lead number (App Review demo) still works
+
+
+def test_admin_test_lead_checkbox_unchecked_is_a_real_lead(clock, account):
+    from app.main import app
+
+    with TestClient(app) as c:
+        c.post(f"/admin/accounts/{account}/test_lead", data={"name": "Real", "phone": "600222333"},
+               auth=("admin", "change-me"), follow_redirects=False)
+    with db.session_scope() as s:
+        assert s.execute(select(Lead).where(Lead.phone == "+34600222333")).scalar_one().is_test is False
+
+
+def test_reminder_not_logged_as_sent_when_blocked(clock, account):
+    lid, m = _book(clock, account)
+    with db.session_scope() as s:
+        s.get(Account, account).status = "paused"  # G11
+    clock.set(m.start - timedelta(hours=24))
+    n = len(sent(M))
+    run_jobs()
+    assert len(sent(M)) == n
+    with db.session_scope() as s:
+        assert not s.execute(select(Event).where(Event.name == "reminder_24h_sent", Event.lead_id == lid)).first()
+
+
+def test_sparrow_number_chat_is_logged_once(clock, account):  # "log every message", G3
+    start_conversation(clock, account)
+    with db.session_scope() as s:
+        assert engine.handle_sparrow_inbound(s, "34611111111", {"id": "sp1", "text": "hola"}) == "help"
+    with db.session_scope() as s:
+        assert engine.handle_sparrow_inbound(s, "34611111111", {"id": "sp1", "text": "hola"}) == "duplicate"
+    with db.session_scope() as s:
+        rows = s.execute(select(Message).where(Message.lead_id.is_(None), Message.account_id == account)).scalars().all()
+        assert [(r.direction, r.sender) for r in rows] == [("in", "agent"), ("out", "system")]
+    assert len([m for m in sent() if m["from"] == "sparrow"]) == 1
+
+
+def test_intake_ignores_garbage_items(clock, account):
+    from app.main import app
+
+    with db.session_scope() as s:
+        key = s.get(Account, account).intake_key
+    with TestClient(app) as c:
+        r = c.post(f"/intake/{key}", json=["texto suelto", {"nombre": "Ana", "telefono": "600333444"}])
+        assert [x["result"] for x in r.json()["results"]] == ["queued"]

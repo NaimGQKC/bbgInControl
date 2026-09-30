@@ -204,7 +204,9 @@ def google_callback(state: str = "", code: str = "", error: str = ""):
 async def intake(intake_key: str, request: Request, source: str = "webhook"):
     """Push new leads here (Lystos, Zapier, forms). Body: one lead object or a list of them."""
     body = await request.json()
-    items = body if isinstance(body, list) else body.get("leads", [body]) if isinstance(body, dict) else []
+    if isinstance(body, dict):
+        body = body.get("leads", [body])
+    items = [i for i in body if isinstance(i, dict)] if isinstance(body, list) else []
     out = []
     with session_scope() as s:
         acc = s.execute(select(Account).where(Account.intake_key == intake_key)).scalar_one_or_none()

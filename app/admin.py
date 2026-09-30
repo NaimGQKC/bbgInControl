@@ -8,9 +8,9 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
 
-from . import onboarding, templates as T
+from . import jobs as jobmod, onboarding, templates as T
 from .config import get_settings
-from .db import session_scope
+from .db import session_scope, utcnow
 from .engine import agent_wa, do_handoff, ingest_lead, log_event, sparrow_wa
 from .guards import normalize_phone
 from .models import Account, Event, Job, Lead, LlmTurn, Meeting, Message
@@ -73,7 +73,7 @@ def account_page(request: Request, account_id: int, msg: str = ""):
         if "meta" in integ:
             try:
                 tpl_status = agent_wa(s, acc).list_templates()
-            except (WhatsAppError, Exception) as e:
+            except Exception as e:  # the console must still open if Meta is down
                 tpl_error = str(e)
         return jinja.TemplateResponse(request, "admin_account.html", {
             "a": acc, "leads": leads, "integ": integ, "tpl_status": tpl_status, "tpl_error": tpl_error, "msg": msg,
@@ -109,7 +109,7 @@ def account_action(account_id: int, action: str = Form(...)):
 
 @router.post("/accounts/{account_id}/test_lead")
 def test_lead(account_id: int, name: str = Form(...), phone: str = Form(...), zone: str = Form(""), property_type: str = Form("piso"),
-              test: str = Form("on")):
+              test: str = Form("")):  # an unchecked checkbox sends nothing, so "" must mean "not a test"
     with session_scope() as s:
         acc = s.get(Account, account_id)
         lead, result = ingest_lead(s, acc, {"name": name, "phone": phone, "zone": zone, "property_type": property_type, "source": "admin"},
@@ -125,6 +125,9 @@ def send_message(account_id: int, to: str = Form(...), kind: str = Form("hello_w
         phone = normalize_phone(to)
         if not phone:
             return _back(f"/admin/accounts/{account_id}", "Número no válido")
+        if s.execute(select(Lead.id).where(Lead.account_id == acc.id, Lead.phone == phone)).first():
+            # Leads are only ever messaged through send_to_lead (opt-out, hours, window checks)
+            return _back(f"/admin/accounts/{account_id}", "Ese número es un lead: usa el flujo normal, no este envío manual")
         wa = agent_wa(s, acc)
         try:
             if kind == "hello_world":
@@ -177,9 +180,6 @@ def lead_page(request: Request, lead_id: int, msg: str = ""):
 
 @router.post("/leads/{lead_id}/action")
 def lead_action(lead_id: int, action: str = Form(...)):
-    from . import jobs as jobmod
-    from .db import utcnow
-
     with session_scope() as s:
         lead = s.get(Lead, lead_id)
         acc = s.get(Account, lead.account_id)
@@ -201,5 +201,6 @@ def lead_action(lead_id: int, action: str = Form(...)):
             lead.do_not_contact = True
             lead.status = "opted_out"
             jobmod.cancel(s, lead.id, ["ai_turn", "followup", "first_contact", "mark_no_reply", "reminder"])
+            log_event(s, "opted_out", acc.id, lead.id, source="admin")
             return _back(url, "Marcado como no contactar")
         return _back(url)

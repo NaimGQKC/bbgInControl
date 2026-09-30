@@ -2,12 +2,14 @@
 import itertools
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from .config import get_settings
 from .crypto import decrypt, encrypt
 from .db import utcnow
+from .models import Integration
 
 SCOPES = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy"
 API = "https://www.googleapis.com/calendar/v3"
@@ -78,8 +80,6 @@ def _iso(dt_utc: datetime) -> str:
 def _parse(s: str) -> datetime:
     dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     if dt.tzinfo:
-        from zoneinfo import ZoneInfo
-
         dt = dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     return dt
 
@@ -182,8 +182,6 @@ class FakeCalendar(CalendarClient):
 
 def calendar_for_account(session, account) -> CalendarClient:
     """Returns a ready client, refreshing the access token when needed."""
-    from .models import Integration
-
     if get_settings().calendar_mode == "fake":
         return FakeCalendar()
     integ = session.query(Integration).filter_by(account_id=account.id, provider="google").one_or_none()

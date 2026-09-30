@@ -1,14 +1,12 @@
 """System prompt for the seller conversation (design doc J4, J4b, 7.2)."""
 from .db import utcnow
-from .guards import to_local
+from .guards import DAYS, first_name, to_local
 from .models import Account, Lead
-
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
 def build_system_prompt(account: Account, lead: Lead, *, must_introduce: bool) -> str:
     agent = account.agent_name or "el agente"
-    agent_first = agent.split(" ")[0]
+    agent_first = first_name(agent) or agent
     now = to_local(utcnow(), account.timezone)
     facts = lead.facts or {}
     known = "\n".join(f"- {k}: {v}" for k, v in facts.items()) or "- (nada todavía)"

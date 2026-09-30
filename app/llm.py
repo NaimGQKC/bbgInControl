@@ -1,4 +1,4 @@
-"""Claude tool-use loop (real + fake). The engine gives it tools; code enforces the hard rules inside each tool."""
+"""AI tool-use loop (Azure OpenAI / OpenAI / Claude, plus a scripted fake for tests). The engine gives it tools; code enforces the hard rules inside each tool."""
 import json
 import logging
 from collections import deque

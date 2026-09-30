@@ -3,7 +3,7 @@ import logging
 import re
 import threading
 import time
-from datetime import datetime, time as dtime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
@@ -14,19 +14,22 @@ from .crypto import decrypt
 from .db import utcnow
 from .gcal import CalendarError, calendar_for_account
 from .guards import (
+    DAYS,
     HOT_STAGES,
     NO_AI_TAGS,
     OPT_OUT_WORDS,
     can_contact,
+    first_name,
     next_allowed_time,
     normalize_phone,
+    parse_hm,
     settings_for,
     to_local,
     to_utc_naive,
     window_open,
 )
 from .llm import run_tool_loop
-from .models import Account, Event, Integration, Lead, LlmTurn, Meeting, Message
+from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Message
 from .prompt import build_system_prompt
 from .transcribe import transcribe
 from .whatsapp import FakeWhatsApp, WhatsAppClient, WhatsAppError
@@ -34,15 +37,10 @@ from .whatsapp import FakeWhatsApp, WhatsAppClient, WhatsAppError
 log = logging.getLogger("sparrow.engine")
 _booking_locks: dict[int, threading.Lock] = {}
 
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
 
 
 # ---------------------------------------------------------------- helpers
-
-def first_name(name: str) -> str:
-    return (name or "").strip().split(" ")[0] if name and name.strip() else ""
-
 
 def when_label(dt_utc: datetime, tz: str) -> str:
     d = to_local(dt_utc, tz)
@@ -232,8 +230,7 @@ def _load(s, job) -> tuple[Account, Lead]:
 def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:00") -> datetime:
     tz = ZoneInfo(account.timezone)
     d = to_local(base_utc, account.timezone).date() + timedelta(days=days)
-    h, m = hhmm.split(":")
-    return next_allowed_time(account, to_utc_naive(datetime.combine(d, dtime(int(h), int(m)), tzinfo=tz)))
+    return next_allowed_time(account, to_utc_naive(datetime.combine(d, parse_hm(hhmm), tzinfo=tz)))
 
 
 @jobs.handler("first_contact")
@@ -247,13 +244,14 @@ def job_first_contact(s, job):
         job.run_at = next_allowed_time(account, utcnow())
         return
     if not ok:
-        lead.status = "skipped" if why not in ("account_not_live",) else lead.status
+        if why != "account_not_live":  # a not-yet-live account keeps the lead queued; any other block is final
+            lead.status = "skipped"
         log_event(s, "first_contact_blocked", account.id, lead.id, reason=why)
         return
-    agent_first = first_name(account.agent_name) or account.agent_name
+    agent_first = first_name(account.agent_name)
     values = [
         first_name(lead.name) or "buenas",
-        account.agent_name or agent_first,
+        account.agent_name or "tu agente",
         account.agency or "tu inmobiliaria",
         lead.zone or (account.zones.split(",")[0].strip() if account.zones else "tu zona"),
         agent_first or "el agente",
@@ -338,10 +336,11 @@ def job_reminder(s, job):
     else:
         tpl, values = T.MEETING_REMINDER_2H, [lead_first, agent_first, where, f"{local:%H:%M}"]
     if window_open(lead):
-        send_to_lead(s, account, lead, kind="reminder", text=tpl.render(values))
+        sent = send_to_lead(s, account, lead, kind="reminder", text=tpl.render(values))
     else:
-        send_to_lead(s, account, lead, kind="reminder", template=tpl, values=values)
-    log_event(s, f"reminder_{which}_sent", account.id, lead.id)
+        sent = send_to_lead(s, account, lead, kind="reminder", template=tpl, values=values)
+    if sent:
+        log_event(s, f"reminder_{which}_sent", account.id, lead.id)
 
 
 @jobs.handler("ai_turn:failed")
@@ -418,10 +417,9 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
         log_event(s, "replied", account.id, lead.id)
     jobs.cancel(s, lead.id, ["followup", "mark_no_reply", "first_contact"])
 
-    # Exact STOP/BAJA → opt out in code, no LLM needed
-    if text.strip().lower() in OPT_OUT_WORDS or (
-        text.strip().lower().rstrip(".!") in ("no", "no gracias", "no, gracias") and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name
-    ):
+    # Exact STOP/BAJA → opt out in code, no LLM needed. A plain "no" counts only as the answer to follow-up 2.
+    word = text.strip().lower().rstrip(".!")
+    if word in OPT_OUT_WORDS or (word in ("no", "no gracias", "no, gracias") and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
         opt_out(s, account, lead, source="keyword")
         return "opted_out"
 
@@ -435,8 +433,6 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
 
     # Burst grouping: wait ~30s after the last message, max ~60s after the first one
     st = get_settings()
-    from .models import Job
-
     pending = s.execute(select(Job).where(Job.dedupe_key == f"ai_turn:{lead.id}", Job.status == "pending")).scalar_one_or_none()
     if not pending:
         lead.burst_started_at = now
@@ -489,12 +485,22 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
     account = s.execute(select(Account).where(Account.personal_whatsapp == p)).scalars().first() if p else None
     if not account:
         return "unknown_sender"
+    if _already_have(s, msg.get("id")):
+        return "duplicate"  # G3
     text = (msg.get("text") or "").strip()
+    s.add(Message(account_id=account.id, direction="in", sender="agent", type=msg.get("type", "text"), text=text,
+                  wa_message_id=msg.get("id"), status="received"))
     wa = sparrow_wa()
+
+    def reply(body: str) -> None:
+        if not wa:
+            return
+        wid = wa.send_text(p, body)
+        s.add(Message(account_id=account.id, direction="out", sender="system", type="text", text=body, wa_message_id=wid, status="sent"))
+
     m = re.match(r"^\s*sigue(?:\s+con)?\s+(.+)$", text, re.IGNORECASE)
     if not m:
-        if wa:
-            wa.send_text(p, "Para que tu asistente retome una conversación, escribe: Sigue con <nombre del cliente>")
+        reply("Para que tu asistente retome una conversación, escribe: Sigue con <nombre del cliente>")
         return "help"
     wanted = m.group(1).strip().lower()
     candidates = s.execute(
@@ -502,9 +508,8 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
     ).scalars().all()
     matches = [l for l in candidates if wanted in (l.name or "").lower() or wanted.replace(" ", "") in l.phone]
     if len(matches) != 1:
-        if wa:
-            names = ", ".join(sorted({l.name or l.phone for l in candidates})[:8]) or "ninguna"
-            wa.send_text(p, f"No he encontrado a una sola persona con ese nombre. Conversaciones en pausa: {names}")
+        names = ", ".join(sorted({l.name or l.phone for l in candidates})[:8]) or "ninguna"
+        reply(f"No he encontrado a una sola persona con ese nombre. Conversaciones en pausa: {names}")
         return "ambiguous"
     lead = matches[0]
     lead.human_owned = False
@@ -513,8 +518,7 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
     log_event(s, "ai_resumed", account.id, lead.id)
     jobs.schedule(s, "ai_turn", utcnow(), lead_id=lead.id, account_id=account.id, dedupe_key=f"ai_turn:{lead.id}",
                   reuse=True, replace_run_at=True, payload={"resumed": True})
-    if wa:
-        wa.send_text(p, f"Hecho, sigo yo con {lead.name or lead.phone}.")
+    reply(f"Hecho, sigo yo con {lead.name or lead.phone}.")
     return "resumed"
 
 
@@ -553,11 +557,6 @@ def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: boo
 
 # ---------------------------------------------------------------- slots & booking
 
-def _hm(s: str) -> dtime:
-    h, m = s.split(":")
-    return dtime(int(h), int(m))
-
-
 def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
     cfg = settings_for(account)
     tz = ZoneInfo(account.timezone)
@@ -574,8 +573,8 @@ def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
     for _ in range(cfg["days_ahead"] + 1):
         if day.weekday() in cfg["slot_days"]:
             for w_start, w_end in cfg["slot_windows"]:
-                t = datetime.combine(day, _hm(w_start), tzinfo=tz)
-                end_w = datetime.combine(day, _hm(w_end), tzinfo=tz)
+                t = datetime.combine(day, parse_hm(w_start), tzinfo=tz)
+                end_w = datetime.combine(day, parse_hm(w_end), tzinfo=tz)
                 while t + dur <= end_w:
                     su = to_utc_naive(t)
                     eu = su + dur
@@ -624,6 +623,14 @@ def event_description(account: Account, lead: Lead, meeting_type: str) -> str:
     return "\n".join(lines)
 
 
+def _short_name(lead: Lead) -> str:
+    """'Marta Pérez López' → 'Marta P.' (the lead's privacy in a calendar that may be shared)."""
+    parts = (lead.name or "").split()
+    if not parts:
+        return lead.phone
+    return parts[0] + (f" {parts[1][0]}." if len(parts) > 1 else "")
+
+
 def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, address: str = "") -> dict:
     if slot_id not in (lead.offered_slots or []):
         return {"ok": False, "error": "slot_not_offered", "hint": "Usa un slot_id devuelto por get_free_slots."}  # G12
@@ -649,9 +656,7 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         jobs.cancel(s, lead.id, ["reminder"])  # reminders of an older booking must not fire
         where = lead.address if meeting_type == "visit" else f"Llamada · {lead.phone}"
         prop = " ".join(p for p in [lead.property_type, lead.zone] if p)
-        name = lead.name.strip() if lead.name else lead.phone
-        short = name.split(" ")[0] + (f" {name.split(' ')[1][0]}." if len(name.split(" ")) > 1 and name.split(" ")[1] else "")
-        summary = f"Valoración · {short}" + (f" · {prop}" if prop else "") + (" · TEST" if lead.is_test else "")
+        summary = f"Valoración · {_short_name(lead)}" + (f" · {prop}" if prop else "") + (" · TEST" if lead.is_test else "")
         event_id = cal.create_event(
             summary=summary,
             description=event_description(account, lead, meeting_type),

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+from datetime import timedelta
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -94,8 +95,6 @@ def process_event(event_id: int) -> None:
 
 def sweep_unprocessed() -> int:
     """Worker safety net: events received but never processed (e.g. a deploy right after answering 200)."""
-    from datetime import timedelta
-
     with session_scope() as s:
         ids = [i for (i,) in s.execute(select(WebhookEvent.id).where(
             WebhookEvent.processed_at.is_(None), WebhookEvent.error == "",

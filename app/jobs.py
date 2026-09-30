@@ -129,20 +129,21 @@ def run_job(job_id: int) -> None:
                         log.exception("failure handler crashed")
 
 
-def run_due(limit: int = 10) -> int:
-    if not is_postgres():
-        with _sqlite_lock:
-            ids = _claim(limit)
-            for i in ids:
-                run_job(i)
-            return len(ids)
+def _claim_and_run(limit: int) -> int:
     ids = _claim(limit)
     for i in ids:
         run_job(i)
     return len(ids)
 
 
-def run_until_idle(max_rounds: int = 50, advance_to: datetime | None = None) -> None:
+def run_due(limit: int = 10) -> int:
+    if is_postgres():  # SKIP LOCKED lets several workers share the queue
+        return _claim_and_run(limit)
+    with _sqlite_lock:  # SQLite (dev/tests): one worker at a time
+        return _claim_and_run(limit)
+
+
+def run_until_idle(max_rounds: int = 50) -> None:
     """Tests: run everything that is due now."""
     for _ in range(max_rounds):
         if run_due(50) == 0:

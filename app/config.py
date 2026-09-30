@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-5"
 
-    # Voice notes (optional). If empty, the AI asks the lead to write instead.
+    # OpenAI key: used for the AI when LLM_PROVIDER=openai, and for voice notes (optional: without it the AI asks the lead to write)
     openai_api_key: str = ""
     # ...or Azure OpenAI (covered by Microsoft for Startups credits): a whisper / gpt-4o-transcribe deployment
     azure_openai_endpoint: str = ""  # https://<resource>.openai.azure.com
