@@ -3,13 +3,13 @@ import hashlib
 import hmac
 import json
 import logging
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import select
 
-from . import engine
+from . import engine, onboarding
 from .config import get_settings
 from .db import session_scope, utcnow
 from .models import Account, Event, Integration, WebhookEvent
@@ -51,6 +51,39 @@ async def receive(request: Request, background: BackgroundTasks):
         s.flush()
         ev_id = ev.id
     background.add_task(process_event, ev_id)
+    return {"ok": True}
+
+
+def _valid_stripe_signature(body: bytes, header: str | None) -> bool:
+    secret = get_settings().stripe_webhook_secret
+    if not secret:
+        return get_settings().whatsapp_mode == "fake"  # only skip the check in fake/dev mode
+    pairs = [p.split("=", 1) for p in (header or "").split(",") if "=" in p]
+    try:
+        stamp = int(dict(pairs)["t"])
+    except (KeyError, ValueError):
+        return False
+    if abs(int(utcnow().replace(tzinfo=timezone.utc).timestamp()) - stamp) > 300:
+        return False  # replayed delivery
+    expected = hmac.new(secret.encode(), f"{stamp}.".encode() + body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, v) for k, v in pairs if k == "v1")
+
+
+@router.post("/webhooks/stripe")
+async def stripe_webhook(request: Request):
+    """Stripe tells us the €90 was paid; the agent's onboarding chat then moves on by itself."""
+    body = await request.body()
+    if not _valid_stripe_signature(body, request.headers.get("stripe-signature")):
+        raise HTTPException(401, "bad signature")
+    event = json.loads(body or b"{}")
+    obj = (event.get("data") or {}).get("object") or {}
+    if event.get("type") == "checkout.session.completed" and obj.get("payment_status") == "paid":
+        with session_scope() as s:
+            acc = s.execute(select(Account).where(Account.public_token == obj.get("client_reference_id"))).scalar_one_or_none()
+            if acc:
+                onboarding.mark_paid(s, acc, str(obj.get("id", "")))
+            else:
+                log.warning("stripe payment %s for an unknown onboarding link", obj.get("id"))
     return {"ok": True}
 
 

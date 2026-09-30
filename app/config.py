@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     admin_password: str = "change-me"
     session_secret: str = "change-me-too"
     contact_email: str = ""  # shown on the privacy / data deletion pages
+    assistant_name: str = "Lucía"  # the named (and openly AI) guide agents talk to during onboarding
+    ops_whatsapp: str = ""  # your own mobile: gets a WhatsApp when an agent presses "necesito ayuda"
     # Fernet key used to encrypt per-agent tokens in the DB (python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())")
     encryption_key: str = ""
 
@@ -39,6 +41,12 @@ class Settings(BaseSettings):
     sparrow_waba_id: str = ""
     run_worker_in_web: bool = True  # one web app runs both the web server and the job worker
     template_language: str = "es"
+
+    # Pricing (shown in the onboarding chat) and Stripe. No STRIPE_PAYMENT_LINK = the payment step is skipped (free pilots).
+    integration_fee_eur: int = 90  # one-time, per agent
+    meeting_fee_eur: int = 30  # per booked meeting
+    stripe_payment_link: str = ""  # a Stripe Payment Link (https://buy.stripe.com/...)
+    stripe_webhook_secret: str = ""  # whsec_... of the webhook that sends checkout.session.completed to /webhooks/stripe
 
     # Google Calendar
     google_client_id: str = ""

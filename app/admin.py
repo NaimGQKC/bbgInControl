@@ -46,9 +46,10 @@ def dashboard(request: Request, msg: str = ""):
         counts = Counter(dict(s.execute(select(Event.name, func.count()).group_by(Event.name)).all()))
         meetings = s.execute(select(Meeting).order_by(Meeting.start.desc()).limit(20)).scalars().all()
         failed_jobs = s.execute(select(Job).where(Job.status == "failed").order_by(Job.id.desc()).limit(10)).scalars().all()
+        help_requests = s.execute(select(Event).where(Event.name == "onboarding_help_requested").order_by(Event.id.desc()).limit(10)).scalars().all()
         return jinja.TemplateResponse(request, "admin_dashboard.html", {
             "accounts": accounts, "leads": leads, "funnel": [(n, counts.get(n, 0)) for n in FUNNEL],
-            "meetings": meetings, "failed_jobs": failed_jobs, "msg": msg, "base_url": get_settings().base_url,
+            "meetings": meetings, "failed_jobs": failed_jobs, "help_requests": help_requests, "msg": msg, "base_url": get_settings().base_url,
         })
 
 

@@ -125,12 +125,10 @@ def send_to_lead(s, account: Account, lead: Lead, *, kind: str, text: str | None
     return True
 
 
-def alert_agent(s, account: Account, template: T.Template, values: list[str]) -> None:
-    """Messages to the agent come only from the Sparrow number (design J7)."""
+def _sparrow_template(s, account: Account, to: str | None, template: T.Template, values: list[str]) -> None:
     wa = sparrow_wa()
-    to = normalize_phone(account.personal_whatsapp)
     if not wa or not to:
-        log.warning("cannot alert agent %s (no Sparrow number or no personal WhatsApp): %s", account.id, template.render(values))
+        log.warning("cannot send %s for account %s (no Sparrow number or no recipient): %s", template.name, account.id, template.render(values))
         log_event(s, "alert_not_sent", account.id, template=template.name, text=template.render(values))
         return
     try:
@@ -138,8 +136,18 @@ def alert_agent(s, account: Account, template: T.Template, values: list[str]) ->
         s.add(Message(account_id=account.id, direction="out", sender="system", type="template",
                       text=template.render(values), template_name=template.name, wa_message_id=wid, status="sent"))
     except WhatsAppError as e:
-        log.error("alert to agent failed: %s", e)
-        log_event(s, "alert_failed", account.id, error=str(e))
+        log.error("%s failed: %s", template.name, e)
+        log_event(s, "alert_failed", account.id, template=template.name, error=str(e))
+
+
+def alert_agent(s, account: Account, template: T.Template, values: list[str]) -> None:
+    """Messages to the agent come only from the Sparrow number (design J7)."""
+    _sparrow_template(s, account, normalize_phone(account.personal_whatsapp), template, values)
+
+
+def alert_ops(s, account: Account, template: T.Template, values: list[str]) -> None:
+    """Same, but to the operator (OPS_WHATSAPP): an agent asked for help."""
+    _sparrow_template(s, account, normalize_phone(get_settings().ops_whatsapp), template, values)
 
 
 def _clip(text: str, n: int = 120) -> str:

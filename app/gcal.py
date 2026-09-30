@@ -11,7 +11,7 @@ from .crypto import decrypt, encrypt
 from .db import utcnow
 from .models import Integration
 
-SCOPES = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy"
+SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy"
 API = "https://www.googleapis.com/calendar/v3"
 
 
@@ -54,6 +54,17 @@ def exchange_code(code: str) -> dict:
     if r.status_code >= 400:
         raise CalendarError(r.text)
     return r.json()
+
+
+def userinfo(access_token: str) -> dict:
+    """Name and email of the Google account that just connected ({} if unavailable: onboarding then just asks)."""
+    if get_settings().calendar_mode == "fake":
+        return {"name": "Laura García", "email": "laura@example.com"}
+    try:
+        r = httpx.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        return r.json() if r.status_code == 200 else {}
+    except Exception:
+        return {}
 
 
 def refresh(refresh_token: str) -> dict:

@@ -23,7 +23,7 @@ class Account(Base):
     personal_whatsapp: Mapped[str] = mapped_column(String(32), default="")  # where "needs you" alerts go
     extra_context: Mapped[str] = mapped_column(Text, default="")  # optional free text for the AI
     status: Mapped[str] = mapped_column(String(20), default="onboarding")  # onboarding|live|paused
-    onboarding_step: Mapped[str] = mapped_column(String(40), default="questions")
+    onboarding_step: Mapped[str] = mapped_column(String(40), default="google")
     settings: Mapped[dict] = mapped_column(JSON, default=dict)
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Madrid")
     public_token: Mapped[str] = mapped_column(String(64), default=_token, unique=True)  # onboarding link
@@ -38,7 +38,7 @@ class Integration(Base):
     __table_args__ = (UniqueConstraint("account_id", "provider"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
-    provider: Mapped[str] = mapped_column(String(20))  # meta|google|lystos
+    provider: Mapped[str] = mapped_column(String(20))  # meta|google|lystos|stripe
     external: Mapped[dict] = mapped_column(JSON, default=dict)  # waba_id, phone_number_id, calendar_id...
     token_enc: Mapped[str] = mapped_column(Text, default="")
     refresh_token_enc: Mapped[str] = mapped_column(Text, default="")

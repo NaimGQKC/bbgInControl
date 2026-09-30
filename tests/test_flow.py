@@ -2,7 +2,7 @@
 import hashlib
 import hmac
 import json
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import select
@@ -10,7 +10,7 @@ from sqlalchemy import select
 from app import db, engine
 from app.gcal import FakeCalendar
 from app.llm import FakeBackend
-from app.models import Account, Event, Job, Lead, Meeting, Message
+from app.models import Account, Event, Integration, Job, Lead, Meeting, Message
 from tests.conftest import run_jobs, sent
 
 LEAD = {"name": "Marta Gómez", "phone": "600 000 001", "zone": "Delicias", "property_type": "piso", "source": "lystos"}
@@ -408,29 +408,120 @@ def test_intake_endpoint_spanish_fields(clock, account):
         assert lead.price == 185000 and lead.source == "lystos" and lead.tags == ["vip"]
 
 
+def _new_onboarding(c):
+    return c.post("/start", follow_redirects=False).headers["location"].split("/")[-1]
+
+
+def _google_connected(token):
+    from app import onboarding
+
+    with db.session_scope() as s:
+        acc = s.execute(select(Account).where(Account.public_token == token)).scalar_one()
+        onboarding.save_google(s, acc, {"access_token": "a", "refresh_token": "r", "expires_in": 3600})
+
+
 def test_onboarding_flow_goes_live(clock):
     from app.main import app
 
     with TestClient(app) as c:
-        token = c.post("/start", follow_redirects=False).headers["location"].split("/")[-1]
-        r = c.post(f"/api/o/{token}/answers", json={"agent_name": "Laura García", "agency": "RE/MAX", "zones": "Delicias"})
-        assert r.json()["step"] == "questions"
-        assert c.post(f"/api/o/{token}/answers", json={"personal_whatsapp": "12"}).status_code == 400
-        assert c.post(f"/api/o/{token}/answers", json={"personal_whatsapp": "611 111 111"}).json()["step"] == "google"
-        with db.session_scope() as s:
-            from app import onboarding
-
-            acc = s.execute(select(Account).where(Account.public_token == token)).scalar_one()
-            onboarding.save_google(s, acc, {"access_token": "a", "refresh_token": "r", "expires_in": 3600})
-        assert c.post(f"/api/o/{token}/step", json={"done": "lystos"}).json()["step"] == "wa_check"
+        token = _new_onboarding(c)
+        assert c.get(f"/api/o/{token}").json()["step"] == "google"  # Google first: one click
+        _google_connected(token)
+        st = c.get(f"/api/o/{token}").json()
+        assert st["step"] == "questions" and st["answers"]["agent_name"] == "Laura García"  # read from Google, not asked
+        assert st["payment"]["required"] is False
+        assert c.post(f"/api/o/{token}/calendar_check").json()["ok"] is True
+        r = c.post(f"/api/o/{token}/answers", json={"agency": "RE/MAX", "zones": "Delicias"}).json()
+        assert r["step"] == "wa_check"  # no Stripe link configured: free pilot, payment skipped
         assert c.post(f"/api/o/{token}/step", json={"done": "wa_check"}).json()["step"] == "whatsapp"
         r = c.post(f"/api/o/{token}/meta", json={"code": "c", "waba_id": "w9", "phone_number_id": "pn9"}).json()
         assert r["step"] == "waiting_templates" and len(r["templates"]) == 6
+        assert c.post(f"/api/o/{token}/answers", json={"personal_whatsapp": "12"}).status_code == 400
+        assert c.post(f"/api/o/{token}/answers", json={"personal_whatsapp": "611 111 111"}).json()["ok"]
     clock.advance(minutes=2)
     run_jobs()
     with db.session_scope() as s:
         acc = s.execute(select(Account).where(Account.public_token == token)).scalar_one()
         assert acc.status == "live" and acc.onboarding_step == "done"
+    assert "ya está activo" in [m for m in sent("+34611111111") if m["from"] == "sparrow"][-1]["text"]  # they hear it from us, not by checking
+
+
+def test_calendar_check_reports_a_missing_permission(clock, monkeypatch):
+    from app import web
+    from app.gcal import CalendarError
+    from app.main import app
+
+    def boom(*a, **k):
+        raise CalendarError("insufficient scope")
+
+    monkeypatch.setattr(web, "compute_free_slots", boom)
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/calendar_check").json() == {"ok": False}
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "calendar_check_failed")).first()
+
+
+def _stripe_post(c, secret, payload, *, stamp=None, signed=True):
+    body = json.dumps(payload).encode()
+    t = stamp if stamp is not None else int(db.utcnow().replace(tzinfo=timezone.utc).timestamp())
+    sig = hmac.new(secret.encode(), f"{t}.".encode() + body, hashlib.sha256).hexdigest() if signed else "bad"
+    return c.post("/webhooks/stripe", content=body, headers={"stripe-signature": f"t={t},v1={sig}"})
+
+
+def test_payment_step_and_stripe_webhook(clock, monkeypatch):
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123")
+    monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        _google_connected(token)
+        r = c.post(f"/api/o/{token}/answers", json={"agency": "RE/MAX", "zones": "Delicias"}).json()
+        assert r["step"] == "payment" and r["payment"]["fee"] == 90 and r["payment"]["per_meeting"] == 30
+        assert f"client_reference_id={token}" in r["payment"]["url"]
+        assert c.post(f"/api/o/{token}/step", json={"done": "wa_check"}).json()["step"] == "payment"  # can't skip paying
+        event = {"type": "checkout.session.completed", "data": {"object": {"id": "cs_1", "client_reference_id": token, "payment_status": "paid"}}}
+        assert _stripe_post(c, "whsec_test", event, signed=False).status_code == 401
+        assert _stripe_post(c, "whsec_test", event, stamp=1).status_code == 401  # old delivery = replay
+        assert _stripe_post(c, "whsec_test", event).status_code == 200
+        assert _stripe_post(c, "whsec_test", event).status_code == 200  # Stripe retries: no double effect
+        st = c.get(f"/api/o/{token}").json()
+        assert st["step"] == "wa_check" and st["payment"]["paid"] is True
+    with db.session_scope() as s:
+        assert len(s.execute(select(Event).where(Event.name == "payment_received")).all()) == 1
+
+
+def test_help_button_alerts_the_operator(clock, monkeypatch):
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("OPS_WHATSAPP", "699 000 111")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/help", json={"message": "no veo el QR"}).status_code == 400  # we need a way to reach them
+        r = c.post(f"/api/o/{token}/help", json={"message": "no veo el QR", "phone": "611 222 333"})
+        assert r.json() == {"ok": True, "contact": "+34611222333"}
+    alert = sent("+34699000111")[-1]
+    assert alert["from"] == "sparrow" and "no veo el QR" in alert["text"] and "+34611222333" in alert["text"]
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "onboarding_help_requested")).first()
+
+
+def test_old_onboarding_steps_are_put_back_on_track(clock):
+    from app import onboarding
+
+    with db.session_scope() as s:
+        a, b = Account(onboarding_step="lystos"), Account(onboarding_step="questions")
+        s.add_all([a, b])
+        s.flush()
+        s.add(Integration(account_id=a.id, provider="google", token_enc="x"))
+        onboarding.normalize_step(s, a)
+        onboarding.normalize_step(s, b)
+        assert (a.onboarding_step, b.onboarding_step) == ("wa_check", "google")
 
 
 # ------------------------------------------------------------------ fixes from code review
@@ -519,15 +610,6 @@ def test_reminder_uses_booked_time_if_calendar_fails(clock, account, monkeypatch
     clock.set(m.start - timedelta(hours=24))
     run_jobs()
     assert "mañana a las" in sent(M)[-1]["text"]
-
-
-def test_onboarding_test_requires_live_account(clock):
-    from app.main import app
-
-    with TestClient(app) as c:
-        token = c.post("/start", follow_redirects=False).headers["location"].split("/")[-1]
-        assert c.post(f"/api/o/{token}/test", json={"phone": "600000001"}).status_code == 400
-    assert sent() == []
 
 
 def test_openai_message_translation():
