@@ -4,11 +4,12 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from . import jobs, templates as T
+from . import gcal, jobs, templates as T
 from .config import get_settings
 from .crypto import encrypt
 from .db import utcnow
-from .engine import alert_agent, first_name, log_event
+from .engine import alert_agent, alert_ops, first_name, log_event
+from .guards import normalize_phone
 from .models import Account, Integration
 from .whatsapp import (
     FakeWhatsApp,
@@ -23,8 +24,8 @@ from .whatsapp import (
 
 log = logging.getLogger("sparrow.onboarding")
 
-REQUIRED_ANSWERS = ["agent_name", "agency", "zones", "personal_whatsapp"]
-STEPS = ["questions", "google", "lystos", "wa_check", "whatsapp", "waiting_templates", "done"]
+REQUIRED_ANSWERS = ["agent_name", "agency", "zones"]  # the mobile for alerts comes from Meta (or one extra question after it)
+STEPS = ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"]
 
 
 def upsert_integration(s, account_id: int, provider: str, **fields) -> Integration:
@@ -42,6 +43,53 @@ def upsert_integration(s, account_id: int, provider: str, **fields) -> Integrati
 def integrations_status(s, account: Account) -> dict:
     rows = s.execute(select(Integration).where(Integration.account_id == account.id)).scalars().all()
     return {r.provider: {"status": r.status, **{k: v for k, v in (r.external or {}).items() if k != "token"}} for r in rows}
+
+
+def _connected(integ: dict, provider: str) -> bool:
+    return integ.get(provider, {}).get("status") == "active"
+
+
+def payment_required() -> bool:
+    return bool(get_settings().stripe_payment_link)
+
+
+def after_questions(s, account: Account) -> str:
+    return "payment" if payment_required() and not _connected(integrations_status(s, account), "stripe") else "wa_check"
+
+
+def normalize_step(s, account: Account) -> None:
+    """Puts accounts created by older versions of the flow (or skipped steps) back on the right step."""
+    integ = integrations_status(s, account)
+    step = "payment" if account.onboarding_step == "lystos" else account.onboarding_step
+    if step in ("questions", "payment") and not _connected(integ, "google"):
+        step = "google"
+    if step == "questions" and all(getattr(account, f) for f in REQUIRED_ANSWERS):
+        step = after_questions(s, account)
+    if step == "payment" and not (payment_required() and not _connected(integ, "stripe")):
+        step = "wa_check"
+    account.onboarding_step = step
+
+
+def mark_paid(s, account: Account, session_id: str) -> bool:
+    """Stripe says the integration fee is paid. Idempotent: Stripe retries webhooks."""
+    current = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "stripe")).scalar_one_or_none()
+    if current and current.status == "active":
+        return False
+    upsert_integration(s, account.id, "stripe", external={"session_id": session_id})
+    log_event(s, "payment_received", account.id, session_id=session_id)
+    if account.onboarding_step == "payment":
+        advance(account, "wa_check")
+    return True
+
+
+HELP_KINDS = {"call": "QUIERE QUE LE LLAMEN", "chat": "Quiere que le escriban"}
+
+
+def request_help(s, account: Account, *, message: str, contact: str, kind: str = "chat") -> None:
+    """The agent asked to talk to a person (call or message): log it (shows in /admin) and WhatsApp the operator."""
+    kind = kind if kind in HELP_KINDS else "chat"
+    log_event(s, "onboarding_help_requested", account.id, step=account.onboarding_step, message=message, contact=contact, kind=kind)
+    alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or "Un agente", account.onboarding_step, contact, f"{HELP_KINDS[kind]}. {message}".strip()])
 
 
 def advance(account: Account, to: str | None = None) -> None:
@@ -63,8 +111,13 @@ def save_google(s, account: Account, token_data: dict) -> None:
         expires_at=utcnow() + timedelta(seconds=int(token_data.get("expires_in", 3600))),
     )
     log_event(s, "google_connected", account.id)
-    if account.onboarding_step in ("questions", "google"):
-        advance(account, "lystos")
+    info = gcal.userinfo(token_data["access_token"])  # we already know who they are: don't ask
+    if not account.agent_name and info.get("name"):
+        account.agent_name = str(info["name"]).strip()[:200]
+    if not account.email and info.get("email"):
+        account.email = str(info["email"]).strip()[:200]
+    if account.onboarding_step == "google":
+        advance(account, "questions")
 
 
 def submit_templates(s, account: Account, wa: WhatsAppClient) -> list[dict]:
@@ -119,6 +172,8 @@ def connect_meta(s, account: Account, *, code: str, waba_id: str, phone_number_i
             pass
     integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one()
     integ.external = {**integ.external, "display_phone_number": info.get("display_phone_number", ""), "verified_name": info.get("verified_name", "")}
+    if not account.personal_whatsapp:  # alerts default to the number they just connected; the chat lets them change it
+        account.personal_whatsapp = normalize_phone(info.get("display_phone_number")) or ""
     account.last_agent_activity_at = utcnow()
     results = submit_templates(s, account, wa)
     advance(account, "waiting_templates")
@@ -156,6 +211,7 @@ def job_check_templates(s, job):
             account.status = "live"
             advance(account, "done")
             log_event(s, "account_live", account.id)
+            alert_agent(s, account, T.AGENT_LIVE, [first_name(account.agent_name) or "hola"])
         return
     if first == "REJECTED":
         log_event(s, "template_rejected", account.id, template=T.LEAD_FIRST_CONTACT.name)

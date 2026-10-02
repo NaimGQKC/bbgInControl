@@ -2,6 +2,7 @@
 import json
 import logging
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -9,11 +10,11 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 
-from . import gcal, onboarding
+from . import gcal, onboarding, templates as T
+from .gcal import CalendarError
 from .config import get_settings
-from .crypto import encrypt
 from .db import session_scope
-from .engine import ingest_lead, log_event
+from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
 from .guards import normalize_phone
 from .intake import from_lystos, normalize
 from .models import Account
@@ -35,19 +36,28 @@ def _account_by_token(s, token: str) -> Account:
 
 
 def _state(s, acc: Account) -> dict:
+    st = get_settings()
+    onboarding.normalize_step(s, acc)
+    integrations = onboarding.integrations_status(s, acc)
+    link = st.stripe_payment_link
+    pay_url = f"{link}{'&' if '?' in link else '?'}client_reference_id={acc.public_token}&prefilled_email={quote(acc.email)}" if link else ""
     return {
         "step": acc.onboarding_step,
         "status": acc.status,
+        "assistant": st.assistant_name,
         "answers": {
             "agent_name": acc.agent_name,
             "agency": acc.agency,
-            "city": acc.city,
             "zones": acc.zones,
             "email": acc.email,
             "personal_whatsapp": acc.personal_whatsapp,
             "extra_context": acc.extra_context,
         },
-        "integrations": onboarding.integrations_status(s, acc),
+        # what a new owner will receive from their number, with a made-up lead name
+        "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, "Marta", "")) if acc.agent_name else "",
+        "integrations": integrations,
+        "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
+                    "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
     }
 
 
@@ -102,7 +112,7 @@ async def api_answers(token: str, request: Request):
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
-        for f in ("agent_name", "agency", "city", "zones", "email", "extra_context"):
+        for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
                 setattr(acc, f, str(data[f]).strip()[:500])
         if "personal_whatsapp" in data:
@@ -111,7 +121,7 @@ async def api_answers(token: str, request: Request):
                 return JSONResponse({"ok": False, "error": "Ese número no parece válido. Prueba con el formato 600 000 000."}, 400)
             acc.personal_whatsapp = p
         if acc.onboarding_step == "questions" and all(getattr(acc, f) for f in onboarding.REQUIRED_ANSWERS):
-            onboarding.advance(acc, "google")
+            onboarding.advance(acc, onboarding.after_questions(s, acc))
         return {"ok": True, **_state(s, acc)}
 
 
@@ -120,16 +130,8 @@ async def api_step(token: str, request: Request):
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
-        step = data.get("done")
-        if step == "lystos":
-            key = (data.get("lystos_key") or "").strip()
-            onboarding.upsert_integration(s, acc.id, "lystos", external={"pending_call": not key}, token_enc=encrypt(key) if key else "",
-                                          status="active" if key else "pending")
-            onboarding.advance(acc, "wa_check")
-        elif step == "wa_check":
+        if data.get("done") == "wa_check" and acc.onboarding_step == "wa_check":
             onboarding.advance(acc, "whatsapp")
-        elif step == "skip_google":  # allowed only to keep going; Google is required before going live
-            onboarding.advance(acc, "lystos")
         return {"ok": True, **_state(s, acc)}
 
 
@@ -159,21 +161,39 @@ async def api_meta_event(token: str, request: Request):
     return {"ok": True}
 
 
-@router.post("/api/o/{token}/test")
-async def api_test(token: str, request: Request):
-    """Optional: send a test conversation to a friend's phone."""
+@router.post("/api/o/{token}/calendar_check")
+def api_calendar_check(token: str):
+    """Right after Google connects: read the calendar once, so a missing permission shows up now and not at the first lead."""
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        try:
+            labels = [x["label"] for x in compute_free_slots(s, acc, max_slots=4)]
+        except CalendarError as e:
+            log_event(s, "calendar_check_failed", acc.id, error=str(e)[:300])
+            return {"ok": False}
+        log_event(s, "calendar_verified", acc.id, free_slots=len(labels))
+        days, picks = set(), []
+        for label in labels:  # two different days read better than two times on the same day
+            if label.split(",")[0] not in days:
+                days.add(label.split(",")[0])
+                picks.append(label)
+        return {"ok": True, "first": picks[:2]}
+
+
+@router.post("/api/o/{token}/help")
+async def api_help(token: str, request: Request):
+    """Talk to a person: tells you (the operator) who wants a call or a message, where they are stuck, and how to reach them."""
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
-        integ = onboarding.integrations_status(s, acc).get("meta", {})
-        if acc.status != "live" or integ.get("status") != "active":
-            return JSONResponse({"ok": False, "error": "Tu asistente aún no está activo."}, 400)
-        phone = normalize_phone(data.get("phone"))
-        if not phone:
-            return JSONResponse({"ok": False, "error": "Número no válido."}, 400)
-        lead, result = ingest_lead(s, acc, {"name": data.get("name") or "Prueba", "phone": phone, "zone": (acc.zones or "").split(",")[0],
-                                            "property_type": "piso", "source": "prueba"}, is_test=True)
-        return {"ok": True, "result": result}
+        phone = normalize_phone(data.get("phone")) if data.get("phone") else None
+        if data.get("phone") and not phone:
+            return JSONResponse({"ok": False, "error": "Ese número no parece válido."}, 400)
+        contact = phone or acc.personal_whatsapp or acc.email
+        if not contact:
+            return JSONResponse({"ok": False, "error": "Déjame un móvil para poder escribirte."}, 400)
+        onboarding.request_help(s, acc, message=str(data.get("message") or "").strip()[:300], contact=contact, kind=str(data.get("kind") or "chat"))
+        return {"ok": True, "contact": contact}
 
 
 # ---------------------------------------------------------------- Google OAuth
@@ -204,7 +224,9 @@ def google_callback(state: str = "", code: str = "", error: str = ""):
 async def intake(intake_key: str, request: Request, source: str = "webhook"):
     """Push new leads here (Lystos, Zapier, forms). Body: one lead object or a list of them."""
     body = await request.json()
-    items = body if isinstance(body, list) else body.get("leads", [body]) if isinstance(body, dict) else []
+    if isinstance(body, dict):
+        body = body.get("leads", [body])
+    items = [i for i in body if isinstance(i, dict)] if isinstance(body, list) else []
     out = []
     with session_scope() as s:
         acc = s.execute(select(Account).where(Account.intake_key == intake_key)).scalar_one_or_none()

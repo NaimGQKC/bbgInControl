@@ -1,6 +1,6 @@
 # Sparrow AI — instructions for Claude Code
 
-WhatsApp AI assistant for independent real estate agents (RE/MAX first, leads from Lystos). New lead → WhatsApp from the agent's own number (Meta Coexistence) in 30s → Spanish seller conversation → valuation booked in the agent's Google Calendar. Pricing: €30 per booked meeting. The full product design lives in the Claude project (`sparrow-ai-design.md`); follow it.
+WhatsApp AI assistant for independent real estate agents (RE/MAX first, leads from Lystos). New lead → WhatsApp from the agent's own number (Meta Coexistence) in 30s → Spanish seller conversation → valuation booked in the agent's Google Calendar. Pricing: €90 one-time per agent integration (Stripe) + €30 per booked meeting. The full product design lives in the Claude project (`sparrow-ai-design.md`); follow it.
 
 ## Talking to Naim
 English, short, simple language, explain any jargon. Push back when something is wrong. Lead-facing copy: Spanish from Spain.
@@ -14,6 +14,9 @@ English, short, simple language, explain any jargon. Push back when something is
 - `app/jobs.py` — Postgres job queue; handlers registered with `@jobs.handler("type")`.
 - Real/fake clients: `WHATSAPP_MODE`, `CALENDAR_MODE`, `LLM_MODE` = `live|fake`.
 
+## Onboarding (the product's promise: one hands-on conversation, then hands-off)
+`app/web_templates/onboarding.html` is a guided chat with a named assistant (`ASSISTANT_NAME`) that is openly an AI (AI Act) but warm and human in voice. Steps live in `app/onboarding.py` (`STEPS`): Google (gives name + email, calendar is read once to prove it works) → agency + zones → free-text preferences ("cómo quieres que trabaje", saved in `extra_context`, goes into the AI prompt but never beats the hard rules) → preview of the exact first message an owner will get (same code path as the real message) → Stripe payment (skipped without `STRIPE_PAYMENT_LINK`) → WhatsApp Business check → Meta Embedded Signup → alert number → wait for Meta approval (the page flips to "listo" by itself). We never ask for a tax ID (autónomos don't need Meta business verification; only Sparrow does). Keep the chat short, one thing at a time, with "Hablar con una persona" always visible (they choose a call or a message; it alerts the operator). Quick-reply buttons must say exactly what the agent would say; no avatar or voice in the MVP. Lead-facing copy stays "el asistente virtual de {agente}" (G13): the named persona is only for agents.
+
 ## Rules (never break)
 - Never hardcode Meta IDs, tokens, phone numbers or agency data: env vars or DB. Per-agent tokens are encrypted (`app/crypto.py`).
 - Every outbound message goes through `send_to_lead` → `can_contact`. Check `do_not_contact` everywhere.
@@ -23,6 +26,7 @@ English, short, simple language, explain any jargon. Push back when something is
 - The AI always introduces itself as "el asistente virtual de {agente}" and never claims to be human (G13).
 - Log every message and every LLM turn.
 - Keep the pilot lean: no dashboards, settings pages, Google Ads intake or new CRMs until the core loop is proven.
+- No schema changes without a migration path: `create_all` does not alter existing tables, so new data goes into existing columns/JSON (e.g. the `stripe` row in `integrations`).
 
 ## Tests
 `pytest -q` must stay green. Every guardrail G1–G14 has a test in `tests/test_flow.py`; add one for every new rule. Use the frozen clock (`db.FROZEN_NOW`) and fakes.
@@ -31,4 +35,7 @@ English, short, simple language, explain any jargon. Push back when something is
 1. Lystos adapter (`app/intake.py:from_lystos`) once their API/payload is known.
 2. End-to-end Coexistence test (echoes) after Tech Provider approval.
 3. Allowed hours from Google Calendar working hours.
-4. Monthly billing summary per agent.
+4. Monthly billing summary per agent (€30 per booked meeting).
+5. Booking summary WhatsApp to the agent (today they only get alerts when a lead needs them). Needs a Sparrow template.
+6. Looped clips for each Meta screen in the onboarding chat (need real screen recordings).
+7. Google OAuth verification (avoids the "unverified app" warning); start early, it takes weeks.

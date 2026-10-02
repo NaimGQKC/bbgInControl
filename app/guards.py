@@ -8,7 +8,7 @@ from .models import Account, Lead
 
 HOT_STAGES = {"exclusiva", "cerrado", "cerrada", "vendido", "vendida", "firmado", "en exclusiva", "reservado"}
 NO_AI_TAGS = {"no ia", "sin ia", "no_ia", "noia"}
-OPT_OUT_WORDS = {"stop", "baja", "stop.", "baja."}
+OPT_OUT_WORDS = {"stop", "baja"}  # compared after lower-casing and stripping trailing . !
 
 DEFAULT_SETTINGS = {
     # Allowed hours for first contact / follow-ups (local time). Days: 0=Monday ... 6=Sunday
@@ -61,7 +61,15 @@ def wa_id(phone_e164: str) -> str:
 
 # ---------- time ----------
 
-def _hm(s: str) -> time:
+DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+
+
+def first_name(name: str | None) -> str:
+    parts = (name or "").split()
+    return parts[0] if parts else ""
+
+
+def parse_hm(s: str) -> time:
     h, m = s.split(":")
     return time(int(h), int(m))
 
@@ -79,15 +87,15 @@ def in_allowed_hours(account: Account, when_utc: datetime | None = None) -> bool
     local = to_local(when_utc or utcnow(), account.timezone)
     if local.weekday() not in s["contact_days"]:
         return False
-    return _hm(s["contact_start"]) <= local.time() < _hm(s["contact_end"])
+    return parse_hm(s["contact_start"]) <= local.time() < parse_hm(s["contact_end"])
 
 
 def next_allowed_time(account: Account, after_utc: datetime) -> datetime:
     """First moment >= after_utc inside allowed hours (naive UTC). Capped to 09:00-21:00 whatever the settings."""
     s = settings_for(account)
     tz = ZoneInfo(account.timezone)
-    start_t = max(_hm(s["contact_start"]), time(9, 0))
-    end_t = min(_hm(s["contact_end"]), time(21, 0))
+    start_t = max(parse_hm(s["contact_start"]), time(9, 0))
+    end_t = min(parse_hm(s["contact_end"]), time(21, 0))
     local = to_local(after_utc, account.timezone)
     for _ in range(15):
         day_start = datetime.combine(local.date(), start_t, tzinfo=tz)

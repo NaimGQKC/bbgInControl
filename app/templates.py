@@ -118,6 +118,25 @@ AGENT_ONBOARDING_NUDGE = Template(
     number="sparrow",
 )
 
+AGENT_LIVE = Template(
+    name="agent_live_v1",
+    category="UTILITY",
+    body="Hola {{1}}, tu asistente de Sparrow ya está activo ✅ Desde ahora, cada lead nuevo recibe un WhatsApp en 30 segundos y las citas aparecen en tu Google Calendar. Gracias.",
+    params=("agent_first_name",),
+    example=("Laura",),
+    number="sparrow",
+)
+
+# To you (the operator), not to agents
+OPS_NEEDS_HELP = Template(
+    name="ops_needs_help_v1",
+    category="UTILITY",
+    body="Hola, {{1}} necesita ayuda con la configuración de Sparrow (paso: {{2}}). Contacto: {{3}}. Mensaje: {{4}}. Gracias.",
+    params=("agent", "step", "contact", "message"),
+    example=("Laura García", "whatsapp", "+34611111111", "no me sale el código QR"),
+    number="sparrow",
+)
+
 AGENT_TEMPLATES = [
     LEAD_FIRST_CONTACT,
     LEAD_FOLLOWUP_1,
@@ -126,7 +145,7 @@ AGENT_TEMPLATES = [
     MEETING_REMINDER_24H,
     MEETING_REMINDER_2H,
 ]
-SPARROW_TEMPLATES = [AGENT_NEEDS_YOU, AGENT_ACTION_REQUIRED, AGENT_PHONE_INACTIVE, AGENT_ONBOARDING_NUDGE]
+SPARROW_TEMPLATES = [AGENT_NEEDS_YOU, AGENT_ACTION_REQUIRED, AGENT_PHONE_INACTIVE, AGENT_ONBOARDING_NUDGE, AGENT_LIVE, OPS_NEEDS_HELP]
 ALL = {t.name: t for t in AGENT_TEMPLATES + SPARROW_TEMPLATES}
 
 # Free-form texts (only inside the 24h window)

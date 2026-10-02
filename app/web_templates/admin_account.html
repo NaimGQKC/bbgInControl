@@ -20,7 +20,7 @@
 
     <div class="card">
       <h2>Conexiones</h2>
-      {% for p in ["google", "meta", "lystos"] %}
+      {% for p in ["google", "meta", "stripe"] %}
         <p>{{ p }}: {% if integ.get(p) %}<span class="pill ok">{{ integ[p].status }}</span> <span class="small muted">{{ integ[p] }}</span>{% else %}<span class="pill bad">no</span>{% endif %}</p>
       {% endfor %}
       <form method="post" action="/admin/accounts/{{ a.id }}/action">

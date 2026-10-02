@@ -2,14 +2,16 @@
 import itertools
 from datetime import datetime, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 import httpx
 
 from .config import get_settings
 from .crypto import decrypt, encrypt
 from .db import utcnow
+from .models import Integration
 
-SCOPES = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy"
+SCOPES = "openid email profile https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy"
 API = "https://www.googleapis.com/calendar/v3"
 
 
@@ -23,6 +25,8 @@ def redirect_uri() -> str:
 
 def auth_url(state: str) -> str:
     s = get_settings()
+    if s.calendar_mode == "fake":  # demo / preview: "Google" approves instantly
+        return redirect_uri() + "?" + urlencode({"state": state, "code": "fake-code"})
     q = {
         "client_id": s.google_client_id,
         "redirect_uri": redirect_uri(),
@@ -38,6 +42,8 @@ def auth_url(state: str) -> str:
 
 def exchange_code(code: str) -> dict:
     s = get_settings()
+    if s.calendar_mode == "fake":
+        return {"access_token": "fake", "refresh_token": "fake", "expires_in": 3600, "scope": ""}
     r = httpx.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -52,6 +58,17 @@ def exchange_code(code: str) -> dict:
     if r.status_code >= 400:
         raise CalendarError(r.text)
     return r.json()
+
+
+def userinfo(access_token: str) -> dict:
+    """Name and email of the Google account that just connected ({} if unavailable: onboarding then just asks)."""
+    if get_settings().calendar_mode == "fake":
+        return {"name": "Laura García", "email": "laura@example.com"}
+    try:
+        r = httpx.get("https://openidconnect.googleapis.com/v1/userinfo", headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        return r.json() if r.status_code == 200 else {}
+    except Exception:
+        return {}
 
 
 def refresh(refresh_token: str) -> dict:
@@ -78,8 +95,6 @@ def _iso(dt_utc: datetime) -> str:
 def _parse(s: str) -> datetime:
     dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
     if dt.tzinfo:
-        from zoneinfo import ZoneInfo
-
         dt = dt.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
     return dt
 
@@ -182,8 +197,6 @@ class FakeCalendar(CalendarClient):
 
 def calendar_for_account(session, account) -> CalendarClient:
     """Returns a ready client, refreshing the access token when needed."""
-    from .models import Integration
-
     if get_settings().calendar_mode == "fake":
         return FakeCalendar()
     integ = session.query(Integration).filter_by(account_id=account.id, provider="google").one_or_none()

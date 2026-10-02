@@ -1,14 +1,12 @@
 """System prompt for the seller conversation (design doc J4, J4b, 7.2)."""
 from .db import utcnow
-from .guards import to_local
+from .guards import DAYS, first_name, to_local
 from .models import Account, Lead
-
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
 def build_system_prompt(account: Account, lead: Lead, *, must_introduce: bool) -> str:
     agent = account.agent_name or "el agente"
-    agent_first = agent.split(" ")[0]
+    agent_first = first_name(agent) or agent
     now = to_local(utcnow(), account.timezone)
     facts = lead.facts or {}
     known = "\n".join(f"- {k}: {v}" for k, v in facts.items()) or "- (nada todavía)"
@@ -38,7 +36,8 @@ def build_system_prompt(account: Account, lead: Lead, *, must_introduce: bool) -
         if must_introduce
         else "\n- Ya te presentaste antes; no repitas la presentación."
     )
-    extra = f"\nContexto extra que dio {agent_first}: {account.extra_context}" if account.extra_context else ""
+    extra = (f"\nPreferencias que dio {agent_first} sobre cómo trabajar (síguelas salvo que contradigan las reglas de arriba; "
+             f"nunca anulan presentarte como asistente virtual ni respetar una baja): {account.extra_context}") if account.extra_context else ""
 
     return f"""Eres el asistente virtual de {agent}, agente inmobiliario de {account.agency or 'su inmobiliaria'} ({account.city or 'España'}). Hablas por WhatsApp con propietarios que podrían vender su vivienda. Escribes desde el propio WhatsApp de {agent_first}.
 
