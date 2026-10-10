@@ -759,6 +759,8 @@ def test_privacy_policy_has_the_google_disclosures_and_matches_the_code(clock, m
 
     monkeypatch.setenv("CONTACT_EMAIL", "ale@sparrowai.eu")
     monkeypatch.setenv("LEGAL_ENTITY", "Test Autónomo")
+    monkeypatch.setenv("LEGAL_NIF", "B12345678")
+    monkeypatch.setenv("LEGAL_ADDRESS", "Calle Prueba 1, Zaragoza")
     get_settings.cache_clear()
     with TestClient(app) as c:
         r = c.get("/privacidad")
@@ -770,7 +772,7 @@ def test_privacy_policy_has_the_google_disclosures_and_matches_the_code(clock, m
                        "How we protect Google data", "Retention and deletion of Google data",
                        "Google API Services User Data Policy", "Limited Use", "train generalized AI", "myaccount.google.com/permissions"]:
             assert needle in page, needle
-        assert "ale@sparrowai.eu" in page and "Test Autónomo" in page
+        assert "ale@sparrowai.eu" in page and "Test Autónomo" in page and "B12345678" in page and "Calle Prueba 1" in page
         assert "servidores en Estados Unidos" in page and "servers in the United States" in page  # hosting is stated truthfully
         assert "alojamiento en la UE" not in page and "hosting in the EU" not in page
         # the disconnect promise is backed by the daily google_check job (see test below)
