@@ -748,3 +748,46 @@ def test_intake_ignores_garbage_items(clock, account):
     with TestClient(app) as c:
         r = c.post(f"/intake/{key}", json=["texto suelto", {"nombre": "Ana", "telefono": "600333444"}])
         assert [x["result"] for x in r.json()["results"]] == ["queued"]
+
+
+# ------------------------------------------------------------------ legal pages: what Google and Meta check
+
+def test_privacy_policy_has_the_google_disclosures_and_matches_the_code(clock, monkeypatch):
+    from app import gcal
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("CONTACT_EMAIL", "ale@sparrowai.eu")
+    monkeypatch.setenv("LEGAL_ENTITY", "Test Autónomo")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        r = c.get("/privacidad")
+        assert r.status_code == 200
+        page = r.text
+        # the four things Google asked for, in both languages
+        for needle in ["Cómo usamos los datos de Google", "Con quién compartimos, transferimos o divulgamos", "Cómo protegemos los datos de Google",
+                       "Conservación y eliminación de los datos de Google", "How we use Google data", "Who we share, transfer or disclose Google data with",
+                       "How we protect Google data", "Retention and deletion of Google data",
+                       "Google API Services User Data Policy", "Limited Use", "train generalized AI", "myaccount.google.com/permissions"]:
+            assert needle in page, needle
+        assert "ale@sparrowai.eu" in page and "Test Autónomo" in page
+        assert "servidores en Estados Unidos" in page and "servers in the United States" in page  # hosting is stated truthfully
+        assert "alojamiento en la UE" not in page and "hosting in the EU" not in page
+    # every scope the policy names is really requested by the code, and vice versa
+    for scope in ("calendar.freebusy", "calendar.events"):
+        assert scope in page and scope in gcal.SCOPES
+    assert "calendar.readonly" not in page and "auth/calendar " not in gcal.SCOPES + " "
+
+
+def test_terms_show_the_real_prices_and_deletion_page_has_both_languages(clock, monkeypatch):
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("INTEGRATION_FEE_EUR", "90")
+    monkeypatch.setenv("MEETING_FEE_EUR", "30")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        terms = c.get("/terminos").text
+        assert "90 €" in terms and "30 €" in terms and "EUR 90" in terms and "EUR 30" in terms
+        deletion = c.get("/eliminar-datos").text
+        assert "Eliminación de datos" in deletion and "Data deletion" in deletion and "30 días" in deletion and "30 days" in deletion

@@ -241,19 +241,27 @@ async def intake(intake_key: str, request: Request, source: str = "webhook"):
 
 # ---------------------------------------------------------------- legal (Meta and Google require these URLs)
 
+def _legal(request: Request, page: str):
+    st = get_settings()
+    return templates.TemplateResponse(request, "legal.html", {
+        "page": page, "contact_email": st.contact_email, "legal_entity": st.legal_entity, "legal_nif": st.legal_nif,
+        "legal_address": st.legal_address, "integration_fee_eur": st.integration_fee_eur, "meeting_fee_eur": st.meeting_fee_eur,
+    })
+
+
 @router.get("/privacidad", response_class=HTMLResponse)
 def privacy(request: Request):
-    return templates.TemplateResponse(request, "legal.html", {"page": "privacidad", "contact_email": get_settings().contact_email})
+    return _legal(request, "privacidad")
 
 
 @router.get("/terminos", response_class=HTMLResponse)
 def terms(request: Request):
-    return templates.TemplateResponse(request, "legal.html", {"page": "terminos", "contact_email": get_settings().contact_email})
+    return _legal(request, "terminos")
 
 
 @router.get("/eliminar-datos", response_class=HTMLResponse)
 def data_deletion(request: Request):
-    return templates.TemplateResponse(request, "legal.html", {"page": "eliminar", "contact_email": get_settings().contact_email})
+    return _legal(request, "eliminar")
 
 
 @router.get("/health")

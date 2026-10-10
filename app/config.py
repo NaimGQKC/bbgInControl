@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     admin_password: str = "change-me"
     session_secret: str = "change-me-too"
     contact_email: str = ""  # shown on the privacy / data deletion pages
+    legal_entity: str = ""  # name shown on the legal pages (e.g. the autónomo's name); optional
+    legal_nif: str = ""  # tax ID shown on the legal pages; optional
+    legal_address: str = ""  # postal address shown on the legal pages; optional
     assistant_name: str = "Lucía"  # the named (and openly AI) guide agents talk to during onboarding
     ops_whatsapp: str = ""  # your own mobile: gets a WhatsApp when an agent presses "necesito ayuda"
     # Fernet key used to encrypt per-agent tokens in the DB (python -c "from cryptography.fernet import Fernet;print(Fernet.generate_key().decode())")
