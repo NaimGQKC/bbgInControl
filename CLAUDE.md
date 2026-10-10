@@ -25,6 +25,7 @@ English, short, simple language, explain any jargon. Push back when something is
 - Never read or answer chats with contacts that aren't leads (G1). Once the agent writes after the lead replied, the AI stops for that lead until resumed (G8).
 - The AI always introduces itself as "el asistente virtual de {agente}" and never claims to be human (G13).
 - Log every message and every LLM turn.
+- AI usage is capped (`ai_max_*` settings in `app/config.py`): at the per-lead cap the chat is handed to the agent and the model is not called; long lead messages are cut before the model. Never remove these caps.
 - Keep the pilot lean: no dashboards, settings pages, Google Ads intake or new CRMs until the core loop is proven.
 - No schema changes without a migration path: `create_all` does not alter existing tables, so new data goes into existing columns/JSON (e.g. the `stripe` row in `integrations`).
 
