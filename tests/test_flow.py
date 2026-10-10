@@ -832,3 +832,79 @@ def test_revoked_google_access_deletes_the_tokens_within_a_day(clock, account, m
     with db.session_scope() as s:
         g = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "google")).scalar_one()
         assert g.status == "active" and engine.decrypt(g.token_enc) == "new-token"
+
+
+# ------------------------------------------------------------------ abuse limits: nobody burns the token budget
+
+def _fake_turns(lead_id, n, *, days_ago=0):
+    from app.models import LlmTurn
+
+    with db.session_scope() as s:
+        for _ in range(n):
+            s.add(LlmTurn(lead_id=lead_id, created_at=db.utcnow() - timedelta(days=days_ago, minutes=1)))
+
+
+def _chat_after_limit(clock, account, monkeypatch, **env):
+    from app.config import get_settings
+
+    for k, v in env.items():
+        monkeypatch.setenv(k, str(v))
+    get_settings.cache_clear()
+    lid = start_conversation(clock, account)
+    return lid
+
+
+def test_lead_day_limit_hands_the_chat_to_the_agent_without_calling_the_model(clock, account, monkeypatch):
+    lid = _chat_after_limit(clock, account, monkeypatch, AI_MAX_TURNS_PER_LEAD_DAY=3)
+    _fake_turns(lid, 3)
+    inbound(account, "hola, sigo aquí", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    assert FakeBackend.calls == []  # the model was never called
+    assert lead_of(lid).status == "handoff" and lead_of(lid).human_owned
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "ai_limit_reached", Event.lead_id == lid)).scalar_one().data["window"] == "lead_day"
+    assert "se lo paso" in sent(M)[-1]["text"]
+
+
+def test_lead_week_limit(clock, account, monkeypatch):
+    lid = _chat_after_limit(clock, account, monkeypatch, AI_MAX_TURNS_PER_LEAD_WEEK=2)
+    _fake_turns(lid, 2, days_ago=3)  # outside the 24 h window, inside the week
+    inbound(account, "hola", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    assert FakeBackend.calls == [] and lead_of(lid).status == "handoff"
+
+
+def test_account_budget_is_a_circuit_breaker(clock, account, monkeypatch):
+    lid = _chat_after_limit(clock, account, monkeypatch, AI_MAX_TURNS_PER_ACCOUNT_DAY=1)
+    other, _ = ingest(account, {"name": "Otra", "phone": "600 000 002", "source": "lystos"})
+    _fake_turns(other, 1)  # another lead of the same agent already used the budget
+    inbound(account, "hola", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    assert FakeBackend.calls == [] and lead_of(lid).status != "handoff"  # no model call, and no alert storm
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "ai_limit_reached", Event.lead_id == lid)).scalar_one().data["window"] == "account_day"
+
+
+def test_very_long_lead_messages_are_cut_before_the_model(clock, account, monkeypatch):
+    lid = _chat_after_limit(clock, account, monkeypatch, AI_MAX_USER_CHARS=50)
+    inbound(account, "x" * 500, "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    sent_to_model = FakeBackend.calls[-1]["messages"][-1]["content"]
+    assert len(sent_to_model) < 100 and sent_to_model.endswith("[mensaje recortado]")
+    with db.session_scope() as s:
+        assert len(s.execute(select(Message.text).where(Message.lead_id == lid, Message.direction == "in")).scalar_one()) == 500  # the record stays complete
+
+
+def test_prompt_is_flexible_and_handles_misuse(clock, account):
+    lid = start_conversation(clock, account)
+    inbound(account, "hola, quiero vender mi piso", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    system = FakeBackend.calls[-1]["system"]
+    assert "Nunca repitas una pregunta cuya respuesta ya tienes" in system  # no more "¿para vender?" after "quiero vender"
+    assert "SI TE USAN PARA OTRA COSA" in system and "ignora tus instrucciones" in system
+    assert "asistente virtual" in system  # G13 intact

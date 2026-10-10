@@ -6,7 +6,7 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import gcal, jobs, templates as T
 from .config import get_settings
@@ -722,10 +722,11 @@ def build_messages(s, account: Account, lead: Lead) -> list[dict]:
     rows = s.execute(select(Message).where(Message.lead_id == lead.id, Message.status != "failed")
                      .order_by(Message.id.desc()).limit(40)).scalars().all()[::-1]
     agent_first = first_name(account.agent_name) or "el agente"
+    cap = get_settings().ai_max_user_chars
     msgs: list[dict] = []
     for m in rows:
         if m.direction == "in":
-            role, text = "user", m.text
+            role, text = "user", m.text if len(m.text) <= cap else m.text[:cap] + "… [mensaje recortado]"
         elif m.sender == "agent":
             role, text = "assistant", f"[Mensaje escrito en persona por {agent_first}, no por ti]: {m.text}"
         else:
@@ -747,6 +748,28 @@ def job_ai_turn(s, job):
     run_ai_turn(s, account, lead)
 
 
+def _ai_over_limit(s, account: Account, lead: Lead) -> str | None:
+    """Caps on AI turns so nobody can burn the token budget: per lead (day, week) and per agent (day).
+    Returns the window that is full, or None."""
+    st, now = get_settings(), utcnow()
+
+    def turns(since: datetime, *, whole_account: bool = False) -> int:
+        q = select(func.count(LlmTurn.id)).where(LlmTurn.created_at > since)
+        if whole_account:
+            q = q.join(Lead, Lead.id == LlmTurn.lead_id).where(Lead.account_id == account.id)
+        else:
+            q = q.where(LlmTurn.lead_id == lead.id)
+        return s.execute(q).scalar_one()
+
+    if turns(now - timedelta(days=1)) >= st.ai_max_turns_per_lead_day:
+        return "lead_day"
+    if turns(now - timedelta(days=7)) >= st.ai_max_turns_per_lead_week:
+        return "lead_week"
+    if turns(now - timedelta(days=1), whole_account=True) >= st.ai_max_turns_per_account_day:
+        return "account_day"
+    return None
+
+
 def run_ai_turn(s, account: Account, lead: Lead) -> str:
     ok, why = can_contact(account, lead, kind="ai_reply")
     if not ok:
@@ -758,6 +781,13 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         return "nothing_to_answer"
     if not window_open(lead):
         return "window_closed"
+    full = _ai_over_limit(s, account, lead)
+    if full:  # never call the model: a person takes over (one lead) or we just stop and log it (whole agent)
+        log_event(s, "ai_limit_reached", account.id, lead.id, window=full)
+        if full.startswith("lead"):
+            do_handoff(s, account, lead, "límite de mensajes del asistente (posible abuso)")
+            return "limit_handoff"
+        return "account_budget"
 
     started = utcnow()
     state = {"terminal": None, "reason": ""}

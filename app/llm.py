@@ -117,6 +117,7 @@ class OpenAIBackend:
             self.client = OpenAI(api_key=s.openai_api_key)
             self.model = s.openai_model
         self.effort = s.llm_reasoning_effort
+        self.max_out = s.llm_max_output_tokens
 
     @staticmethod
     def to_openai(system: str, messages: list[dict], tools: list[dict]) -> tuple[list[dict], list[dict]]:
@@ -162,7 +163,7 @@ class OpenAIBackend:
 
     def complete(self, system: str, messages: list[dict], tools: list[dict]) -> dict:
         msgs, fns = self.to_openai(system, messages, tools)
-        kwargs = {"model": self.model, "messages": msgs, "tools": fns, "max_completion_tokens": 2000}
+        kwargs = {"model": self.model, "messages": msgs, "tools": fns, "max_completion_tokens": self.max_out}
         if self.effort:
             kwargs["reasoning_effort"] = self.effort
         resp = self.client.chat.completions.create(**kwargs)
