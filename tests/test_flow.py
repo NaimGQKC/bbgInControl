@@ -7,7 +7,7 @@ from datetime import timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
-from app import db, engine
+from app import db, engine, jobs
 from app.gcal import FakeCalendar
 from app.llm import FakeBackend
 from app.models import Account, Event, Integration, Job, Lead, Meeting, Message
@@ -748,3 +748,85 @@ def test_intake_ignores_garbage_items(clock, account):
     with TestClient(app) as c:
         r = c.post(f"/intake/{key}", json=["texto suelto", {"nombre": "Ana", "telefono": "600333444"}])
         assert [x["result"] for x in r.json()["results"]] == ["queued"]
+
+
+# ------------------------------------------------------------------ legal pages: what Google and Meta check
+
+def test_privacy_policy_has_the_google_disclosures_and_matches_the_code(clock, monkeypatch):
+    from app import gcal
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("CONTACT_EMAIL", "ale@sparrowai.eu")
+    monkeypatch.setenv("LEGAL_ENTITY", "Test Autónomo")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        r = c.get("/privacidad")
+        assert r.status_code == 200
+        page = r.text
+        # the four things Google asked for, in both languages
+        for needle in ["Cómo usamos los datos de Google", "Con quién compartimos, transferimos o divulgamos", "Cómo protegemos los datos de Google",
+                       "Conservación y eliminación de los datos de Google", "How we use Google data", "Who we share, transfer or disclose Google data with",
+                       "How we protect Google data", "Retention and deletion of Google data",
+                       "Google API Services User Data Policy", "Limited Use", "train generalized AI", "myaccount.google.com/permissions"]:
+            assert needle in page, needle
+        assert "ale@sparrowai.eu" in page and "Test Autónomo" in page
+        assert "servidores en Estados Unidos" in page and "servers in the United States" in page  # hosting is stated truthfully
+        assert "alojamiento en la UE" not in page and "hosting in the EU" not in page
+        # the disconnect promise is backed by the daily google_check job (see test below)
+        assert "desde que el agente se desconecta" in page and "after the agent disconnects" in page
+        assert "mientras el agente use el servicio, porque los necesitamos" in page and "kept while the agent uses the service" in page
+    # every scope the policy names is really requested by the code, and vice versa
+    for scope in ("calendar.freebusy", "calendar.events"):
+        assert scope in page and scope in gcal.SCOPES
+    assert "calendar.readonly" not in page and "auth/calendar " not in gcal.SCOPES + " "
+
+
+def test_terms_show_the_real_prices_and_deletion_page_has_both_languages(clock, monkeypatch):
+    from app.config import get_settings
+    from app.main import app
+
+    monkeypatch.setenv("INTEGRATION_FEE_EUR", "90")
+    monkeypatch.setenv("MEETING_FEE_EUR", "30")
+    get_settings.cache_clear()
+    with TestClient(app) as c:
+        terms = c.get("/terminos").text
+        assert "90 €" in terms and "30 €" in terms and "EUR 90" in terms and "EUR 30" in terms
+        deletion = c.get("/eliminar-datos").text
+        assert "Eliminación de datos" in deletion and "Data deletion" in deletion and "30 días" in deletion and "30 days" in deletion
+
+
+def test_revoked_google_access_deletes_the_tokens_within_a_day(clock, account, monkeypatch):  # what the privacy policy promises
+    from app import gcal
+    from app.config import get_settings
+    from app.gcal import CalendarError
+
+    monkeypatch.setenv("CALENDAR_MODE", "live")
+    get_settings.cache_clear()
+    with db.session_scope() as s:
+        g = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "google")).scalar_one()
+        g.refresh_token_enc = engine.encrypt("refresh-token")
+
+    def revoked(_token):
+        raise CalendarError('{"error": "invalid_grant"}')
+
+    monkeypatch.setattr(gcal, "refresh", revoked)
+    with db.session_scope() as s:
+        jobs.schedule(s, "google_check", db.utcnow(), dedupe_key="google_check:test")
+    run_jobs()
+    with db.session_scope() as s:
+        g = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "google")).scalar_one()
+        assert g.token_enc == "" and g.refresh_token_enc == "" and g.status == "disconnected"
+        assert s.execute(select(Event).where(Event.name == "google_disconnected", Event.account_id == account)).first()
+        assert s.execute(select(Job).where(Job.type == "google_check", Job.status == "pending")).first()  # it re-arms itself for tomorrow
+    # a healthy token is simply renewed and stays active
+    with db.session_scope() as s:
+        g = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "google")).scalar_one()
+        g.status, g.refresh_token_enc, g.token_enc = "active", engine.encrypt("refresh-token"), engine.encrypt("old")
+    monkeypatch.setattr(gcal, "refresh", lambda _t: {"access_token": "new-token", "expires_in": 3600})
+    with db.session_scope() as s:
+        jobs.schedule(s, "google_check", db.utcnow(), dedupe_key="google_check:test2")
+    run_jobs()
+    with db.session_scope() as s:
+        g = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "google")).scalar_one()
+        assert g.status == "active" and engine.decrypt(g.token_enc) == "new-token"
