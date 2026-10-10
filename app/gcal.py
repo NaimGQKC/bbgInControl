@@ -195,6 +195,18 @@ class FakeCalendar(CalendarClient):
             FakeCalendar.events[event_id]["deleted"] = True
 
 
+def mark_revoked(session, account, integ) -> None:
+    """The agent removed Sparrow in Google (or the refresh token died): delete the tokens (privacy policy) and ask them to reconnect."""
+    from . import templates as T
+    from .engine import alert_agent, first_name, log_event
+
+    integ.token_enc = ""
+    integ.refresh_token_enc = ""
+    integ.status = "disconnected"
+    log_event(session, "google_disconnected", account.id)
+    alert_agent(session, account, T.AGENT_ACTION_REQUIRED, [first_name(account.agent_name) or "hola", "vuelve a conectar tu Google Calendar desde tu enlace de Sparrow"])
+
+
 def calendar_for_account(session, account) -> CalendarClient:
     """Returns a ready client, refreshing the access token when needed."""
     if get_settings().calendar_mode == "fake":
@@ -206,13 +218,8 @@ def calendar_for_account(session, account) -> CalendarClient:
         try:
             data = refresh(decrypt(integ.refresh_token_enc))
         except CalendarError as e:
-            if "invalid_grant" in str(e):  # the agent revoked access or the token expired: ask them to reconnect
-                from . import templates as T
-                from .engine import alert_agent, first_name, log_event
-
-                integ.status = "error"
-                log_event(session, "google_disconnected", account.id)
-                alert_agent(session, account, T.AGENT_ACTION_REQUIRED, [first_name(account.agent_name) or "hola", "vuelve a conectar tu Google Calendar desde tu enlace de Sparrow"])
+            if "invalid_grant" in str(e):  # the agent revoked access or the token expired
+                mark_revoked(session, account, integ)
             raise
         integ.token_enc = encrypt(data["access_token"])
         integ.expires_at = utcnow() + timedelta(seconds=int(data.get("expires_in", 3600)))

@@ -18,6 +18,8 @@ def schedule_daily_jobs() -> None:
         tomorrow = utcnow() + timedelta(days=1)
         jobs.schedule(s, "phone_health", utcnow() + timedelta(minutes=5), dedupe_key=f"phone_health:{utcnow():%Y-%m-%d}")
         jobs.schedule(s, "phone_health", tomorrow, dedupe_key=f"phone_health:{tomorrow:%Y-%m-%d}")
+        jobs.schedule(s, "google_check", utcnow() + timedelta(minutes=10), dedupe_key=f"google_check:{utcnow():%Y-%m-%d}")
+        jobs.schedule(s, "google_check", tomorrow, dedupe_key=f"google_check:{tomorrow:%Y-%m-%d}")
 
 
 @asynccontextmanager

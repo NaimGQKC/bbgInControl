@@ -8,9 +8,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from . import jobs, templates as T
+from . import gcal, jobs, templates as T
 from .config import get_settings
-from .crypto import decrypt
+from .crypto import decrypt, encrypt
 from .db import utcnow
 from .gcal import CalendarError, calendar_for_account
 from .guards import (
@@ -365,6 +365,30 @@ def job_first_contact_failed(s, job):
     account, lead = _load(s, job)
     lead.status = "failed"
     log_event(s, "first_contact_failed", account.id, lead.id, error=job.last_error[:500])
+
+
+@jobs.handler("google_check")
+def job_google_check(s, job):
+    """Daily: refresh every agent's Google token. If an agent removed Sparrow in Google we find out within a day and
+    delete their tokens, as the privacy policy promises."""
+    nxt = utcnow() + timedelta(days=1)
+    jobs.schedule(s, "google_check", nxt, dedupe_key=f"google_check:{nxt:%Y-%m-%d}")
+    if get_settings().calendar_mode == "fake":
+        return
+    for integ in s.execute(select(Integration).where(Integration.provider == "google", Integration.status == "active")).scalars().all():
+        if not integ.refresh_token_enc:
+            continue
+        account = s.get(Account, integ.account_id)
+        try:
+            data = gcal.refresh(decrypt(integ.refresh_token_enc))
+        except CalendarError as e:
+            if "invalid_grant" in str(e):
+                gcal.mark_revoked(s, account, integ)
+            else:
+                log.warning("google check failed for account %s: %s", account.id, e)
+            continue
+        integ.token_enc = encrypt(data["access_token"])
+        integ.expires_at = utcnow() + timedelta(seconds=int(data.get("expires_in", 3600)))
 
 
 @jobs.handler("phone_health")

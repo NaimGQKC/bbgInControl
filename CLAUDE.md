@@ -39,4 +39,4 @@ English, short, simple language, explain any jargon. Push back when something is
 5. Booking summary WhatsApp to the agent (today they only get alerts when a lead needs them). Needs a Sparrow template.
 6. Looped clips for each Meta screen in the onboarding chat (need real screen recordings).
 7. Google OAuth verification (avoids the "unverified app" warning); start early, it takes weeks.
-8. Data retention job: the policy promises deleting an agent's data 12 months after they stop and Google tokens within 30 days of a deletion request. Both are manual today (nothing deletes automatically). Do the 12-month cleanup before the first agents reach that date.
+8. Data retention: Google tokens are now deleted automatically when an agent revokes access (daily `google_check` job, `gcal.mark_revoked`) and by hand on request/closure within 30 days. Still manual: deleting an agent's data 12 months after they stop (the policy promises it). Do that cleanup before the first agents reach that date.
