@@ -773,6 +773,9 @@ def test_privacy_policy_has_the_google_disclosures_and_matches_the_code(clock, m
         assert "ale@sparrowai.eu" in page and "Test Autónomo" in page
         assert "servidores en Estados Unidos" in page and "servers in the United States" in page  # hosting is stated truthfully
         assert "alojamiento en la UE" not in page and "hosting in the EU" not in page
+        # we do not auto-delete Google tokens on disconnect, so the policy must not promise it
+        assert "desde que el agente se desconecta" not in page and "after the agent disconnects" not in page
+        assert "mientras el agente use el servicio, porque los necesitamos" in page and "kept while the agent uses the service" in page
     # every scope the policy names is really requested by the code, and vice versa
     for scope in ("calendar.freebusy", "calendar.events"):
         assert scope in page and scope in gcal.SCOPES

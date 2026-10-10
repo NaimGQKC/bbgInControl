@@ -52,7 +52,7 @@
 <h3>3.5 Conservación y eliminación de los datos de Google</h3>
 <ul>
 <li><b>Disponibilidad (libre/ocupado):</b> se consulta en el momento y no se almacena.</li>
-<li><b>Tokens de acceso a Google:</b> los eliminamos como máximo en 30 días desde que el agente se desconecta, lo solicita o cierra su cuenta.</li>
+<li><b>Tokens de acceso a Google:</b> los conservamos mientras el agente use el servicio, porque los necesitamos para agendar sus citas. Los eliminamos como máximo en 30 días desde que el agente lo solicita o cierra su cuenta. Si el agente revoca el acceso en Google, los tokens dejan de funcionar al instante y no podemos volver a usarlos.</li>
 <li><b>Nombre y email de la cuenta, y el registro de la cita</b> (fecha, tipo, dirección, identificador del evento): mientras el agente use el servicio y hasta 12 meses después, salvo obligación legal.</li>
 <li>Los eventos creados en el calendario del agente son del agente, que puede borrarlos en cualquier momento.</li>
 <li><b>Revocar el acceso:</b> en cualquier momento en <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. <b>Pedir la eliminación:</b> en <a href="/eliminar-datos">Eliminación de datos</a> o en <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
@@ -127,7 +127,7 @@
 <h3>3.5 Retention and deletion of Google data</h3>
 <ul>
 <li><b>Availability (free/busy):</b> queried on demand and not stored.</li>
-<li><b>Google access tokens:</b> deleted within 30 days at most after the agent disconnects, requests it or closes their account.</li>
+<li><b>Google access tokens:</b> kept while the agent uses the service, because we need them to book their appointments. We delete them within 30 days at most after the agent asks us to or closes their account. If the agent revokes access in Google, the tokens stop working immediately and we cannot use them again.</li>
 <li><b>Account name and email, and the appointment record</b> (date, type, address, event id): kept while the agent uses the service and up to 12 months afterwards, unless the law requires otherwise.</li>
 <li>Events created in the agent's calendar belong to the agent, who can delete them at any time.</li>
 <li><b>Revoke access</b> at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. <b>Request deletion</b> on the <a href="/eliminar-datos">Data deletion</a> page or at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
