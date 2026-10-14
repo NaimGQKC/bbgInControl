@@ -51,8 +51,10 @@
   .wa { align-self:stretch; background:#ECE5DD; border-radius:18px; padding:12px; box-shadow:var(--shadow); color:#111; }
   .wa small { display:block; color:#667781; font-size:12px; margin-bottom:6px; }
   .wa div { background:#DCF8C6; border-radius:12px; padding:9px 11px; white-space:pre-line; font-size:15px; box-shadow:0 1px 1px rgba(0,0,0,.08); }
-  .suggest { display:flex; gap:6px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; } .suggest::-webkit-scrollbar { display:none; }
-  .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; white-space:nowrap; flex:none !important; }
+  .suggest { display:flex; flex-wrap:wrap; gap:6px; margin:2px 4px 8px; }
+  .actions .suggest .btn { padding:6px 12px; font-size:13px; font-weight:500; flex:0 0 auto; }
+  .skip { background:none; border:0; color:var(--muted); font:inherit; font-size:14px; padding:6px 10px; cursor:pointer; }
+  .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; flex:none !important; }
   .chip { display:flex; align-items:center; gap:8px; margin:6px 0; } .chip code { flex:1; }
   .chip button { padding:5px 10px; font-size:13px; }
   @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
@@ -115,17 +117,13 @@ function scroll() { requestAnimationFrame(() => window.scrollTo({ top: document.
 // the floating dock changes height: keep the last message always visible above it
 new ResizeObserver(() => { document.documentElement.style.setProperty("--dock", ($actions.offsetHeight || 0) + 12 + "px"); scroll(); }).observe($actions);
 async function say(text, who, my) {
-  if (who === "bot" && !seen.has(text)) {
-    const dots = document.createElement("div"); dots.className = "b bot typing"; dots.innerHTML = "<i></i><i></i><i></i>";
-    $msgs.appendChild(dots); scroll();
-    await sleep(450);
-    dots.remove();
-    if (my !== gen) throw STALE;
-    seen.add(text); store.set("seen", JSON.stringify([...seen]));
-  }
+  const fresh = who === "bot" && !seen.has(text);
+  if (fresh) { seen.add(text); store.set("seen", JSON.stringify([...seen])); }
   if (my !== gen) throw STALE;
   add(text, who); scroll();
+  if (fresh) await sleep(Math.min(1000, 250 + text.split(/\s+/).length * 28));  // let the words land before the next line
 }
+function stage() { $msgs.innerHTML = ""; }  // a finished step dissolves; only the current one stays on screen
 async function api(path, body) {
   const r = await fetch(`/api/o/${TOKEN}${path}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
   const data = await r.json().catch(() => ({ ok: false, error: "Error de conexión" }));
@@ -135,7 +133,7 @@ async function api(path, body) {
 function err(t) { const e = document.getElementById("err"); if (e) e.textContent = t || ""; }
 function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [] }) {
   $actions.innerHTML = `${suggestions.length ? '<div class="suggest" id="sg"></div>' : ""}<form class="row" id="f"><input id="i" type="${type}" placeholder="${ph}" autocomplete="on" ${optional ? "" : "required"}>
-    <button class="btn" type="submit">${button}</button>${optional ? `<button class="btn secondary" type="button" id="skip">${skipLabel}</button>` : ""}</form><div class="err" id="err"></div>`;
+    <button class="btn" type="submit">${button}</button></form>${optional ? `<div style="text-align:center"><button class="skip" type="button" id="skip">${skipLabel}</button></div>` : ""}<div class="err" id="err"></div>`;
   const i = document.getElementById("i"); i.focus();
   for (const text of suggestions) {  // tap an example to add it; the agent can edit the text freely
     const b = document.createElement("button"); b.type = "button"; b.className = "btn secondary"; b.textContent = text;
@@ -170,11 +168,9 @@ const pretty = (p) => (p || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "+34 $1 $
 document.getElementById("aname").textContent = state.assistant;
 document.getElementById("avatar").textContent = state.assistant.charAt(0);
 function updateProgress() {
-  const groups = ["google", "questions", ...(state.payment.required ? ["payment"] : []), "whatsapp"];
-  const at = { wa_check: "whatsapp", waiting_templates: "whatsapp", done: "whatsapp" }[state.step] || state.step;
-  const n = Math.max(groups.indexOf(at), 0) + 1;
-  document.getElementById("progress").textContent = state.step === "done" ? "listo" : `${n}/${groups.length}`;
-  document.getElementById("barfill").style.width = (state.step === "done" ? 100 : Math.round(((n - 1 + 0.5) / groups.length) * 100)) + "%";
+  const n = { google: 1, questions: 2, payment: 3, wa_check: 3, whatsapp: 4, waiting_templates: 4, done: 4 }[state.step] || 1;
+  document.getElementById("progress").textContent = state.step === "done" ? "listo" : `${n}/4`;
+  document.getElementById("barfill").style.width = (state.step === "done" ? 100 : n * 25 - 12) + "%";
 }
 document.getElementById("helpbtn").onclick = () => {
   add("¿Prefieres que te llame una persona del equipo o que te escriba?", "bot"); scroll();
@@ -251,7 +247,7 @@ async function flow(my) {
   const bot = (t) => say(t, "bot", my), me = (t) => say(t, "me", my);
   const a = state.answers, integ = state.integrations, step = state.step, pay = state.payment;
   const at = (s) => ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"].indexOf(s);
-  updateProgress();
+  updateProgress(); stage();
 
   $msgs.insertAdjacentHTML("beforeend", `<div class="hero"><div class="orb"></div><h1>Hola, soy ${state.assistant}</h1></div>`);
   await bot("La IA de Sparrow. Contacto a tus propietarios por WhatsApp y te agendo las valoraciones. Lo dejamos listo en 10 minutos.");
@@ -264,6 +260,7 @@ async function flow(my) {
     buttons([{ cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google`, onClick: () => connectGoogle(my) }]);
     return;
   }
+  stage();
   await me("✅ Calendario conectado");
   let peek = JSON.parse(store.get("peek") || "null");  // proof that it works, and an early warning if a permission is missing
   if (!peek) { const r = await api("/calendar_check", {}); if (r.ok) { peek = r; store.set("peek", JSON.stringify(r)); } else peek = { failed: true }; }
@@ -278,6 +275,7 @@ async function flow(my) {
   const nameOk = () => store.get("nameOk") === "1";
   for (const q of QUESTIONS) {
     const v = a[q.f];
+    if (q.f !== "agent_name") stage();
     const answered = v && (q.f !== "agent_name" || nameOk() || step !== "questions");
     if (answered) { await bot(q.q); await me(v); continue; }
     if (step !== "questions") continue;
@@ -300,6 +298,7 @@ async function flow(my) {
   }
   if (step === "questions") { await api("/answers", {}); return render(); }
 
+  stage();
   // 3. How do they want it to work? (optional, free text; it goes straight into the assistant's instructions)
   const PREFS_Q = "Opcional: ¿cómo quieres que trabaje? Horarios, tono, lo que NO debo hacer…";
   if (a.extra_context) { await bot(PREFS_Q); await me(a.extra_context); }
@@ -317,17 +316,31 @@ async function flow(my) {
     return;
   }
 
-  // 3b. Show exactly what an owner will receive from their number
-  if (state.first_message) {
+  // 3b. Show exactly what an owner will receive, and what success looks like
+  if (state.first_message && store.get("previewOk") !== "1" && at(step) <= at("wa_check")) {
+    stage();
     await bot("Así verá un propietario mi primer mensaje:");
     const wa = document.createElement("div"); wa.className = "wa";
     const who = document.createElement("small"); who.textContent = "WhatsApp · Marta (propietaria, ejemplo)";
     const msg = document.createElement("div"); msg.textContent = state.first_message;
     wa.append(who, msg); $msgs.appendChild(wa); scroll();
+    const slot = ((JSON.parse(store.get("peek") || "null") || {}).first || [])[0];
+    if (slot) {
+      if (!seen.has("demo")) await sleep(1400);
+      const re = document.createElement("div"); re.className = "wa"; re.style.cssText = "background:none;box-shadow:none;padding:0"; re.innerHTML = '<div style="background:#fff;margin-left:30px"></div>';
+      re.firstChild.textContent = "Perfecto, me viene bien. ¿Quedamos el " + slot + "?"; $msgs.appendChild(re); scroll();
+      if (!seen.has("demo")) await sleep(1000);
+      const ok = document.createElement("div"); ok.className = "coach warn"; ok.textContent = "✅ Valoración agendada en tu Google Calendar: " + slot; $msgs.appendChild(ok); scroll();
+      seen.add("demo"); store.set("seen", JSON.stringify([...seen]));
+      await bot("Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
+    }
+    buttons([{ label: "Me gusta, seguimos", onClick: () => { store.set("previewOk", "1"); render(); } }]);
+    return;
   }
 
   // 4. Payment (only when a Stripe link is configured)
   if (pay.required) {
+    stage();
     await bot(`Ya casi. La puesta en marcha cuesta ${pay.fee} € una sola vez. Después, solo pagas ${pay.per_meeting} € por cada cita que te agende: si no hay citas, no pagas nada más.`);
     if (pay.paid) await me("✅ Pago recibido");
     else {
@@ -341,6 +354,7 @@ async function flow(my) {
   }
 
   // 5. WhatsApp Business check
+  stage();
   await bot("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida BAJA no recibe nada más.");
   await bot("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)?");
   if (at(step) > at("wa_check")) await me(store.get("waAnswer") || "Uso WhatsApp Business");
@@ -365,7 +379,8 @@ async function flow(my) {
     return;
   }
 
-  // 6. Meta signup (the popup is Meta's; we sit next to it with copy-paste helpers)
+  // 6. Meta signup
+  stage();  // the popup is Meta's; we sit next to it with copy-paste helpers
   await bot("Último paso: conectar tu WhatsApp. Se abre una ventana de Meta. Ten a mano el móvil y una tarjeta.");
   if (at(step) > at("whatsapp")) await me("✅ WhatsApp conectado");
   else {
@@ -387,6 +402,7 @@ async function flow(my) {
 
   // 7. Where to alert them (defaults to the number they just connected)
   if (store.get("alertOk") !== "1") {
+    stage();
     const saveAlert = async (val) => { const r = await api("/answers", { personal_whatsapp: val }); if (r.ok === false) return err(r.error); store.set("alertOk", "1"); render(); };
     if (a.personal_whatsapp) {
       await bot(`Un último detalle: si un cliente necesita que intervengas tú, te aviso por WhatsApp al ${pretty(a.personal_whatsapp)}. ¿Te va bien ese número?`);
@@ -400,6 +416,7 @@ async function flow(my) {
   }
 
   // 8. Waiting for Meta / done
+  stage();
   if (state.status !== "live") {
     await bot("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté.");
     pollTimer = setInterval(async () => { await api(""); if (state.status === "live") render(); }, 20000);
