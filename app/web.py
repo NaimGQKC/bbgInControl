@@ -17,7 +17,7 @@ from .db import session_scope
 from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
 from .guards import normalize_phone
 from .intake import from_lystos, normalize
-from .models import Account
+from .models import Account, Integration
 
 log = logging.getLogger("sparrow.web")
 router = APIRouter()
@@ -33,6 +33,18 @@ def _account_by_token(s, token: str) -> Account:
     if not acc:
         raise HTTPException(404, "Enlace no válido")
     return acc
+
+
+_GENERIC_MAIL = {"gmail", "googlemail", "hotmail", "outlook", "live", "msn", "yahoo", "icloud", "me", "proton", "protonmail", "telefonica", "movistar", "terra", "orange", "wanadoo"}
+
+
+def _agency_hint(email: str) -> str:
+    """A work email domain often names the agency (laura@remax-confort.es -> 'Remax Confort'). Only a suggestion, never saved."""
+    dom = (email or "").rpartition("@")[2].lower()
+    label = dom.split(".")[0] if dom else ""
+    if not label or label in _GENERIC_MAIL:
+        return ""
+    return " ".join(w.capitalize() for w in label.replace("_", "-").split("-") if w)
 
 
 def _state(s, acc: Account) -> dict:
@@ -53,6 +65,7 @@ def _state(s, acc: Account) -> dict:
             "personal_whatsapp": acc.personal_whatsapp,
             "extra_context": acc.extra_context,
         },
+        "agency_hint": _agency_hint(acc.email),
         # what a new owner will receive from their number, with a made-up lead name
         "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, "Marta", "")) if acc.agent_name else "",
         "integrations": integrations,
@@ -178,6 +191,61 @@ def api_calendar_check(token: str):
                 days.add(label.split(",")[0])
                 picks.append(label)
         return {"ok": True, "first": picks[:2]}
+
+
+def _google_row(s, acc: Account):
+    return s.execute(select(Integration).where(Integration.account_id == acc.id, Integration.provider == "google")).scalar_one_or_none()
+
+
+@router.post("/api/o/{token}/test_event")
+def api_test_event(token: str):
+    """The 'wow' moment: a clearly labelled test valuation lands in their real calendar (their phone buzzes). They delete it with one tap."""
+    from .engine import _slot_to_utc, settings_for
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        integ = _google_row(s, acc)
+        if not integ or integ.status != "active":
+            return {"ok": False}
+        ext = dict(integ.external or {})
+        try:
+            cal = gcal.calendar_for_account(s, acc)
+            if ext.get("test_event") and cal.get_event(ext["test_event"]["id"]):  # already created: don't duplicate
+                return {"ok": True, "label": ext["test_event"]["label"]}
+            slots = compute_free_slots(s, acc, max_slots=1)
+            if not slots:
+                return {"ok": False}
+            start = _slot_to_utc(slots[0]["slot_id"], acc.timezone)
+            from datetime import timedelta
+            eid = cal.create_event(
+                summary="[Prueba Sparrow] Valoración piso Marta",
+                description="Esto es una prueba de Sparrow AI: así verás aquí tus valoraciones reales, con el teléfono y los datos del propietario.\nPuedes borrarla sin problema.",
+                location="", start_utc=start, end_utc=start + timedelta(minutes=settings_for(acc)["meeting_minutes"]),
+                timezone=acc.timezone, request_id=f"test-{acc.id}",
+            )
+        except CalendarError as e:
+            log_event(s, "test_event_failed", acc.id, error=str(e)[:300])
+            return {"ok": False}
+        ext["test_event"] = {"id": eid, "label": slots[0]["label"]}
+        integ.external = ext
+        log_event(s, "test_event_created", acc.id)
+        return {"ok": True, "label": slots[0]["label"]}
+
+
+@router.post("/api/o/{token}/test_event/delete")
+def api_test_event_delete(token: str):
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        integ = _google_row(s, acc)
+        ext = dict(integ.external or {}) if integ else {}
+        te = ext.pop("test_event", None)
+        if te:
+            try:
+                gcal.calendar_for_account(s, acc).delete_event(te["id"])
+            except CalendarError:
+                pass
+            integ.external = ext
+            log_event(s, "test_event_deleted", acc.id)
+        return {"ok": True}
 
 
 @router.post("/api/o/{token}/help")
