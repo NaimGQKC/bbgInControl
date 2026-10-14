@@ -19,7 +19,7 @@
   .msgs { flex:1; padding:calc(76px + env(safe-area-inset-top)) 16px calc(var(--dock) + 24px); display:flex; flex-direction:column; gap:10px; }
   .msgs > * { animation:rise .45s var(--ease) both; }
   @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:none; } }
-  .b { max-width:88%; padding:11px 15px; border-radius:20px; white-space:pre-line; line-height:1.45; transition:opacity .6s; }
+  .b { max-width:88%; font-size:15px; padding:10px 14px; border-radius:20px; white-space:pre-line; line-height:1.45; transition:opacity .6s; }
   .bot { background:var(--card); box-shadow:var(--shadow); align-self:flex-start; border-bottom-left-radius:6px; }
   .me { background:var(--ink); color:var(--bg); align-self:flex-end; border-bottom-right-radius:6px; }
   .dock { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; justify-content:center; padding:0 12px calc(12px + env(safe-area-inset-bottom)); pointer-events:none; }
@@ -30,6 +30,7 @@
   .actions .row input { flex:1; min-width:0; border-radius:14px; }
   .actions .btn { border-radius:14px; padding:12px 18px; flex:1 1 auto; text-align:center; transition:transform .15s var(--ease), opacity .2s; }
   .actions .btn:active { transform:scale(.97); } .actions .row input + .btn { flex:none; }
+  .btn.g { background:#fff; color:#3c4043; border:1px solid #dadce0; font-weight:500; } @media (prefers-color-scheme: dark) { .btn.g { background:#fff; } }
   .wait { display:flex; gap:10px; align-items:center; color:var(--muted); font-size:14px; padding:2px 4px 8px; }
   .spin { width:16px; height:16px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:sp 0.8s linear infinite; flex:none; }
   @keyframes sp { to { transform:rotate(360deg); } }
@@ -57,7 +58,7 @@
   <div class="top">
     <div class="top-in">
       <div class="avatar" id="avatar"></div>
-      <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span>asistente virtual (IA) de Sparrow</span></div>
+      <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span>Asistente IA de Sparrow</span></div>
       <button class="helpbtn" id="helpbtn" type="button">Hablar con una persona</button>
     </div>
     <div class="bar"><i id="barfill"></i></div>
@@ -134,7 +135,7 @@ function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optiona
   if (optional) document.getElementById("skip").onclick = () => onSubmit("", true);
 }
 function buttons(list) {
-  $actions.innerHTML = `<div class="row">${list.map((b, k) => `<button class="btn ${b.secondary ? "secondary" : ""}" data-k="${k}">${b.label}</button>`).join("")}</div><div class="err" id="err"></div>`;
+  $actions.innerHTML = `<div class="row">${list.map((b, k) => `<button class="btn ${b.secondary ? "secondary" : ""} ${b.cls || ""}" data-k="${k}">${b.label}</button>`).join("")}</div><div class="err" id="err"></div>`;
   $actions.querySelectorAll("button").forEach((el) => (el.onclick = () => list[+el.dataset.k].onClick(el)));
   scroll();  // the bar just grew: keep the last message visible above it
 }
@@ -209,16 +210,16 @@ function connectGoogle(my) {
   if (!w) { store.set("popup", "0"); location.href = url; return; }  // phone or blocked: same tab, nothing else to coordinate
   waiting("Esperando a Google…", () => connectGoogle(my));
   const timers = [
-    setTimeout(() => coach(my, "g1", "Ya tienes Google abierto en otra ventana. Elige tu cuenta de Google Calendar."), 3500),
-    setTimeout(() => coach(my, "g2", "Si sale «Google no ha verificado esta app»: pulsa Avanzado y luego «Ir a Sparrow AI». Tranquilo, es lo esperado."), 9000),
-    setTimeout(() => coach(my, "g3", "En la lista de permisos, deja TODAS las casillas marcadas y pulsa Continuar. Si falta alguna, no podré agendar."), 17000),
+    setTimeout(() => coach(my, "g1", "Elige tu cuenta de Google Calendar."), 3500),
+    setTimeout(() => coach(my, "g2", "¿Aviso de «no verificada»? Avanzado → Ir a Sparrow AI."), 9000),
+    setTimeout(() => coach(my, "g3", "Deja todas las casillas marcadas y pulsa Continuar."), 17000),
   ];
   const done = setInterval(async () => {
     const res = (store.get("gres") || "").split(":")[0];
     if (res === "denied") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); params.set("google", "denied"); try { w.close(); } catch (e) {} return render(); }
     await api("");
     if (state.integrations.google && state.integrations.google.status === "active") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); try { w.close(); } catch (e) {} render(); }
-    else if (w.closed && !(res)) { clearInterval(done); timers.forEach(clearTimeout); await coach(my, "gx", "Has cerrado la ventana de Google antes de terminar. Cuando quieras, lo intentamos otra vez."); buttons([{ label: "Abrir Google", onClick: () => connectGoogle(my) }]); }
+    else if (w.closed && !(res)) { clearInterval(done); timers.forEach(clearTimeout); await coach(my, "gx", "Se cerró antes de terminar. Otra vez:"); buttons([{ cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google`, onClick: () => connectGoogle(my) }]); }
   }, 1500);
 }
 
@@ -240,25 +241,25 @@ async function flow(my) {
   const at = (s) => ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"].indexOf(s);
   updateProgress();
 
-  await bot(`¡Hola! Soy ${state.assistant}, tu asistente virtual de Sparrow 👋 Sí, soy una IA. Yo contacto a tus propietarios nuevos por WhatsApp y te dejo las valoraciones agendadas en tu calendario. Te lo dejo todo listo en unos 10 minutos. Y si prefieres hacerlo con una persona, pulsa «Hablar con una persona» arriba.`);
+  await bot(`¡Hola! Soy ${state.assistant}, la IA de Sparrow 👋 Contacto a tus propietarios por WhatsApp y te agendo las valoraciones. Lo dejamos listo en 10 minutos.`);
 
   // 1. Google: one click, and we learn who they are. Google's screens can't show our words, so we warn first and coach in time.
-  await bot("Empezamos por tu Google Calendar, que es un clic. De ahí saco tus huecos libres y ahí aparecerán las citas.");
+  await bot("Primero, tu Google Calendar: ahí verás las citas.");
   if (!integ.google || integ.google.status !== "active") {
     if (params.get("google") === "denied") await bot("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
-    await bot("Te aviso de lo que vas a ver para que no te asuste: Google enseñará un aviso que dice «Google no ha verificado esta app». Es normal, estamos terminando su revisión. Se salta en dos toques: Avanzado → Ir a Sparrow AI.");
-    buttons([{ label: "Abrir Google", onClick: () => connectGoogle(my) }]);
+    await bot("Google avisará de «app no verificada»: es normal. Pulsa Avanzado → Ir a Sparrow AI.");
+    buttons([{ cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google`, onClick: () => connectGoogle(my) }]);
     return;
   }
   await me("✅ Calendario conectado");
   let peek = JSON.parse(store.get("peek") || "null");  // proof that it works, and an early warning if a permission is missing
   if (!peek) { const r = await api("/calendar_check", {}); if (r.ok) { peek = r; store.set("peek", JSON.stringify(r)); } else peek = { failed: true }; }
   if (peek.failed) {
-    await bot("Mmm, no consigo leer tu calendario. Suele pasar si en la ventana de Google se desmarca alguna casilla. Conéctalo otra vez y deja todas marcadas.");
+    await bot("No consigo leer tu calendario: falta algún permiso. Conéctalo otra vez con todas las casillas marcadas.");
     buttons([{ label: "Conectar de nuevo", onClick: () => connectGoogle(my) }]);
     return;
   }
-  await bot(peek.first.length ? `Comprobado: veo tu agenda perfectamente. Por ejemplo, ahora mismo estás libre el ${peek.first.join(" o el ")}.` : "Comprobado: veo tu agenda perfectamente. Esta semana la tienes llena, ya ajustaremos los horarios.");
+  await bot(peek.first.length ? `Veo tu agenda perfectamente: estás libre el ${peek.first.join(" o el ")}.` : "Veo tu agenda perfectamente.");
 
   // 2. Two questions (name comes from Google: just confirm it)
   const nameOk = () => store.get("nameOk") === "1";
@@ -278,7 +279,7 @@ async function flow(my) {
       } });
     };
     if (q.f === "agent_name" && v) {
-      await bot(`Por tu cuenta de Google veo que te llamas ${v}. ¿Te llamo ${firstName(v)}?`);
+      await bot(`Veo que te llamas ${v}. ¿Te llamo ${firstName(v)}?`);
       buttons([{ label: `Sí, ${firstName(v)}`, onClick: () => { store.set("nameOk", "1"); render(); } },
                { label: "Prefiero otro nombre", secondary: true, onClick: () => { $actions.innerHTML = ""; ask(); } }]);
     } else await ask();
@@ -287,7 +288,7 @@ async function flow(my) {
   if (step === "questions") { await api("/answers", {}); return render(); }
 
   // 3. How do they want it to work? (optional, free text; it goes straight into the assistant's instructions)
-  const PREFS_Q = "Una cosa más, opcional: ¿cómo quieres que trabaje por ti? Cuéntame lo que quieras (horarios, tono, tipo de inmuebles, lo que NO debo hacer) y lo tendré en cuenta en cada conversación.";
+  const PREFS_Q = "Opcional: ¿cómo quieres que trabaje? Horarios, tono, lo que NO debo hacer…";
   if (a.extra_context) { await bot(PREFS_Q); await me(a.extra_context); }
   else if (store.get("prefs") === "skipped") { await bot(PREFS_Q); await me("Así está bien, de momento"); }
   else if (at(step) <= at("wa_check")) {
@@ -305,7 +306,7 @@ async function flow(my) {
 
   // 3b. Show exactly what an owner will receive from their number
   if (state.first_message) {
-    await bot("Así es el primer mensaje que recibirá un propietario nuevo, desde tu número:");
+    await bot("Así verá un propietario mi primer mensaje:");
     const wa = document.createElement("div"); wa.className = "wa";
     const who = document.createElement("small"); who.textContent = "WhatsApp · Marta (propietaria, ejemplo)";
     const msg = document.createElement("div"); msg.textContent = state.first_message;
@@ -327,8 +328,8 @@ async function flow(my) {
   }
 
   // 5. WhatsApp Business check
-  await bot("Ahora lo importante: escribiré desde tu propio número de WhatsApp, así tus propietarios te reconocen. Tus chats y tu app siguen igual. Mis reglas:\n• Solo escribo a leads; nunca toco el resto de tus chats.\n• Si escribes tú a un cliente, me aparto.\n• Quien pida BAJA no vuelve a recibir nada.");
-  await bot("¿Qué WhatsApp usas en el móvil? Hay dos: el normal y WhatsApp Business (icono verde con una B blanca).");
+  await bot("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida BAJA no recibe nada más.");
+  await bot("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)?");
   if (at(step) > at("wa_check")) await me(store.get("waAnswer") || "Uso WhatsApp Business");
   else {
     const proceed = async (label) => { await me(label); store.set("waAnswer", label); await api("/step", { done: "wa_check" }); render(); };
@@ -352,7 +353,7 @@ async function flow(my) {
   }
 
   // 6. Meta signup (the popup is Meta's; we sit next to it with copy-paste helpers)
-  await bot("Último paso: conectar tu WhatsApp. Se abrirá una ventana de Meta (Facebook) encima de esta página. Ten a mano tu móvil con WhatsApp Business y una tarjeta (WhatsApp cobra céntimos por conversación, directamente a ti).");
+  await bot("Último paso: conectar tu WhatsApp. Se abre una ventana de Meta. Ten a mano el móvil y una tarjeta.");
   if (at(step) > at("whatsapp")) await me("✅ WhatsApp conectado");
   else {
     if (isMobile) {
@@ -360,13 +361,11 @@ async function flow(my) {
       const mail = `mailto:${encodeURIComponent(a.email || "")}?subject=${encodeURIComponent("Continuar la configuración de Sparrow")}&body=${encodeURIComponent(location.href)}`;
       $msgs.insertAdjacentHTML("beforeend", `<div class="coach small"><a href="${mail}">Envíame el enlace por email</a> para seguir desde el ordenador.</div>`);
     }
-    await bot("Esto es lo que vas a ver:");
-    $msgs.insertAdjacentHTML("beforeend", `<div class="coach"><ol>
-      <li>Inicia sesión en Facebook y pulsa <b>Continuar</b>.</li>
-      <li>Tus datos de empresa ya vienen rellenados: revisa y pulsa <b>Siguiente</b>.</li>
-      <li>Elige <b>conectar tu app de WhatsApp Business</b> y escribe tu número.</li>
-      <li>En tu móvil: WhatsApp Business → Ajustes → Dispositivos vinculados → <b>escanea el código QR</b>.</li>
-      <li>Añade tu tarjeta y pulsa <b>Finalizar</b>.</li></ol></div>`);
+        $msgs.insertAdjacentHTML("beforeend", `<div class="coach"><ol>
+      <li>Facebook → <b>Continuar</b></li>
+      <li>Revisa tus datos → <b>Siguiente</b></li>
+      <li>Tu número → <b>escanea el QR</b></li>
+      <li>Tarjeta → <b>Finalizar</b></li></ol></div>`);
     chips([["Nombre", a.agent_name + (a.agency ? " · " + a.agency : "")], ["Email", a.email]]);
     if (!FAKE) loadFB();  // load the SDK now so the popup opens straight from the click (no popup blocker)
     buttons([{ label: "Conectar WhatsApp", onClick: (el) => launchSignup(el) }]);
@@ -389,11 +388,11 @@ async function flow(my) {
 
   // 8. Waiting for Meta / done
   if (state.status !== "live") {
-    await bot("Ahora toca esperar a que WhatsApp apruebe tus mensajes (suele tardar unas horas, a veces un día). No tienes que hacer nada: te escribo yo en cuanto esté activo. Si dejas esta página abierta, verás aquí mismo cuándo está listo.");
+    await bot("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté.");
     pollTimer = setInterval(async () => { await api(""); if (state.status === "live") render(); }, 20000);
     return;
   }
-  await bot("Listo 🎉 Tu asistente ya está activo. No tienes que volver aquí: cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas aparecerán en tu Google Calendar con todo el contexto.");
+  await bot("Listo 🎉 Cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas caerán en tu Google Calendar. No hace falta volver aquí.");
   await bot("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo.");
 }
 // ---- Meta Embedded Signup (WhatsApp Business app onboarding = Coexistence) ----
