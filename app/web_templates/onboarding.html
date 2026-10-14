@@ -2,43 +2,68 @@
 {% block title %}Configura tu asistente · Sparrow AI{% endblock %}
 {% block head %}
 <style>
-  body { background:#EFE7DC; }
-  .chat { max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
-  .top { padding:10px 16px; border-bottom:1px solid var(--line); display:flex; gap:10px; align-items:center; background:var(--card); position:sticky; top:0; z-index:2; }
-  .avatar { width:38px; height:38px; border-radius:50%; background:var(--accent); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex:none; }
-  .who { flex:1; line-height:1.25; } .who b { display:block; } .who span { font-size:12px; color:var(--muted); }
-  .helpbtn { background:none; border:0; color:var(--accent); font:inherit; font-size:14px; cursor:pointer; text-decoration:underline; padding:4px; }
-  .msgs { flex:1; padding:16px; display:flex; flex-direction:column; gap:10px; }
-  .b { max-width:86%; padding:10px 13px; border-radius:14px; white-space:pre-line; }
-  .bot { background:var(--card); border:1px solid var(--line); align-self:flex-start; border-bottom-left-radius:4px; }
-  .me { background:#1C2433; color:#F6F2EA; align-self:flex-end; border-bottom-right-radius:4px; }
-  .actions { padding:12px 16px 20px; border-top:1px solid var(--line); background:var(--card); position:sticky; bottom:0; }
-  .actions .row input { flex:1; min-width:0; }
-  .coach { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 14px; align-self:stretch; }
+  :root { --shadow:0 1px 2px rgba(28,36,51,.06), 0 8px 24px rgba(28,36,51,.07); --glass:rgba(255,253,248,.78); --ease:cubic-bezier(.22,.8,.24,1); --dock:120px; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0E1014; --card:#1A1D24; --ink:#F2EEE6; --muted:#9AA1B0; --line:#2A2F3A; --accent:#D2694B; --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); --glass:rgba(26,29,36,.8); }
+    input, select, textarea { background:#12151B; } code { background:#262B35; } .me { background:var(--accent) !important; color:#fff !important; }
+  }
+  html { -webkit-text-size-adjust:100%; }
+  body { background:radial-gradient(1200px 600px at 50% -10%, rgba(180,85,58,.10), transparent 60%), var(--bg); -webkit-font-smoothing:antialiased; }
+  .chat { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
+  .top { position:fixed; top:0; left:0; right:0; z-index:5; background:var(--glass); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top); }
+  .top-in { max-width:560px; margin:0 auto; padding:10px 16px; display:flex; gap:10px; align-items:center; }
+  .avatar { width:34px; height:34px; border-radius:50%; background:linear-gradient(145deg,var(--accent),#d98a6f); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:700; flex:none; box-shadow:0 2px 8px rgba(180,85,58,.35); }
+  .who { flex:1; line-height:1.2; min-width:0; } .who b { display:block; font-size:15px; } .who span { font-size:12px; color:var(--muted); }
+  .helpbtn { background:none; border:0; color:var(--accent); font:inherit; font-size:13px; cursor:pointer; padding:6px 4px; white-space:nowrap; }
+  .bar { height:2px; background:transparent; } .bar i { display:block; height:2px; width:0; background:var(--accent); transition:width .8s var(--ease); }
+  .msgs { flex:1; padding:calc(76px + env(safe-area-inset-top)) 16px calc(var(--dock) + 24px); display:flex; flex-direction:column; gap:10px; }
+  .msgs > * { animation:rise .45s var(--ease) both; }
+  @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:none; } }
+  .b { max-width:88%; padding:11px 15px; border-radius:20px; white-space:pre-line; line-height:1.45; transition:opacity .6s; }
+  .bot { background:var(--card); box-shadow:var(--shadow); align-self:flex-start; border-bottom-left-radius:6px; }
+  .me { background:var(--ink); color:var(--bg); align-self:flex-end; border-bottom-right-radius:6px; }
+  .dock { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; justify-content:center; padding:0 12px calc(12px + env(safe-area-inset-bottom)); pointer-events:none; }
+  .actions { pointer-events:auto; width:100%; max-width:536px; background:var(--glass); -webkit-backdrop-filter:saturate(180%) blur(22px); backdrop-filter:saturate(180%) blur(22px); border:1px solid var(--line); border-radius:24px; padding:12px; box-shadow:0 10px 40px rgba(28,36,51,.16); }
+  .actions:empty { display:none; }
+  .actions > * { animation:rise .4s var(--ease) both; }
+  .actions .row { flex-wrap:nowrap; } .actions .row:has(.btn:nth-child(3)) { flex-wrap:wrap; }
+  .actions .row input { flex:1; min-width:0; border-radius:14px; }
+  .actions .btn { border-radius:14px; padding:12px 18px; flex:1 1 auto; text-align:center; transition:transform .15s var(--ease), opacity .2s; }
+  .actions .btn:active { transform:scale(.97); } .actions .row input + .btn { flex:none; }
+  .wait { display:flex; gap:10px; align-items:center; color:var(--muted); font-size:14px; padding:2px 4px 8px; }
+  .spin { width:16px; height:16px; border-radius:50%; border:2px solid var(--line); border-top-color:var(--accent); animation:sp 0.8s linear infinite; flex:none; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  .coach { background:var(--card); box-shadow:var(--shadow); border-radius:18px; padding:13px 16px; align-self:stretch; }
   .coach ol { margin:6px 0 0; padding-left:20px; } .coach li { margin:4px 0; }
-  .err { color:var(--bad); font-size:14px; margin-top:6px; }
-  .progress { font-size:12px; color:var(--muted); }
-  .typing { display:inline-flex; gap:4px; padding:13px 14px; }
+  .warn { border-left:3px solid var(--accent); }
+  .err { color:var(--bad); font-size:14px; margin-top:6px; } .err:empty { display:none; }
+  .progress { font-size:12px; color:var(--muted); font-weight:400; }
+  .typing { display:inline-flex; gap:4px; padding:14px 16px; }
   .typing i { width:7px; height:7px; border-radius:50%; background:var(--muted); opacity:.35; animation:blink 1.1s infinite; }
   .typing i:nth-child(2) { animation-delay:.18s; } .typing i:nth-child(3) { animation-delay:.36s; }
-  @keyframes blink { 0%,80%,100% { opacity:.25 } 40% { opacity:1 } }
-  .wa { align-self:stretch; background:#ECE5DD; border-radius:14px; padding:12px; }
+  @keyframes blink { 0%,80%,100% { opacity:.25; transform:translateY(0) } 40% { opacity:1; transform:translateY(-3px) } }
+  .wa { align-self:stretch; background:#ECE5DD; border-radius:18px; padding:12px; box-shadow:var(--shadow); color:#111; }
   .wa small { display:block; color:#667781; font-size:12px; margin-bottom:6px; }
-  .wa div { background:#DCF8C6; border-radius:10px; padding:9px 11px; white-space:pre-line; font-size:15px; box-shadow:0 1px 1px rgba(0,0,0,.08); }
-  .suggest { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; } .suggest button { padding:6px 10px; font-size:13px; }
+  .wa div { background:#DCF8C6; border-radius:12px; padding:9px 11px; white-space:pre-line; font-size:15px; box-shadow:0 1px 1px rgba(0,0,0,.08); }
+  .suggest { display:flex; gap:6px; margin-bottom:8px; overflow-x:auto; scrollbar-width:none; } .suggest::-webkit-scrollbar { display:none; }
+  .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; white-space:nowrap; flex:none !important; }
   .chip { display:flex; align-items:center; gap:8px; margin:6px 0; } .chip code { flex:1; }
   .chip button { padding:5px 10px; font-size:13px; }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 {% endblock %}
 {% block body %}
 <div class="chat">
   <div class="top">
-    <div class="avatar" id="avatar"></div>
-    <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span>asistente virtual (IA) de Sparrow</span></div>
-    <button class="helpbtn" id="helpbtn" type="button">Hablar con una persona</button>
+    <div class="top-in">
+      <div class="avatar" id="avatar"></div>
+      <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span>asistente virtual (IA) de Sparrow</span></div>
+      <button class="helpbtn" id="helpbtn" type="button">Hablar con una persona</button>
+    </div>
+    <div class="bar"><i id="barfill"></i></div>
   </div>
   <div class="msgs" id="msgs" aria-live="polite"></div>
-  <div class="actions" id="actions"></div>
+  <div class="dock"><div class="actions" id="actions"></div></div>
 </div>
 
 <script>
@@ -47,6 +72,16 @@ const FAKE = {{ 'true' if fake else 'false' }};
 const META = { appId: {{ meta_app_id|tojson }}, configId: {{ meta_config_id|tojson }}, version: {{ graph_version|tojson }} };
 let state = {{ state_json|safe }};
 const params = new URLSearchParams(location.search);
+// Google opens in a side window; when it lands back here, that window reports the result and closes itself
+try {
+  const g = params.get("google"), flag = +(localStorage.getItem(`sp:${TOKEN}:popup`) || 0);
+  if (g && flag && Date.now() - flag < 600000) {
+    localStorage.setItem(`sp:${TOKEN}:popup`, "0"); localStorage.setItem(`sp:${TOKEN}:gres`, g + ":" + Date.now());
+    window.close();
+    document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:30vh">Listo. Ya puedes cerrar esta ventana y volver a Sparrow.</p>';
+    throw new Error("popup-done");
+  }
+} catch (e) { if (e.message === "popup-done") throw e; }
 const STALE = Symbol("stale");
 const isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
 const $msgs = document.getElementById("msgs"), $actions = document.getElementById("actions");
@@ -62,7 +97,10 @@ const seen = new Set(JSON.parse(store.get("seen") || "[]"));
 let gen = 0, pollTimer = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function add(text, who) { const d = document.createElement("div"); d.className = "b " + who; d.textContent = text; $msgs.appendChild(d); return d; }
-function scroll() { window.scrollTo(0, document.body.scrollHeight); }
+const calm = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function scroll() { requestAnimationFrame(() => window.scrollTo({ top: document.body.scrollHeight, behavior: calm ? "auto" : "smooth" })); }
+// the floating dock changes height: keep the last message always visible above it
+new ResizeObserver(() => { document.documentElement.style.setProperty("--dock", ($actions.offsetHeight || 0) + 12 + "px"); scroll(); }).observe($actions);
 async function say(text, who, my) {
   if (who === "bot" && !seen.has(text)) {
     const dots = document.createElement("div"); dots.className = "b bot typing"; dots.innerHTML = "<i></i><i></i><i></i>";
@@ -123,6 +161,7 @@ function updateProgress() {
   const at = { wa_check: "whatsapp", waiting_templates: "whatsapp", done: "whatsapp" }[state.step] || state.step;
   const n = Math.max(groups.indexOf(at), 0) + 1;
   document.getElementById("progress").textContent = state.step === "done" ? "listo" : `${n}/${groups.length}`;
+  document.getElementById("barfill").style.width = (state.step === "done" ? 100 : Math.round(((n - 1 + 0.5) / groups.length) * 100)) + "%";
 }
 document.getElementById("helpbtn").onclick = () => {
   add("¿Prefieres que te llame una persona del equipo o que te escriba?", "bot"); scroll();
@@ -149,6 +188,40 @@ function helpForm(kind) {
   };
 }
 
+
+// ---- proactive coaching: say the right thing at the right moment while the user is in someone else's window
+const sayOnce = new Set();
+async function coach(my, key, text) {
+  if (sayOnce.has(key) || my !== gen) return;
+  sayOnce.add(key);
+  try { await say(text, "bot", my); } catch (e) { if (e !== STALE) throw e; }
+}
+function waiting(text, again) {
+  $actions.innerHTML = `<div class="wait"><span class="spin"></span><span>${text}</span></div>${again ? '<div class="row"><button class="btn secondary" id="again" type="button">Abrir de nuevo</button></div>' : ""}<div class="err" id="err"></div>`;
+  if (again) document.getElementById("again").onclick = again;
+}
+function connectGoogle(my) {
+  const url = `/oauth/google/start?t=${TOKEN}`;
+  let w = null;
+  if (!isMobile) {
+    try { store.set("popup", String(Date.now())); w = window.open(url, "sparrow-google", "width=520,height=720,left=" + Math.max(0, screen.width / 2 - 260) + ",top=60"); } catch (e) {}
+  }
+  if (!w) { store.set("popup", "0"); location.href = url; return; }  // phone or blocked: same tab, nothing else to coordinate
+  waiting("Esperando a Google…", () => connectGoogle(my));
+  const timers = [
+    setTimeout(() => coach(my, "g1", "Ya tienes Google abierto en otra ventana. Elige tu cuenta de Google Calendar."), 3500),
+    setTimeout(() => coach(my, "g2", "Si sale «Google no ha verificado esta app»: pulsa Avanzado y luego «Ir a Sparrow AI». Tranquilo, es lo esperado."), 9000),
+    setTimeout(() => coach(my, "g3", "En la lista de permisos, deja TODAS las casillas marcadas y pulsa Continuar. Si falta alguna, no podré agendar."), 17000),
+  ];
+  const done = setInterval(async () => {
+    const res = (store.get("gres") || "").split(":")[0];
+    if (res === "denied") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); params.set("google", "denied"); try { w.close(); } catch (e) {} return render(); }
+    await api("");
+    if (state.integrations.google && state.integrations.google.status === "active") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); try { w.close(); } catch (e) {} render(); }
+    else if (w.closed && !(res)) { clearInterval(done); timers.forEach(clearTimeout); await coach(my, "gx", "Has cerrado la ventana de Google antes de terminar. Cuando quieras, lo intentamos otra vez."); buttons([{ label: "Abrir Google", onClick: () => connectGoogle(my) }]); }
+  }, 1500);
+}
+
 // ---- the conversation: one section per step; finished sections replay instantly as history
 const QUESTIONS = [
   { f: "agent_name", q: "¿Cómo te llamas? (nombre y apellido)", ph: "Laura García" },
@@ -169,11 +242,12 @@ async function flow(my) {
 
   await bot(`¡Hola! Soy ${state.assistant}, tu asistente virtual de Sparrow 👋 Sí, soy una IA. Yo contacto a tus propietarios nuevos por WhatsApp y te dejo las valoraciones agendadas en tu calendario. Te lo dejo todo listo en unos 10 minutos. Y si prefieres hacerlo con una persona, pulsa «Hablar con una persona» arriba.`);
 
-  // 1. Google: one click, and we learn who they are
+  // 1. Google: one click, and we learn who they are. Google's screens can't show our words, so we warn first and coach in time.
   await bot("Empezamos por tu Google Calendar, que es un clic. De ahí saco tus huecos libres y ahí aparecerán las citas.");
   if (!integ.google || integ.google.status !== "active") {
     if (params.get("google") === "denied") await bot("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
-    buttons([{ label: "Conectar Google Calendar", onClick: () => (location.href = `/oauth/google/start?t=${TOKEN}`) }]);
+    await bot("Te aviso de lo que vas a ver para que no te asuste: Google enseñará un aviso que dice «Google no ha verificado esta app». Es normal, estamos terminando su revisión. Se salta en dos toques: Avanzado → Ir a Sparrow AI.");
+    buttons([{ label: "Abrir Google", onClick: () => connectGoogle(my) }]);
     return;
   }
   await me("✅ Calendario conectado");
@@ -181,7 +255,7 @@ async function flow(my) {
   if (!peek) { const r = await api("/calendar_check", {}); if (r.ok) { peek = r; store.set("peek", JSON.stringify(r)); } else peek = { failed: true }; }
   if (peek.failed) {
     await bot("Mmm, no consigo leer tu calendario. Suele pasar si en la ventana de Google se desmarca alguna casilla. Conéctalo otra vez y deja todas marcadas.");
-    buttons([{ label: "Conectar de nuevo", onClick: () => (location.href = `/oauth/google/start?t=${TOKEN}`) }]);
+    buttons([{ label: "Conectar de nuevo", onClick: () => connectGoogle(my) }]);
     return;
   }
   await bot(peek.first.length ? `Comprobado: veo tu agenda perfectamente. Por ejemplo, ahora mismo estás libre el ${peek.first.join(" o el ")}.` : "Comprobado: veo tu agenda perfectamente. Esta semana la tienes llena, ya ajustaremos los horarios.");
@@ -323,14 +397,31 @@ async function flow(my) {
   await bot("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo.");
 }
 // ---- Meta Embedded Signup (WhatsApp Business app onboarding = Coexistence) ----
-let signup = {};
+let signup = {}, metaTimers = [];
+function metaCoach(data) {  // Meta tells us which screen the user is on: speak up at that moment
+  const step = String((data.data && data.data.current_step) || data.event || "").toLowerCase(), n = firstName(state.answers.agent_name), my = gen;
+  const hi = n ? `${n}, ` : "";
+  if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", `${hi}ahora coge tu móvil: WhatsApp Business → Ajustes → Dispositivos vinculados → Vincular un dispositivo, y escanea el código de la pantalla.`);
+  else if (/phone|number/.test(step)) coach(my, "m-phone", `${hi}Meta te pide tu número: pon el de WhatsApp Business, con el que escribes a tus clientes.`);
+  else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
+  else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", `${hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.`);
+}
+function startMetaCoaching() {
+  const my = gen, n = firstName(state.answers.agent_name), hi = n ? `${n}, ` : "";
+  metaTimers.forEach(clearTimeout);
+  metaTimers = [
+    setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
+    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge tu app de WhatsApp Business."), 20000),
+    setTimeout(() => coach(my, "m3", "¿Te has quedado atascado? Pulsa «Hablar con una persona» arriba y te ayudamos."), 90000),
+  ];
+}
 window.addEventListener("message", (event) => {
   if (!event.origin.endsWith("facebook.com")) return;
   try {
     const data = JSON.parse(event.data);
     if (data.type !== "WA_EMBEDDED_SIGNUP") return;
     if (data.event && data.event.startsWith("FINISH")) signup = { waba_id: data.data.waba_id, phone_number_id: data.data.phone_number_id };
-    else api("/meta_event", { event: data.event, current_step: data.data && data.data.current_step });
+    else { api("/meta_event", { event: data.event, current_step: data.data && data.data.current_step }); metaCoach(data); }
   } catch (e) {}
 });
 function loadFB() {
@@ -352,11 +443,11 @@ let fbPromise = null, fbReady = false;
 function launchSignup(el) {
   if (FAKE) { el.disabled = true; signup = { waba_id:"fake-waba", phone_number_id:"fake-phone-" + TOKEN.slice(0,6) }; return finishSignup("fake-code"); }
   if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
-  el.disabled = true;
+  el.disabled = true; startMetaCoaching();
   const a = state.answers;
   const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
   FB.login((response) => {
-    el.disabled = false;
+    el.disabled = false; metaTimers.forEach(clearTimeout);
     if (response.authResponse && response.authResponse.code) {
       const code = response.authResponse.code;  // expires in ~30s: send it right away
       // Coexistence only returns waba_id (the server looks up the phone number)
