@@ -16,6 +16,10 @@
   .avatar { width:28px; height:28px; font-size:0; } .avatar::after, .orb::after { content:""; position:absolute; inset:22%; border-radius:50%; background:var(--bg); filter:blur(1px); opacity:.88; }
   .orb { width:56px; height:56px; filter:blur(.3px); box-shadow:0 0 40px rgba(124,140,248,.35), 0 0 60px rgba(180,85,58,.25); }
   @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes breathe { 50% { transform:scale(1.12); } }
+  [data-orb=google] .orb, [data-orb=google] .avatar { background:conic-gradient(#EA4335,#FBBC05,#34A853,#4285F4,#EA4335); animation-duration:2.2s; }
+  [data-orb=ok] .orb, [data-orb=ok] .avatar, [data-orb=done] .orb, [data-orb=done] .avatar { background:conic-gradient(#1FAF6B,#7EE2B0,#1FAF6B); animation:breathe 2.4s ease-in-out infinite; }
+  [data-orb=meta] .orb, [data-orb=meta] .avatar { background:conic-gradient(#25D366 calc(var(--p,10) * 1%), rgba(150,150,150,.35) 0); animation:none; transition:background .6s; }
   .hero { margin:6px 0 18px; } .hero h1 { font-size:34px; line-height:1.15; margin:18px 0 0; font-weight:600; letter-spacing:-.02em; background:linear-gradient(90deg,#B4553A,#7C8CF8 70%); -webkit-background-clip:text; background-clip:text; color:transparent; }
   .w { opacity:0; animation:wd .55s var(--ease) forwards; } @keyframes wd { from { opacity:0; filter:blur(4px); transform:translateY(4px); } to { opacity:1; filter:none; transform:none; } }
   .who { flex:1; line-height:1.2; min-width:0; } .who b { display:block; font-size:15px; } .who span { font-size:12px; color:var(--muted); }
@@ -92,6 +96,7 @@ try {
 } catch (e) { if (e.message === "popup-done") throw e; }
 const STALE = Symbol("stale");
 const isMobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+const setOrb = (v, p) => { document.documentElement.dataset.orb = v; if (p !== undefined) document.documentElement.style.setProperty("--p", p); };
 const $msgs = document.getElementById("msgs"), $actions = document.getElementById("actions");
 
 // ---- tiny storage helpers (storage can be blocked: the chat must still work)
@@ -131,23 +136,50 @@ async function api(path, body) {
   return data;
 }
 function err(t) { const e = document.getElementById("err"); if (e) e.textContent = t || ""; }
-function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [] }) {
+function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false }) {
   $actions.innerHTML = `${suggestions.length ? '<div class="suggest" id="sg"></div>' : ""}<form class="row" id="f"><input id="i" type="${type}" placeholder="${ph}" autocomplete="on" ${optional ? "" : "required"}>
     <button class="btn" type="submit">${button}</button></form>${optional ? `<div style="text-align:center"><button class="skip" type="button" id="skip">${skipLabel}</button></div>` : ""}<div class="err" id="err"></div>`;
   const i = document.getElementById("i"); i.focus();
   for (const text of suggestions) {  // tap an example to add it; the agent can edit the text freely
     const b = document.createElement("button"); b.type = "button"; b.className = "btn secondary"; b.textContent = text;
-    b.onclick = () => { i.value = i.value ? `${i.value}. ${text}` : text; i.focus(); };
+    b.onclick = () => { i.value = i.value ? `${i.value}${joiner}${text}` : text; i.focus(); };
     document.getElementById("sg").appendChild(b);
   }
+  if (zones) zonePicker(i);
   scroll();
   document.getElementById("f").onsubmit = async (e) => { e.preventDefault(); await onSubmit(i.value.trim(), false); };
   if (optional) document.getElementById("skip").onclick = () => onSubmit("", true);
+}
+// zones: tap the city first (Spain shares one timezone, so we can't guess it), then tap neighbourhoods instead of typing commas
+const CITIES = {
+  Madrid: ["Chamberí", "Salamanca", "Retiro", "Chamartín", "Centro", "Arganzuela", "Tetuán", "Moncloa"],
+  Barcelona: ["Eixample", "Gràcia", "Sarrià", "Les Corts", "Sant Martí", "Poblenou", "Sants", "Horta"],
+  Valencia: ["Ruzafa", "El Carmen", "Benimaclet", "Campanar", "Pla del Real", "Algirós", "Patraix"],
+  Sevilla: ["Nervión", "Triana", "Los Remedios", "Macarena", "Casco Antiguo", "Heliópolis"],
+  Zaragoza: ["Delicias", "Actur", "Centro", "Universidad", "San José", "Las Fuentes", "Casco Histórico"],
+  Málaga: ["Centro", "Teatinos", "Limonar", "El Palo", "Pedregalejo", "Huelin"],
+};
+function zonePicker(input) {
+  const box = document.createElement("div"); box.className = "suggest"; $actions.prepend(box);
+  const pill = (t, on) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn secondary"; b.textContent = t; b.onclick = on; box.appendChild(b); return b; };
+  const cities = () => { box.innerHTML = ""; for (const c of Object.keys(CITIES)) pill(c, () => hoods(c)); };
+  const hoods = (c) => {
+    box.innerHTML = ""; pill("← " + c, cities);
+    for (const h of CITIES[c]) { const b = pill(h, () => { const cur = input.value.split(",").map((x) => x.trim()).filter(Boolean); if (!cur.includes(h)) cur.push(h); input.value = cur.join(", "); b.style.opacity = ".45"; input.focus(); }); }
+  };
+  cities();
 }
 function buttons(list) {
   $actions.innerHTML = `<div class="row">${list.map((b, k) => `<button class="btn ${b.secondary ? "secondary" : ""} ${b.cls || ""}" data-k="${k}">${b.label}</button>`).join("")}</div><div class="err" id="err"></div>`;
   $actions.querySelectorAll("button").forEach((el) => (el.onclick = () => list[+el.dataset.k].onClick(el)));
   scroll();  // the bar just grew: keep the last message visible above it
+}
+function summaryCard() {
+  const a = state.answers, d = document.createElement("div"); d.className = "coach";
+  const rows = [["Agencia", a.agency], ["Zonas", a.zones], ["Calendario", "✅ Google Calendar conectado"], ["WhatsApp", "✅ Tu número, conectado"], ["Avisos a", pretty(a.personal_whatsapp)]].filter((x) => x[1]);
+  d.innerHTML = rows.map(([k, v]) => `<div class="chip"><span class="small muted" style="min-width:80px">${k}</span><span class="sv"></span></div>`).join("");
+  d.querySelectorAll(".sv").forEach((el, k) => (el.textContent = rows[k][1]));
+  $msgs.appendChild(d);
 }
 function chips(items) {  // copy-paste helpers next to Meta's window
   const d = document.createElement("div"); d.className = "coach";
@@ -216,7 +248,7 @@ function connectGoogle(my) {
     try { store.set("popup", String(Date.now())); w = window.open(url, "sparrow-google", "width=520,height=720,left=" + Math.max(0, screen.width / 2 - 260) + ",top=60"); } catch (e) {}
   }
   if (!w) { store.set("popup", "0"); location.href = url; return; }  // phone or blocked: same tab, nothing else to coordinate
-  waiting("Esperando a Google…", () => connectGoogle(my));
+  setOrb("google"); waiting("Esperando a Google…", () => connectGoogle(my));
   const timers = [
     setTimeout(() => coach(my, "g1", "Elige tu cuenta de Google Calendar."), 3500),
     setTimeout(() => coach(my, "g2", "¿Aviso de «no verificada»? Avanzado → Ir a Sparrow AI."), 9000),
@@ -248,6 +280,7 @@ async function flow(my) {
   const a = state.answers, integ = state.integrations, step = state.step, pay = state.payment;
   const at = (s) => ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"].indexOf(s);
   updateProgress(); stage();
+  setOrb(state.status === "live" ? "done" : "idle");
 
   $msgs.insertAdjacentHTML("beforeend", `<div class="hero"><div class="orb"></div><h1>Hola, soy ${state.assistant}</h1></div>`);
   await bot("La IA de Sparrow. Contacto a tus propietarios por WhatsApp y te agendo las valoraciones. Lo dejamos listo en 10 minutos.");
@@ -260,7 +293,7 @@ async function flow(my) {
     buttons([{ cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google`, onClick: () => connectGoogle(my) }]);
     return;
   }
-  stage();
+  stage(); setOrb("ok"); setTimeout(() => { if (document.documentElement.dataset.orb === "ok") setOrb("idle"); }, 3500);
   await me("✅ Calendario conectado");
   let peek = JSON.parse(store.get("peek") || "null");  // proof that it works, and an early warning if a permission is missing
   if (!peek) { const r = await api("/calendar_check", {}); if (r.ok) { peek = r; store.set("peek", JSON.stringify(r)); } else peek = { failed: true }; }
@@ -281,7 +314,7 @@ async function flow(my) {
     if (step !== "questions") continue;
     const ask = async () => {
       await bot(q.q);
-      inputRow({ ph: q.ph, onSubmit: async (val) => {
+      inputRow({ ph: q.ph, zones: q.f === "zones", joiner: ", ", suggestions: q.f === "agency" && state.agency_hint ? [state.agency_hint] : [], onSubmit: async (val) => {
         if (!val) return;
         const r = await api("/answers", { [q.f]: val });
         if (r.ok === false) return err(r.error);
@@ -325,16 +358,23 @@ async function flow(my) {
     const msg = document.createElement("div"); msg.textContent = state.first_message;
     wa.append(who, msg); $msgs.appendChild(wa); scroll();
     const slot = ((JSON.parse(store.get("peek") || "null") || {}).first || [])[0];
+    let label = slot, real = false;
     if (slot) {
-      if (!seen.has("demo")) await sleep(1400);
+      if (!seen.has("demo")) {
+        await sleep(1400);
+        const te = await api("/test_event", {});  // a real test event in their calendar: their phone buzzes
+        if (te.ok) { label = te.label; real = true; }
+      }
       const re = document.createElement("div"); re.className = "wa"; re.style.cssText = "background:none;box-shadow:none;padding:0"; re.innerHTML = '<div style="background:#fff;margin-left:30px"></div>';
-      re.firstChild.textContent = "Perfecto, me viene bien. ¿Quedamos el " + slot + "?"; $msgs.appendChild(re); scroll();
-      if (!seen.has("demo")) await sleep(1000);
-      const ok = document.createElement("div"); ok.className = "coach warn"; ok.textContent = "✅ Valoración agendada en tu Google Calendar: " + slot; $msgs.appendChild(ok); scroll();
+      re.firstChild.textContent = "Perfecto, me viene bien. ¿Quedamos el " + label + "?"; $msgs.appendChild(re); scroll();
+      if (!seen.has("demo")) await sleep(900);
+      const ok = document.createElement("div"); ok.className = "coach warn"; ok.textContent = "✅ Valoración agendada en tu Google Calendar: " + label; $msgs.appendChild(ok); scroll();
       seen.add("demo"); store.set("seen", JSON.stringify([...seen]));
-      await bot("Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
+      await bot(real ? "Mira tu móvil: acaba de sonar. Es una prueba; la borro cuando quieras." : "Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
     }
-    buttons([{ label: "Me gusta, seguimos", onClick: () => { store.set("previewOk", "1"); render(); } }]);
+    const go = async () => { if (real) await api("/test_event/delete", {}); store.set("previewOk", "1"); render(); };
+    buttons(real ? [{ label: "Lo he visto · borrar la prueba y seguir", onClick: go }, { label: "No me ha llegado, seguir", secondary: true, onClick: go }]
+                 : [{ label: "Me gusta, seguimos", onClick: go }]);
     return;
   }
 
@@ -419,10 +459,12 @@ async function flow(my) {
   stage();
   if (state.status !== "live") {
     await bot("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté.");
+    summaryCard();
     pollTimer = setInterval(async () => { await api(""); if (state.status === "live") render(); }, 20000);
     return;
   }
   await bot("Listo 🎉 Cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas caerán en tu Google Calendar. No hace falta volver aquí.");
+  summaryCard();
   await bot("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo.");
 }
 // ---- Meta Embedded Signup (WhatsApp Business app onboarding = Coexistence) ----
@@ -430,6 +472,8 @@ let signup = {}, metaTimers = [];
 function metaCoach(data) {  // Meta tells us which screen the user is on: speak up at that moment
   const step = String((data.data && data.data.current_step) || data.event || "").toLowerCase(), n = firstName(state.answers.agent_name), my = gen;
   const hi = n ? `${n}, ` : "";
+  const ring = /qr|scan|link|device/.test(step) ? 75 : /phone|number/.test(step) ? 50 : /pay|billing|card/.test(step) ? 90 : /business|portfolio|info/.test(step) ? 25 : null;
+  if (ring) setOrb("meta", ring);
   if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", `${hi}ahora coge tu móvil: WhatsApp Business → Ajustes → Dispositivos vinculados → Vincular un dispositivo, y escanea el código de la pantalla.`);
   else if (/phone|number/.test(step)) coach(my, "m-phone", `${hi}Meta te pide tu número: pon el de WhatsApp Business, con el que escribes a tus clientes.`);
   else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
@@ -470,13 +514,15 @@ async function finishSignup(code) {
 }
 let fbPromise = null, fbReady = false;
 function launchSignup(el) {
+  const bizName = state.answers.agent_name + (state.answers.agency ? " · " + state.answers.agency : "");
+  try { navigator.clipboard.writeText(bizName).then(() => coach(gen, "copied", `Ya tienes tu nombre copiado («${bizName}»). Si Meta te lo pide, pégalo con Ctrl+V (⌘V en Mac).`)).catch(() => {}); } catch (e) {}  // inside the click: browsers allow it
   if (FAKE) { el.disabled = true; signup = { waba_id:"fake-waba", phone_number_id:"fake-phone-" + TOKEN.slice(0,6) }; return finishSignup("fake-code"); }
   if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
-  el.disabled = true; startMetaCoaching();
+  el.disabled = true; setOrb("meta", 10); startMetaCoaching();
   const a = state.answers;
   const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
   FB.login((response) => {
-    el.disabled = false; metaTimers.forEach(clearTimeout);
+    el.disabled = false; metaTimers.forEach(clearTimeout); setOrb("idle");
     if (response.authResponse && response.authResponse.code) {
       const code = response.authResponse.code;  // expires in ~30s: send it right away
       // Coexistence only returns waba_id (the server looks up the phone number)

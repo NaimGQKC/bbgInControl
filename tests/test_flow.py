@@ -473,6 +473,31 @@ def test_calendar_check_reports_a_missing_permission(clock, monkeypatch):
         assert s.execute(select(Event).where(Event.name == "calendar_check_failed")).first()
 
 
+def test_test_event_lands_in_calendar_and_is_deleted(clock):  # the "wow" demo: real event, one tap to remove
+    from app.gcal import FakeCalendar
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/test_event").json() == {"ok": False}  # no Google yet: nothing happens
+        _google_connected(token)
+        r = c.post(f"/api/o/{token}/test_event").json()
+        assert r["ok"] and r["label"]
+        live = [e for e in FakeCalendar.events.values() if not e.get("deleted")]
+        assert len(live) == 1 and live[0]["summary"].startswith("[Prueba Sparrow]")
+        assert c.post(f"/api/o/{token}/test_event").json()["label"] == r["label"]  # no duplicate on reload
+        assert len([e for e in FakeCalendar.events.values() if not e.get("deleted")]) == 1
+        assert c.post(f"/api/o/{token}/test_event/delete").json()["ok"]
+        assert not [e for e in FakeCalendar.events.values() if not e.get("deleted")]
+
+
+def test_agency_hint_only_from_work_domains():
+    from app.web import _agency_hint
+
+    assert _agency_hint("laura@remax-confort.es") == "Remax Confort"
+    assert _agency_hint("laura@gmail.com") == "" and _agency_hint("") == ""
+
+
 def _stripe_post(c, secret, payload, *, stamp=None, signed=True):
     body = json.dumps(payload).encode()
     t = stamp if stamp is not None else int(db.utcnow().replace(tzinfo=timezone.utc).timestamp())
