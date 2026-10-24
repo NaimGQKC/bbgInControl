@@ -491,6 +491,19 @@ def test_test_event_lands_in_calendar_and_is_deleted(clock):  # the "wow" demo: 
         assert not [e for e in FakeCalendar.events.values() if not e.get("deleted")]
 
 
+def test_start_carries_over_what_the_website_demo_collected(clock):
+    from app.main import app
+
+    with TestClient(app) as c:
+        r = c.post("/start", data={"agency": "RE/MAX Sol", "zones": "Delicias, Actur", "name": "Laura", "phone": "611 111 111"}, follow_redirects=False)
+        token = r.headers["location"].split("/")[-1]
+        a = c.get(f"/api/o/{token}").json()["answers"]
+        assert a["agency"] == "RE/MAX Sol" and a["zones"] == "Delicias, Actur" and a["personal_whatsapp"] == "+34611111111"
+        _google_connected(token)  # Google knows the full name: it replaces the first name; the questions are not asked again
+        st = c.get(f"/api/o/{token}").json()
+        assert st["answers"]["agent_name"] == "Laura García" and st["step"] == "wa_check"
+
+
 def test_agency_hint_only_from_work_domains():
     from app.web import _agency_hint
 

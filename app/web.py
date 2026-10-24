@@ -82,12 +82,22 @@ def landing(request: Request):
 
 
 @router.post("/start")
-def start():
+async def start(request: Request):
+    """Starts an onboarding. The website demo can post what the agent already told it (agency, zones, name, phone) so we never ask twice."""
+    try:
+        form = await request.form()
+    except Exception:
+        form = {}
+    clean = lambda k, n=200: str(form.get(k, "") or "").strip()[:n]
     with session_scope() as s:
         acc = Account()
         s.add(acc)
         s.flush()
-        log_event(s, "onboarding_started", acc.id)
+        acc.agency, acc.zones, acc.agent_name = clean("agency"), clean("zones", 500), clean("name")
+        phone = normalize_phone(clean("phone", 30)) if clean("phone", 30) else None
+        if phone:
+            acc.personal_whatsapp = phone
+        log_event(s, "onboarding_started", acc.id, prefilled=bool(acc.agency or acc.zones or acc.agent_name))
         token = acc.public_token
     return RedirectResponse(f"/o/{token}", status_code=303)
 
