@@ -75,7 +75,7 @@ class Settings(BaseSettings):
     ai_max_turns_per_lead_day: int = 20  # AI replies to one lead in 24 h; beyond it the chat goes to the agent
     ai_max_turns_per_lead_week: int = 60  # same, over 7 days
     ai_max_turns_per_account_day: int = 400  # all leads of one agent in 24 h (circuit breaker)
-    ai_max_help_turns: int = 15  # messages to the onboarding help chat per agent (screenshots included)
+    ai_max_help_turns: int = 40  # messages to the onboarding help chat per agent (screenshots included)
     ai_max_user_chars: int = 1000  # longer lead messages are cut before they reach the model
     llm_max_output_tokens: int = 1200  # per model call (includes the model's hidden reasoning)
 

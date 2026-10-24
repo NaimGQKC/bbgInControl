@@ -536,10 +536,14 @@ function metaCoach(data) {  // Meta tells us which screen the user is on: speak 
   else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
   else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", `${hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.`);
 }
-function startMetaCoaching() {  // no predictions about screens: we only speak when Meta tells us the step, or offer help if it goes quiet
-  const my = gen;
+function startMetaCoaching() {  // short tips that cover most cases; Meta's own step signals take over when they arrive; the help chat is the safety net
+  const my = gen, n = firstName(state.answers.agent_name), hi = n ? `${n}, ` : "";
   metaTimers.forEach(clearTimeout);
-  metaTimers = [setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 75000)];
+  metaTimers = [
+    setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
+    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge tu app de WhatsApp Business."), 20000),
+    setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 60000),
+  ];
 }
 window.addEventListener("message", (event) => {
   if (!event.origin.endsWith("facebook.com")) return;
