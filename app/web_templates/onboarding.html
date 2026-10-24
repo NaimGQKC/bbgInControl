@@ -39,7 +39,7 @@
   .actions .row input { flex:1; min-width:0; border-radius:99px; border:0; background:transparent; font-size:17px; padding:12px 16px; outline:none; }
   .actions .btn:not(.secondary):not(.g) { background:var(--ink); color:#fff; }
   .actions .btn { border-radius:99px; padding:13px 20px; flex:1 1 auto; text-align:center; transition:transform .15s var(--ease), opacity .2s; }
-  .actions .btn:active { transform:scale(.97); } .actions .row input + .btn { flex:none; }
+  .actions .btn:active { transform:scale(.97); } .actions .row input + .btn, .actions .row .mic + .btn { flex:none; }
   .actions .btn.secondary { background:transparent; }
   .btn.g { background:#fff; color:#3c4043; border:1px solid #dadce0; font-weight:500; }
   .wait { display:flex; gap:10px; align-items:center; color:var(--muted); font-size:14px; padding:2px 4px 8px; }
@@ -59,6 +59,9 @@
   .wa div { background:#DCF8C6; border-radius:12px; padding:9px 11px; white-space:pre-line; font-size:15px; box-shadow:0 1px 1px rgba(0,0,0,.08); }
   .suggest { display:flex; flex-wrap:wrap; gap:6px; margin:2px 4px 8px; }
   .actions .suggest .btn { padding:6px 12px; font-size:13px; font-weight:500; flex:0 0 auto; }
+  .mic { flex:none; width:44px; height:44px; border-radius:50%; border:0; background:transparent; color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; transition:background .2s, color .2s; }
+  .mic:hover { color:var(--ink); } .mic.on { background:var(--accent); color:#fff; animation:breathe 1.2s ease-in-out infinite; }
+  .att { flex:none; width:40px; height:44px; border:0; background:transparent; color:var(--muted); cursor:pointer; font-size:20px; }
   .skip { background:none; border:0; color:var(--muted); font:inherit; font-size:14px; padding:6px 10px; cursor:pointer; }
   .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; flex:none !important; }
   .chip { display:flex; align-items:center; gap:8px; margin:6px 0; } .chip code { flex:1; }
@@ -139,7 +142,7 @@ async function api(path, body) {
 }
 function err(t) { const e = document.getElementById("err"); if (e) e.textContent = t || ""; }
 function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false }) {
-  $actions.innerHTML = `${suggestions.length ? '<div class="suggest" id="sg"></div>' : ""}<form class="row" id="f"><input id="i" type="${type}" placeholder="${ph}" autocomplete="on" ${optional ? "" : "required"}>
+  $actions.innerHTML = `${suggestions.length ? '<div class="suggest" id="sg"></div>' : ""}<form class="row" id="f"><input id="i" type="${type}" placeholder="${ph}" autocomplete="on" ${optional ? "" : "required"}>${CAN_TALK && type === "text" ? '<button class="mic" id="mic" type="button" aria-label="Hablar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>' : ""}
     <button class="btn" type="submit">${button}</button></form>${optional ? `<div style="text-align:center"><button class="skip" type="button" id="skip">${skipLabel}</button></div>` : ""}<div class="err" id="err"></div>`;
   const i = document.getElementById("i"); i.focus();
   for (const text of suggestions) {  // tap an example to add it; the agent can edit the text freely
@@ -148,9 +151,26 @@ function inputRow({ ph = "", type = "text", button = "Enviar", onSubmit, optiona
     document.getElementById("sg").appendChild(b);
   }
   if (zones) zonePicker(i);
+  if (CAN_TALK && type === "text") talk(i, document.getElementById("mic"));
   scroll();
   document.getElementById("f").onsubmit = async (e) => { e.preventDefault(); await onSubmit(i.value.trim(), false); };
   if (optional) document.getElementById("skip").onclick = () => onSubmit("", true);
+}
+// ---- talk instead of type (the browser's own speech recognition: free, shows the words so they can be fixed before sending)
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const CAN_TALK = !!SR && !/iPhone|iPad|iPod/i.test(navigator.userAgent) && !/Firefox/i.test(navigator.userAgent);  // patchy there: hide the button
+function talk(input, btn) {
+  let rec = null, base = "";
+  btn.onclick = () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR(); rec.lang = "es-ES"; rec.interimResults = true; rec.continuous = false;
+    base = input.value ? input.value.trim() + " " : "";
+    btn.classList.add("on"); input.placeholder = "Te escucho…";
+    rec.onresult = (e) => { let t = ""; for (const r of e.results) t += r[0].transcript; input.value = base + t; };
+    const stop = () => { btn.classList.remove("on"); input.placeholder = ""; rec = null; input.focus(); };
+    rec.onend = stop; rec.onerror = (e) => { stop(); if (e.error === "not-allowed") err("Activa el micrófono en el navegador para poder hablar."); };
+    rec.start();
+  };
 }
 // zones: tap the city first (Spain shares one timezone, so we can't guess it), then tap neighbourhoods instead of typing commas
 const CITIES = {
@@ -438,7 +458,7 @@ async function flow(my) {
       <li>Tarjeta → <b>Finalizar</b></li></ol></div>`);
     chips([["Nombre", a.agent_name + (a.agency ? " · " + a.agency : "")], ["Email", a.email]]);
     if (!FAKE) loadFB();  // load the SDK now so the popup opens straight from the click (no popup blocker)
-    buttons([{ label: "Conectar WhatsApp", onClick: (el) => launchSignup(el) }]);
+    buttons([{ label: "Conectar WhatsApp", onClick: (el) => launchSignup(el) }, { label: "Me ha salido otra cosa", secondary: true, onClick: () => helpChat() }]);
     scroll(); return;
   }
 
@@ -469,6 +489,41 @@ async function flow(my) {
   summaryCard();
   await bot("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo.");
 }
+// ---- help while connecting WhatsApp: describe it (type or talk) or upload a screenshot; light AI, capped, falls back to a person
+const helpHistory = [];
+async function shrink(file) {  // screenshots are resized in the browser: small, fast, and never stored
+  const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(file); });
+  const k = Math.min(1, 1400 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+  return c.toDataURL("image/jpeg", 0.8);
+}
+function helpChat() {
+  stage();
+  let shot = null;
+  add("Cuéntame qué te sale en pantalla, con tus palabras o subiendo una captura, y lo vemos juntos. No escribas aquí contraseñas ni códigos.", "bot");
+  $actions.innerHTML = `<form class="row" id="hc"><button class="att" id="att" type="button" aria-label="Subir captura">📎</button><input id="hi" placeholder="¿Qué te sale?" autocomplete="off">${CAN_TALK ? '<button class="mic" id="hmic" type="button" aria-label="Hablar"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>' : ""}<button class="btn" type="submit">Enviar</button><input id="hf" type="file" accept="image/*" hidden></form><div style="text-align:center"><button class="skip" id="hback" type="button">Volver al paso</button></div><div class="err" id="err"></div>`;
+  const input = document.getElementById("hi"), file = document.getElementById("hf"), att = document.getElementById("att");
+  input.focus(); if (CAN_TALK) talk(input, document.getElementById("hmic"));
+  att.onclick = () => file.click();
+  file.onchange = async () => { try { shot = await shrink(file.files[0]); att.textContent = "✅"; err(""); } catch (e) { shot = null; err("No he podido leer esa imagen."); } };
+  document.getElementById("hback").onclick = () => render();
+  document.getElementById("hc").onsubmit = async (e) => {
+    e.preventDefault();
+    const text = input.value.trim(); if (!text && !shot) return;
+    add((shot ? "📷 " : "") + (text || "Captura de pantalla"), "me"); input.value = ""; att.textContent = "📎"; scroll();
+    const body = { text, image: shot, history: helpHistory.slice(-6) }; shot = null; file.value = "";
+    helpHistory.push({ role: "user", text });
+    const thinking = add("…", "bot");
+    const r = await api("/help_chat", body);
+    thinking.remove();
+    if (r.ok) { helpHistory.push({ role: "bot", text: r.reply }); add(r.reply, "bot"); }
+    else {
+      add(r.capped ? "Hemos hablado bastante por aquí. Mejor te ayuda una persona del equipo." : (r.error || "Ahora mismo no puedo ayudarte yo. Mejor te ayuda una persona del equipo."), "bot");
+      buttons([{ label: "Hablar con una persona", onClick: () => document.getElementById("helpbtn").click() }, { label: "Volver al paso", secondary: true, onClick: () => render() }]);
+    }
+    scroll();
+  };
+}
 // ---- Meta Embedded Signup (WhatsApp Business app onboarding = Coexistence) ----
 let signup = {}, metaTimers = [];
 function metaCoach(data) {  // Meta tells us which screen the user is on: speak up at that moment
@@ -481,14 +536,10 @@ function metaCoach(data) {  // Meta tells us which screen the user is on: speak 
   else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
   else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", `${hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.`);
 }
-function startMetaCoaching() {
-  const my = gen, n = firstName(state.answers.agent_name), hi = n ? `${n}, ` : "";
+function startMetaCoaching() {  // no predictions about screens: we only speak when Meta tells us the step, or offer help if it goes quiet
+  const my = gen;
   metaTimers.forEach(clearTimeout);
-  metaTimers = [
-    setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
-    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge tu app de WhatsApp Business."), 20000),
-    setTimeout(() => coach(my, "m3", "¿Te has quedado atascado? Pulsa «Hablar con una persona» arriba y te ayudamos."), 90000),
-  ];
+  metaTimers = [setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 75000)];
 }
 window.addEventListener("message", (event) => {
   if (!event.origin.endsWith("facebook.com")) return;
@@ -511,7 +562,7 @@ function loadFB() {
 async function finishSignup(code) {
   add("Conectando…", "me"); scroll();
   const r = await api("/meta", { code, waba_id: signup.waba_id, phone_number_id: signup.phone_number_id });
-  if (r.ok === false) { add((r.error || "Algo falló.") + " Puedes reintentarlo; si se repite, pulsa «Hablar con una persona» arriba y te escribimos.", "bot"); buttons([{ label:"Reintentar", onClick: (el) => launchSignup(el) }]); return scroll(); }
+  if (r.ok === false) { add((r.error || "Algo falló.") + " Puedes reintentarlo; si se repite, pulsa «Hablar con una persona» arriba y te escribimos.", "bot"); buttons([{ label:"Reintentar", onClick: (el) => launchSignup(el) }, { label: "Me ha salido otra cosa", secondary: true, onClick: () => helpChat() }]); return scroll(); }
   render();
 }
 let fbPromise = null, fbReady = false;

@@ -504,6 +504,22 @@ def test_start_carries_over_what_the_website_demo_collected(clock):
         assert st["answers"]["agent_name"] == "Laura García" and st["step"] == "wa_check"
 
 
+def test_help_chat_is_capped_and_validates_images(clock):
+    from app.config import get_settings
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/help_chat", json={}).status_code == 400
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "hola", "image": "http://evil/x.png"}).status_code == 400
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "hola", "image": "data:image/svg+xml;base64,AAAA"}).status_code == 400
+        ok = c.post(f"/api/o/{token}/help_chat", json={"text": "No me deja entrar en Facebook", "image": "data:image/png;base64,AAAA"}).json()
+        assert ok["ok"] and ok["reply"]
+        for _ in range(get_settings().ai_max_help_turns - 1):
+            assert c.post(f"/api/o/{token}/help_chat", json={"text": "otra vez"}).json()["ok"]
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "otra vez"}).json() == {"ok": False, "capped": True}  # model not called past the cap
+
+
 def test_agency_hint_only_from_work_domains():
     from app.web import _agency_hint
 
