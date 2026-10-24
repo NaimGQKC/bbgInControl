@@ -491,6 +491,35 @@ def test_test_event_lands_in_calendar_and_is_deleted(clock):  # the "wow" demo: 
         assert not [e for e in FakeCalendar.events.values() if not e.get("deleted")]
 
 
+def test_start_carries_over_what_the_website_demo_collected(clock):
+    from app.main import app
+
+    with TestClient(app) as c:
+        r = c.post("/start", data={"agency": "RE/MAX Sol", "zones": "Delicias, Actur", "name": "Laura", "phone": "611 111 111"}, follow_redirects=False)
+        token = r.headers["location"].split("/")[-1]
+        a = c.get(f"/api/o/{token}").json()["answers"]
+        assert a["agency"] == "RE/MAX Sol" and a["zones"] == "Delicias, Actur" and a["personal_whatsapp"] == "+34611111111"
+        _google_connected(token)  # Google knows the full name: it replaces the first name; the questions are not asked again
+        st = c.get(f"/api/o/{token}").json()
+        assert st["answers"]["agent_name"] == "Laura García" and st["step"] == "wa_check"
+
+
+def test_help_chat_is_capped_and_validates_images(clock):
+    from app.config import get_settings
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/help_chat", json={}).status_code == 400
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "hola", "image": "http://evil/x.png"}).status_code == 400
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "hola", "image": "data:image/svg+xml;base64,AAAA"}).status_code == 400
+        ok = c.post(f"/api/o/{token}/help_chat", json={"text": "No me deja entrar en Facebook", "image": "data:image/png;base64,AAAA"}).json()
+        assert ok["ok"] and ok["reply"]
+        for _ in range(get_settings().ai_max_help_turns - 1):
+            assert c.post(f"/api/o/{token}/help_chat", json={"text": "otra vez"}).json()["ok"]
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "otra vez"}).json() == {"ok": False, "capped": True}  # model not called past the cap
+
+
 def test_agency_hint_only_from_work_domains():
     from app.web import _agency_hint
 

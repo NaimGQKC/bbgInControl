@@ -82,12 +82,22 @@ def landing(request: Request):
 
 
 @router.post("/start")
-def start():
+async def start(request: Request):
+    """Starts an onboarding. The website demo can post what the agent already told it (agency, zones, name, phone) so we never ask twice."""
+    try:
+        form = await request.form()
+    except Exception:
+        form = {}
+    clean = lambda k, n=200: str(form.get(k, "") or "").strip()[:n]
     with session_scope() as s:
         acc = Account()
         s.add(acc)
         s.flush()
-        log_event(s, "onboarding_started", acc.id)
+        acc.agency, acc.zones, acc.agent_name = clean("agency"), clean("zones", 500), clean("name")
+        phone = normalize_phone(clean("phone", 30)) if clean("phone", 30) else None
+        if phone:
+            acc.personal_whatsapp = phone
+        log_event(s, "onboarding_started", acc.id, prefilled=bool(acc.agency or acc.zones or acc.agent_name))
         token = acc.public_token
     return RedirectResponse(f"/o/{token}", status_code=303)
 
@@ -172,6 +182,36 @@ async def api_meta_event(token: str, request: Request):
         acc = _account_by_token(s, token)
         log_event(s, "meta_signup_event", acc.id, event=str(data.get("event")), current_step=str(data.get("current_step", "")))
     return {"ok": True}
+
+
+@router.post("/api/o/{token}/help_chat")
+async def api_help_chat(token: str, request: Request):
+    """AI help while connecting WhatsApp. Capped per agent; the screenshot is read once and never stored. Failure = hand over to a person."""
+    from sqlalchemy import func
+    from . import helpchat
+    from .models import Event
+
+    st = get_settings()
+    data = await request.json()
+    text = str(data.get("text") or "").strip()[: st.ai_max_user_chars]
+    image = data.get("image")
+    if image is not None and not (isinstance(image, str) and image.startswith(("data:image/jpeg;base64,", "data:image/png;base64,", "data:image/webp;base64,")) and len(image) <= 4_000_000):
+        return JSONResponse({"ok": False, "error": "No he podido leer esa captura. Prueba con otra."}, 400)
+    if not text and not image:
+        return JSONResponse({"ok": False, "error": "Escribe algo o sube una captura."}, 400)
+    history = [{"role": "assistant" if m.get("role") == "bot" else "user", "text": str(m.get("text", ""))[: st.ai_max_user_chars]} for m in (data.get("history") or [])[-6:] if isinstance(m, dict)]
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        used = s.execute(select(func.count()).select_from(Event).where(Event.account_id == acc.id, Event.name == "help_chat")).scalar_one()
+        if used >= st.ai_max_help_turns:
+            return {"ok": False, "capped": True}
+        last = s.execute(select(Event).where(Event.account_id == acc.id, Event.name == "meta_signup_event").order_by(Event.id.desc())).scalars().first()
+        context = f"evento={last.data.get('event')}, paso={last.data.get('current_step')}" if last else ""
+        log_event(s, "help_chat", acc.id, chars=len(text), image=bool(image))
+    reply = helpchat.answer(history, text, image, context)
+    if not reply:
+        return {"ok": False}
+    return {"ok": True, "reply": reply}
 
 
 @router.post("/api/o/{token}/calendar_check")
