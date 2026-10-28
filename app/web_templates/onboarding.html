@@ -9,6 +9,7 @@
   body { font-family:"Hanken Grotesk", -apple-system, "Segoe UI", sans-serif; }
   input, button { font-family:inherit; }
   body { background:radial-gradient(1200px 600px at 50% -10%, rgba(180,85,58,.10), transparent 60%), var(--bg); -webkit-font-smoothing:antialiased; }
+  body.split { padding-right:500px; } body.split .dock, body.split .top { right:500px; }
   .chat { max-width:560px; margin:0 auto; min-height:100vh; min-height:100dvh; display:flex; flex-direction:column; }
   .top { position:fixed; top:0; left:0; right:0; z-index:5; background:var(--glass); -webkit-backdrop-filter:saturate(180%) blur(18px); backdrop-filter:saturate(180%) blur(18px); padding-top:env(safe-area-inset-top); }
   .top-in { max-width:560px; margin:0 auto; padding:10px 16px; display:flex; gap:10px; align-items:center; }
@@ -21,6 +22,7 @@
   [data-orb=ok] .orb, [data-orb=ok] .avatar, [data-orb=done] .orb, [data-orb=done] .avatar { background:conic-gradient(#1FAF6B,#7EE2B0,#1FAF6B); animation:breathe 2.4s ease-in-out infinite; }
   [data-orb=meta] .orb, [data-orb=meta] .avatar { background:conic-gradient(#25D366 calc(var(--p,10) * 1%), rgba(150,150,150,.35) 0); animation:none; transition:background .6s; }
   .hero { margin:6px 0 18px; } .hero h1 { font-size:34px; line-height:1.15; margin:18px 0 0; font-weight:600; letter-spacing:-.02em; font-family:"Instrument Serif", Georgia, serif; font-weight:400; font-size:44px; letter-spacing:-.01em; color:var(--ink); }
+  .hl { font-weight:600; background:linear-gradient(transparent 52%, rgba(180,85,58,.32) 52%); border-radius:2px; padding:0 1px; }
   .w { opacity:0; animation:wd .55s var(--ease) forwards; } @keyframes wd { from { opacity:0; filter:blur(4px); transform:translateY(4px); } to { opacity:1; filter:none; transform:none; } }
   .who { flex:1; line-height:1.2; min-width:0; } .who b { display:block; font-size:15px; } .who span { font-family:"IBM Plex Mono", monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .helpbtn { background:none; border:0; color:var(--accent); font:inherit; font-size:13px; cursor:pointer; padding:6px 4px; white-space:nowrap; }
@@ -116,9 +118,12 @@ let gen = 0, pollTimer = null;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 function add(text, who) {
   const d = document.createElement("div"); d.className = "b " + who;
-  if (who === "bot") {  // words fade in one after another, like the text is being thought
-    const parts = text.split(/(\s+)/), step = Math.min(38, 900 / Math.max(parts.length / 2, 1)); let k = 0;
-    for (const t of parts) { if (/^\s+$/.test(t) || !t) { d.append(t); continue; } const w = document.createElement("span"); w.className = "w"; w.style.animationDelay = (k++ * step) + "ms"; w.textContent = t; d.append(w); }
+  if (who === "bot") {  // words fade in one after another; **text** is highlighted
+    const parts = text.split(/(\*\*[^*]+\*\*)/).filter(Boolean), total = text.split(/\s+/).length, step = Math.min(38, 900 / Math.max(total, 1)); let k = 0;
+    for (const seg of parts) {
+      const mark = seg.startsWith("**"), body = mark ? seg.slice(2, -2) : seg;
+      for (const t of body.split(/(\s+)/)) { if (!t) continue; if (/^\s+$/.test(t)) { if (mark) { const g = document.createElement("span"); g.className = "hl"; g.textContent = t; d.append(g); } else d.append(t); continue; } const w = document.createElement("span"); w.className = "w" + (mark ? " hl" : ""); w.style.animationDelay = (k++ * step) + "ms"; w.textContent = t; d.append(w); }
+    }
   } else d.textContent = text;
   $msgs.appendChild(d); return d;
 }
@@ -267,14 +272,16 @@ function connectGoogle(my) {
   const url = `/oauth/google/start?t=${TOKEN}`;
   let w = null;
   if (!isMobile) {
-    try { store.set("popup", String(Date.now())); w = window.open(url, "sparrow-google", "width=520,height=720,left=" + Math.max(0, screen.width / 2 - 260) + ",top=60"); } catch (e) {}
+    try { store.set("popup", String(Date.now())); const wide = window.innerWidth >= 1000, pw = 480, left = Math.max(0, (window.screenX || 0) + window.outerWidth - pw - 12), top = Math.max(0, (window.screenY || 0) + 40);
+    w = window.open(url, "sparrow-google", `width=${pw},height=700,left=${left},top=${top}`);
+    if (w && wide) document.body.classList.add("split"); } catch (e) {}  // split: chat moves left, Google's window sits on the right, not on top of Lucía
   }
   if (!w) { store.set("popup", "0"); location.href = url; return; }  // phone or blocked: same tab, nothing else to coordinate
-  setOrb("google"); waiting("Esperando a Google…", () => connectGoogle(my));
+  setOrb("google"); waiting("Esperando a Google… mírala en la ventana de al lado", () => connectGoogle(my));
   const timers = [
     setTimeout(() => coach(my, "g1", "Elige tu cuenta de Google Calendar."), 3500),
-    setTimeout(() => coach(my, "g2", "¿Aviso de «no verificada»? Avanzado → Ir a Sparrow AI."), 9000),
-    setTimeout(() => coach(my, "g3", "Deja todas las casillas marcadas y pulsa Continuar."), 17000),
+    setTimeout(() => coach(my, "g2", "¿Aviso de **«no verificada»**? Pulsa **Avanzado → Ir a Sparrow AI**."), 9000),
+    setTimeout(() => coach(my, "g3", "Deja **todas las casillas marcadas** y pulsa Continuar."), 17000),
   ];
   const done = setInterval(async () => {
     const res = (store.get("gres") || "").split(":")[0];
@@ -292,6 +299,7 @@ const QUESTIONS = [
   { f: "zones", q: "¿En qué zonas o barrios captas? Sepáralos con comas.", ph: "Delicias, Actur, Centro" },
 ];
 async function render() {
+  document.body.classList.remove("split");
   const my = ++gen;
   clearInterval(pollTimer);
   $msgs.innerHTML = ""; $actions.innerHTML = "";
@@ -311,7 +319,7 @@ async function flow(my) {
   await bot("Primero, tu Google Calendar: ahí verás las citas.");
   if (!integ.google || integ.google.status !== "active") {
     if (params.get("google") === "denied") await bot("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
-    await bot("Google avisará de «app no verificada»: es normal. Pulsa Avanzado → Ir a Sparrow AI.");
+    await bot("Google avisará de **«app no verificada»**: es normal. Pulsa **Avanzado → Ir a Sparrow AI**.");
     buttons([{ cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google`, onClick: () => connectGoogle(my) }]);
     return;
   }
@@ -541,7 +549,7 @@ function startMetaCoaching() {  // short tips that cover most cases; Meta's own 
   metaTimers.forEach(clearTimeout);
   metaTimers = [
     setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
-    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge tu app de WhatsApp Business."), 20000),
+    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge **tu app de WhatsApp Business**."), 20000),
     setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 60000),
   ];
 }
