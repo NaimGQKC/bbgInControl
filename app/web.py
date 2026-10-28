@@ -206,7 +206,7 @@ async def api_help_chat(token: str, request: Request):
         if used >= st.ai_max_help_turns:
             return {"ok": False, "capped": True}
         last = s.execute(select(Event).where(Event.account_id == acc.id, Event.name == "meta_signup_event").order_by(Event.id.desc())).scalars().first()
-        context = f"evento={last.data.get('event')}, paso={last.data.get('current_step')}" if last else ""
+        context = f"paso del alta={acc.onboarding_step}" + (f"; Meta: evento={last.data.get('event')}, paso={last.data.get('current_step')}" if last else "")
         log_event(s, "help_chat", acc.id, chars=len(text), image=bool(image))
     reply = helpchat.answer(history, text, image, context)
     if not reply:
