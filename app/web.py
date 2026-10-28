@@ -207,11 +207,15 @@ async def api_help_chat(token: str, request: Request):
             return {"ok": False, "capped": True}
         last = s.execute(select(Event).where(Event.account_id == acc.id, Event.name == "meta_signup_event").order_by(Event.id.desc())).scalars().first()
         context = f"paso del alta={acc.onboarding_step}" + (f"; Meta: evento={last.data.get('event')}, paso={last.data.get('current_step')}" if last else "")
+        current = f"nombre={acc.agent_name!r}, inmobiliaria={acc.agency!r}, zonas={acc.zones!r}, cómo trabaja={acc.extra_context!r}, móvil={acc.personal_whatsapp!r}"
         log_event(s, "help_chat", acc.id, chars=len(text), image=bool(image))
-    reply = helpchat.answer(history, text, image, context)
-    if not reply:
+    out = helpchat.answer(history, text, image, context, current)
+    if not out or not out[0]:
         return {"ok": False}
-    return {"ok": True, "reply": reply}
+    reply, proposal = out
+    if proposal and proposal["field"] == "personal_whatsapp" and not normalize_phone(proposal["value"]):
+        proposal = None
+    return {"ok": True, "reply": reply, "proposal": proposal}
 
 
 @router.post("/api/o/{token}/calendar_check")
