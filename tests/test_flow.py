@@ -520,6 +520,15 @@ def test_help_chat_is_capped_and_validates_images(clock):
         assert c.post(f"/api/o/{token}/help_chat", json={"text": "otra vez"}).json() == {"ok": False, "capped": True}  # model not called past the cap
 
 
+def test_help_chat_change_proposals_are_allowlisted():
+    from app.helpchat import split_proposal
+
+    text, p = split_proposal('Vale, cambio tus zonas.\nCAMBIO: {"campo":"zones","valor":"Delicias, Actur"}')
+    assert text == "Vale, cambio tus zonas." and p == {"field": "zones", "value": "Delicias, Actur"}
+    assert split_proposal('Hecho.\nCAMBIO: {"campo":"email","valor":"x@y.z"}')[1] is None  # not an allowed field
+    assert split_proposal("Solo respuesta")[1] is None and split_proposal('CAMBIO: {roto')[1] is None
+
+
 def test_agency_hint_only_from_work_domains():
     from app.web import _agency_hint
 
