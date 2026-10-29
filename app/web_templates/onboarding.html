@@ -47,6 +47,7 @@
   .opts .btn { border-radius:99px; padding:11px 18px; font-size:15px; transition:transform .15s var(--ease); background:var(--ink); color:#fff; }
   .opts .btn.secondary { background:transparent; color:var(--ink); border:1px solid var(--line); }
   .opts .btn.g { background:#fff; color:#3c4043; border:1px solid #dadce0; }
+  .opts.solo .btn { flex:1 1 100%; padding:19px 24px; font-size:17px; }
   .opts .btn:active { transform:scale(.97); }
   .b.think { color:var(--muted); animation:blink 1.1s infinite; }
   .btn.g { background:#fff; color:#3c4043; border:1px solid #dadce0; font-weight:500; }
@@ -257,7 +258,7 @@ function helpChat(topic) {  // "Preguntar algo" / "Me ha salido otra cosa": the 
 // ---- options live inside the conversation, right under what Lucía just said
 function buttons(list, side = false) {
   if (!side) document.querySelectorAll(".opts.main").forEach((e) => e.remove());
-  const row = document.createElement("div"); row.className = "opts " + (side ? "side" : "main");
+  const row = document.createElement("div"); row.className = "opts " + (side ? "side" : "main") + (list.length === 1 && !side ? " solo" : "");
   list.forEach((b) => { const el = document.createElement("button"); el.type = "button"; el.className = "btn " + (b.secondary ? "secondary " : "") + (b.cls || ""); el.innerHTML = b.label; el.onclick = () => b.onClick(el); row.appendChild(el); });
   $msgs.appendChild(row); scroll();
 }
@@ -495,7 +496,7 @@ async function flow(my) {
     const hhmm = (d) => d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
     const slot = ((JSON.parse(store.get("peek") || "null") || {}).first || [])[0];
     const showDemo = store.get("previewOk") !== "1";
-    await bot(showDemo ? "Así lo verá **Marta**, la propietaria, en su WhatsApp:" : "Así ve un propietario mi primer mensaje:");
+    await bot(showDemo ? "Esto es una **demostración** de cómo lo verá Marta, una propietaria de ejemplo. Aún no he escrito a nadie:" : "Así ve un propietario mi primer mensaje:");
     const wa = document.createElement("div"); wa.className = "wa2 new";
     const nm = (a.agent_name || "Tu nombre") + (a.agency ? " · " + a.agency : "");
     wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b><small>Cuenta de empresa</small></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span><span class="t"></span></div></div>`;
@@ -517,7 +518,7 @@ async function flow(my) {
         if (!seen.has("demo")) await sleep(900);
         const ok = document.createElement("div"); ok.className = "coach warn new"; ok.textContent = "✅ Valoración agendada en tu Google Calendar: " + label; $msgs.appendChild(ok); scroll();
         seen.add("demo"); store.set("seen", JSON.stringify([...seen]));
-        await bot(real ? "Mira tu móvil: acaba de sonar. Es una prueba; la borro cuando quieras." : "Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
+        await bot(real ? "Lo que sí es real: acabo de crear una cita de prueba en tu **Google Calendar**. Mira la notificación de tu móvil o abre el calendario. La borro cuando quieras." : "Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
       }
       await bot("El primer mensaje es siempre este texto, aprobado por WhatsApp. El tono del resto de la conversación lo adapto a lo que me pidas.");
       const go = async () => { if (real) await api("/test_event/delete", {}); store.set("previewOk", "1"); render(); };
