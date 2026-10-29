@@ -4,7 +4,9 @@ A WhatsApp AI assistant for real estate agents.
 - A new lead arrives → a WhatsApp from the agent's own number in 30 seconds.
 - The AI chats in Spanish (sellers only) → books a valuation in the agent's Google Calendar.
 
-Design: `sparrow-ai-design.md` (in the Claude project). Rules for Claude Code: `CLAUDE.md`.
+How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rules for Claude Code: `CLAUDE.md`.
+
+**Status:** live at app.sparrowai.eu. Meta has approved the app's WhatsApp permissions; Google OAuth verification (Calendar scopes) is in progress, so Google still shows an "unverified app" screen during sign-in.
 
 ## What's inside
 
@@ -17,10 +19,12 @@ Design: `sparrow-ai-design.md` (in the Claude project). Rules for Claude Code: `
 | `app/templates.py` | ALL WhatsApp template names + texts |
 | `app/whatsapp.py`, `app/gcal.py` | Meta Cloud API and Google Calendar clients (real + fake) |
 | `app/webhooks.py` | Meta webhook: signature check, stored once, processed after |
-| `app/web.py` + `web_templates/onboarding.html` | The one-chat onboarding with a named, openly-AI guide (Google → 2 questions → optional €90 payment → WhatsApp Embedded Signup with Coexistence) |
+| `app/web.py`, `app/onboarding.py`, `web_templates/onboarding.html` | The onboarding: one continuous chat with a named, openly-AI guide (Google Calendar → name, agency, zones, preferences, mobile → preview of the first message with a real test event in the calendar → optional €90 payment → WhatsApp Embedded Signup with Coexistence). Scripted, so it costs no AI tokens. Agents can change any answer ("Mis datos") or ask the guide questions at any time |
+| `app/helpchat.py` | Capped AI help inside the onboarding (questions, screenshots, change proposals the agent must confirm) |
+| `app/transcribe.py` | Voice-note transcription for leads (needs an Azure transcription deployment) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |
 | `app/jobs.py` | Job queue in Postgres (the worker runs inside the web process) |
-| `tests/` | 46 tests covering guardrails G1–G14 and the full flow |
+| `tests/` | 59 tests covering guardrails G1–G14, onboarding and the full flow |
 
 ## Run locally (5 min, no accounts needed)
 
@@ -33,22 +37,15 @@ WHATSAPP_MODE=fake CALENDAR_MODE=fake LLM_MODE=fake uvicorn app.main:app --reloa
 # → http://localhost:8000 (onboarding) and http://localhost:8000/admin (admin / change-me)
 ```
 
-## Deploy (Azure App Service + Supabase)
+## Deploy (Railway)
 
-The AI runs on Azure OpenAI (covered by Microsoft for Startups credits). Claude also works (`LLM_PROVIDER=anthropic`) but Azure credits don't cover it.
+Production runs as one Docker service on Railway (web server and job worker in the same process) plus a Railway Postgres. The AI runs on Azure OpenAI (Claude also works with `LLM_PROVIDER=anthropic`).
 
-1. **GitHub:** push this folder to the repo.
-2. **Supabase:** Connect (top bar) → **Session pooler** URI. Replace `[YOUR-PASSWORD]`. That's `DATABASE_URL`. Tables are created automatically on start.
-3. **Azure:** portal.azure.com → Create a resource → **Web App**:
-   - Publish: Code · Runtime: **Python 3.11** · OS: Linux · Region: **West Europe**
-   - Pricing plan: **Basic B1** (needed for "Always on": the job worker runs inside the web app)
-4. Once created, in the Web App:
-   - **Configuration → General settings:**
-     - Startup command: `uvicorn app.main:app --host 0.0.0.0 --port 8000`
-     - Always on: **On**
-   - **Environment variables:** add everything from `.env.example`, plus `SCM_DO_BUILD_DURING_DEPLOYMENT=true`.
-   - **Deployment Center:** Source GitHub → your repo → branch `main` → Save. Every push now deploys.
-5. `BASE_URL` = `https://<app-name>.azurewebsites.net`. Open `BASE_URL/health` → `{"ok": true}`.
+1. **GitHub:** push to the repo. Railway deploys every push to `main` (a second "preview" service can deploy a branch with `WHATSAPP_MODE=fake CALENDAR_MODE=fake LLM_MODE=fake`).
+2. **Railway:** New project → deploy from the GitHub repo (the `Dockerfile` is used) → add a **PostgreSQL** service and reference its URL as `DATABASE_URL`. Tables are created on start.
+3. **Variables:** everything in `.env.example`. Secrets only go into Railway, never into the repo. Per-agent tokens are stored encrypted (`app/crypto.py`).
+4. **Domain:** add a custom domain (for example `app.<yourdomain>`) and set `BASE_URL` to it. Open `BASE_URL/health` → `{"ok": true}`.
+5. The Railway region is US; mention it in the privacy policy (it does).
 
 ## Meta setup
 
@@ -64,7 +61,7 @@ The AI runs on Azure OpenAI (covered by Microsoft for Startups credits). Claude 
    - Allowed domains for the JavaScript SDK: add `BASE_URL`.
    - Valid OAuth redirect URIs: add `BASE_URL/`.
 
-   (HTTPS only. Until App Review passes, only people with a role on the app can complete it. That's enough to test with your own WhatsApp Business.)
+   (HTTPS only. The app must be set to **Live** for agents without a role on the app to complete the sign-up.)
 5. **App settings → Basic:**
    - Privacy policy URL = `BASE_URL/privacidad`
    - Terms = `BASE_URL/terminos`
@@ -74,11 +71,9 @@ The AI runs on Azure OpenAI (covered by Microsoft for Startups credits). Claude 
 ## Google setup
 
 1. Create a Google Cloud project, then enable the **Google Calendar API**.
-2. OAuth consent screen: External. Scopes:
-   - `calendar.events`
-   - `calendar.freebusy`
+2. Google Auth Platform → Data Access: the scopes in the Console must match exactly what the code requests (`app/gcal.py`, `SCOPES`): `openid`, `email`, `profile`, `calendar.events` and `calendar.freebusy`. Do not add the broad `calendar` scope; Google rejects a mismatch.
 
-   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. Unverified production apps show a warning screen and are capped at 100 users, which is fine for the pilot.
+   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. Unverified production apps show a warning screen and are capped at 100 users, which is fine for the pilot. For verification, Google needs a demo video, the privacy policy (`/privacidad`), scope justifications and a test account.
 3. Credentials → OAuth client ID (Web). Redirect URI: `BASE_URL/oauth/google/callback`. Copy the client ID and secret into `GOOGLE_*`.
 
 ## First real test (test number, your own phones)
@@ -95,7 +90,7 @@ Record the screen and your phone side by side, in English or with subtitles:
 2. **whatsapp_business_management:** click "Crear plantillas en Meta" → show them in WhatsApp Manager → Message templates.
 3. (If asked) **Embedded Signup:** open the onboarding link → "Conectar WhatsApp" → finish the popup.
 
-Submit once business verification is approved.
+These videos were used for the approved permissions (`whatsapp_business_messaging`, `whatsapp_business_management`, `public_profile`).
 
 ## Known gaps / next
 
@@ -107,4 +102,7 @@ Submit once business verification is approved.
 - **Resume command:** "Sigue con <nombre>" sent to the Sparrow number.
 - **Allowed hours:** from settings (Mon–Sat 9–21), not yet from Google Calendar working hours.
 - **Billing:** count `meeting_booked` events per agent per month (see `/admin`).
+- **Onboarding help chat:** capped by `AI_MAX_HELP_TURNS` (default 40 per agent); uses the same Azure deployment.
+- **Voice dictation** in the onboarding uses the browser's speech recognition (hidden on iPhone and Firefox). The privacy policy says so.
+- **Website → app:** `POST /start` accepts `agency`, `zones`, `name`, `phone` from the website demo and pre-fills the onboarding.
 - The legal pages are drafts: have them reviewed before paid clients.
