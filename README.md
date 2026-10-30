@@ -79,7 +79,7 @@ Production runs as one Docker service on Railway (web server and job worker in t
 ## First real test (test number, your own phones)
 
 1. In `/admin`, create an agent (your name, your second phone for alerts).
-2. Click **Usar el número de prueba de Meta**, then **Crear plantillas en Meta**. Wait for `lead_first_contact_v1` to show APPROVED (minutes to hours).
+2. Click **Usar el número de prueba de Meta**, then **Crear plantillas en Meta**. Wait for `lead_first_contact_v2` to show APPROVED (minutes to hours).
 3. Connect Google: open the onboarding link shown on the agent page and do the Google step.
 4. **Lead de prueba** with your verified phone → the template arrives in ~30s → reply → the AI chats → pick a slot → the event appears in your calendar.
 

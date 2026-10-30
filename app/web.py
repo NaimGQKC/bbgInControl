@@ -15,7 +15,7 @@ from .gcal import CalendarError
 from .config import get_settings
 from .db import session_scope
 from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
-from .guards import normalize_phone
+from .guards import normalize_phone, tidy_name
 from .intake import from_lystos, normalize
 from .models import Account, Integration
 
@@ -93,7 +93,7 @@ async def start(request: Request):
         acc = Account()
         s.add(acc)
         s.flush()
-        acc.agency, acc.zones, acc.agent_name = clean("agency"), clean("zones", 500), clean("name")
+        acc.agency, acc.zones, acc.agent_name = clean("agency"), clean("zones", 500), tidy_name(clean("name"))
         phone = normalize_phone(clean("phone", 30)) if clean("phone", 30) else None
         if phone:
             acc.personal_whatsapp = phone
@@ -137,7 +137,7 @@ async def api_answers(token: str, request: Request):
         acc = _account_by_token(s, token)
         for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
-                setattr(acc, f, str(data[f]).strip()[:500])
+                setattr(acc, f, tidy_name(str(data[f]).strip()[:500]) if f == "agent_name" else str(data[f]).strip()[:500])
         if "personal_whatsapp" in data:
             p = normalize_phone(data["personal_whatsapp"])
             if not p:

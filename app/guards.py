@@ -64,6 +64,17 @@ def wa_id(phone_e164: str) -> str:
 DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
 
+_PARTICLES = {"de", "del", "la", "las", "los", "y", "van", "von", "da", "di"}
+
+
+def tidy_name(name: str | None) -> str:
+    """Google (or typing) can give 'NADIA ROUCHDI ROUCHDI' or 'nadia': show it like a person writes it."""
+    n = " ".join((name or "").split())
+    if not n or not (n.isupper() or n.islower()):
+        return n
+    return " ".join(w.lower() if i and w.lower() in _PARTICLES else w[:1].upper() + w[1:].lower() for i, w in enumerate(n.split()))
+
+
 def first_name(name: str | None) -> str:
     parts = (name or "").split()
     return parts[0] if parts else ""

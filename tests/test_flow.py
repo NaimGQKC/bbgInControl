@@ -55,8 +55,8 @@ def test_first_message_after_30_seconds(clock, account):
     clock.advance(seconds=31)
     run_jobs()
     out = sent(M)
-    assert len(out) == 1 and out[0]["template"] == "lead_first_contact_v1"
-    assert "asistente virtual de Laura García" in out[0]["text"]  # G13
+    assert len(out) == 1 and out[0]["template"] == "lead_first_contact_v2"
+    assert "asistente virtual de Laura" in out[0]["text"]  # G13
     assert "Hola Marta" in out[0]["text"]
     lead = lead_of(lid)
     assert lead.status == "contacted" and lead.introduced
@@ -527,6 +527,13 @@ def test_help_chat_change_proposals_are_allowlisted():
     assert text == "Vale, cambio tus zonas." and p == {"field": "zones", "value": "Delicias, Actur"}
     assert split_proposal('Hecho.\nCAMBIO: {"campo":"email","valor":"x@y.z"}')[1] is None  # not an allowed field
     assert split_proposal("Solo respuesta")[1] is None and split_proposal('CAMBIO: {roto')[1] is None
+
+
+def test_names_are_tidied_for_people_to_read():
+    from app.guards import tidy_name
+
+    assert tidy_name("NADIA ROUCHDI ROUCHDI") == "Nadia Rouchdi Rouchdi"
+    assert tidy_name("maría de la cruz") == "María de la Cruz" and tidy_name("Laura García") == "Laura García" and tidy_name("") == ""
 
 
 def test_agency_hint_only_from_work_domains():

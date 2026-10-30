@@ -26,16 +26,15 @@ class Template:
 
 
 LEAD_FIRST_CONTACT = Template(
-    name="lead_first_contact_v1",
+    name="lead_first_contact_v2",
     category="MARKETING",
     body=(
-        "Hola {{1}}, soy el asistente virtual de {{2}} ({{3}}). Te escribo por tu vivienda en {{4}}: "
-        "{{5}} puede prepararte una valoración gratuita y ajustada al mercado. Para afinarla, "
-        "¿dirías que está reformada, en buen estado o para actualizar?\n\n"
-        "Si prefieres no recibir más mensajes, responde BAJA."
+        "Hola {{1}}, soy el asistente virtual de {{2}} ({{3}}). Vi tu anuncio en {{4}} y puedo prepararte "
+        "una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?\n\n"
+        "Si no quieres más mensajes, responde BAJA."
     ),
-    params=("lead_name", "agent_name", "agency", "zone", "agent_first_name"),
-    example=("Marta", "Laura García", "RE/MAX Zaragoza", "Delicias", "Laura"),
+    params=("lead_name", "agent_first_name", "agency", "zone"),
+    example=("Marta", "Laura", "RE/MAX Zaragoza", "Delicias"),
 )
 
 LEAD_FOLLOWUP_1 = Template(
