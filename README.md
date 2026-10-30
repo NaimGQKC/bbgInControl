@@ -6,7 +6,7 @@ A WhatsApp AI assistant for real estate agents.
 
 How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rules for Claude Code: `CLAUDE.md`.
 
-**Status:** live at app.sparrowai.eu. Meta has approved the app's WhatsApp permissions; Google OAuth verification (Calendar scopes) is in progress, so Google still shows an "unverified app" screen during sign-in.
+**Status:** live at app.sparrowai.eu. Meta has approved the app's WhatsApp permissions and Google has verified the OAuth app (Calendar scopes).
 
 ## What's inside
 
@@ -73,7 +73,7 @@ Production runs as one Docker service on Railway (web server and job worker in t
 1. Create a Google Cloud project, then enable the **Google Calendar API**.
 2. Google Auth Platform → Data Access: the scopes in the Console must match exactly what the code requests (`app/gcal.py`, `SCOPES`): `openid`, `email`, `profile`, `calendar.events` and `calendar.freebusy`. Do not add the broad `calendar` scope; Google rejects a mismatch.
 
-   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. Unverified production apps show a warning screen and are capped at 100 users, which is fine for the pilot. For verification, Google needs a demo video, the privacy policy (`/privacidad`), scope justifications and a test account.
+   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. The app is verified, so there is no warning screen and no user cap. (Verification needed a demo video, the privacy policy at `/privacidad`, scope justifications and a test account.)
 3. Credentials → OAuth client ID (Web). Redirect URI: `BASE_URL/oauth/google/callback`. Copy the client ID and secret into `GOOGLE_*`.
 
 ## First real test (test number, your own phones)

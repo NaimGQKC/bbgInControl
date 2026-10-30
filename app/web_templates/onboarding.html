@@ -369,8 +369,7 @@ function connectGoogle(my) {
   setOrb("google"); waiting("Esperando a Google… mírala en la ventana de al lado", () => connectGoogle(my));
   const timers = [
     setTimeout(() => coach(my, "g1", "Elige tu cuenta de Google Calendar."), 3500),
-    setTimeout(() => coach(my, "g2", "¿Aviso de **«no verificada»**? Pulsa **Avanzado → Ir a Sparrow AI**."), 9000),
-    setTimeout(() => coach(my, "g3", "Deja **todas las casillas marcadas** y pulsa Continuar."), 17000),
+    setTimeout(() => coach(my, "g3", "Deja **todas las casillas marcadas** y pulsa Continuar."), 9000),
   ];
   const done = setInterval(async () => {
     const res = (store.get("gres") || "").split(":")[0];
@@ -412,7 +411,6 @@ async function flow(my) {
   await bot("Primero, tu Google Calendar: ahí verás las citas.");
   if (!integ.google || integ.google.status !== "active") {
     if (params.get("google") === "denied") await bot("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
-    await bot("Google avisará de **«app no verificada»**: es normal. Pulsa **Avanzado → Ir a Sparrow AI**.");
     buttons([{ ...GOOGLE_BTN, onClick: () => connectGoogle(my) }]);
     return;
   }
