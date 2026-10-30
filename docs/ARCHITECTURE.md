@@ -88,7 +88,7 @@ sequenceDiagram
 ```mermaid
 flowchart TD
     A[Website demo: agency, zones, name] -->|POST /start| B[Onboarding chat with Lucía<br/>openly an AI, scripted, no tokens]
-    B --> C[Google Calendar connect<br/>side window, warning about unverified app]
+    B --> C[Google Calendar connect<br/>side window]
     C --> D[Read calendar once: proof it works]
     D --> E[Name, agency, zones, preferences, mobile]
     E --> F[Preview of the exact first message<br/>+ real test event in their calendar]

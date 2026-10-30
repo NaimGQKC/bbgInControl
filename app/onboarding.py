@@ -9,7 +9,7 @@ from .config import get_settings
 from .crypto import encrypt
 from .db import utcnow
 from .engine import alert_agent, alert_ops, first_name, log_event
-from .guards import normalize_phone
+from .guards import normalize_phone, tidy_name
 from .models import Account, Integration
 from .whatsapp import (
     FakeWhatsApp,
@@ -113,7 +113,7 @@ def save_google(s, account: Account, token_data: dict) -> None:
     log_event(s, "google_connected", account.id)
     info = gcal.userinfo(token_data["access_token"])  # we already know who they are: don't ask
     if info.get("name") and (not account.agent_name or " " not in account.agent_name.strip()):  # a first name from the website demo gives way to the full name from Google
-        account.agent_name = str(info["name"]).strip()[:200]
+        account.agent_name = tidy_name(str(info["name"]).strip()[:200])
     if not account.email and info.get("email"):
         account.email = str(info["email"]).strip()[:200]
     if account.onboarding_step == "google":

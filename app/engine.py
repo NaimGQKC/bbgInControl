@@ -22,6 +22,7 @@ from .guards import (
     first_name,
     next_allowed_time,
     normalize_phone,
+    tidy_name,
     parse_hm,
     settings_for,
     to_local,
@@ -244,10 +245,9 @@ def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:0
 def first_contact_values(account: Account, lead_name: str, zone: str) -> list[str]:
     return [
         first_name(lead_name) or "buenas",
-        account.agent_name or "tu agente",
+        first_name(tidy_name(account.agent_name)) or "tu agente",
         account.agency or "tu inmobiliaria",
         zone or (account.zones.split(",")[0].strip() if account.zones else "tu zona"),
-        first_name(account.agent_name) or "el agente",
     ]
 
 

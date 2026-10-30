@@ -6,7 +6,7 @@ A WhatsApp AI assistant for real estate agents.
 
 How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rules for Claude Code: `CLAUDE.md`.
 
-**Status:** live at app.sparrowai.eu. Meta has approved the app's WhatsApp permissions; Google OAuth verification (Calendar scopes) is in progress, so Google still shows an "unverified app" screen during sign-in.
+**Status:** live at app.sparrowai.eu. Meta has approved the app's WhatsApp permissions and Google has verified the OAuth app (Calendar scopes).
 
 ## What's inside
 
@@ -73,13 +73,13 @@ Production runs as one Docker service on Railway (web server and job worker in t
 1. Create a Google Cloud project, then enable the **Google Calendar API**.
 2. Google Auth Platform → Data Access: the scopes in the Console must match exactly what the code requests (`app/gcal.py`, `SCOPES`): `openid`, `email`, `profile`, `calendar.events` and `calendar.freebusy`. Do not add the broad `calendar` scope; Google rejects a mismatch.
 
-   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. Unverified production apps show a warning screen and are capped at 100 users, which is fine for the pilot. For verification, Google needs a demo video, the privacy policy (`/privacidad`), scope justifications and a test account.
+   Then click **Publish app** ("In production"). In "Testing" mode, Google expires refresh tokens after 7 days and the agent's calendar would silently disconnect. The app is verified, so there is no warning screen and no user cap. (Verification needed a demo video, the privacy policy at `/privacidad`, scope justifications and a test account.)
 3. Credentials → OAuth client ID (Web). Redirect URI: `BASE_URL/oauth/google/callback`. Copy the client ID and secret into `GOOGLE_*`.
 
 ## First real test (test number, your own phones)
 
 1. In `/admin`, create an agent (your name, your second phone for alerts).
-2. Click **Usar el número de prueba de Meta**, then **Crear plantillas en Meta**. Wait for `lead_first_contact_v1` to show APPROVED (minutes to hours).
+2. Click **Usar el número de prueba de Meta**, then **Crear plantillas en Meta**. Wait for `lead_first_contact_v2` to show APPROVED (minutes to hours).
 3. Connect Google: open the onboarding link shown on the agent page and do the Google step.
 4. **Lead de prueba** with your verified phone → the template arrives in ~30s → reply → the AI chats → pick a slot → the event appears in your calendar.
 
