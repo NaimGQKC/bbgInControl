@@ -709,7 +709,6 @@ function launchSignup(el) {
   if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
   el.disabled = true; setOrb("meta", 10); startMetaCoaching();
   const a = state.answers;
-  const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
   const realOpen = window.open;  // the SDK opens Meta's window itself; steer it to the right edge, like Google's
   if (window.innerWidth >= 1000) {
     window.open = function (u, n, f) {
@@ -737,8 +736,7 @@ function launchSignup(el) {
     response_type: "code",
     override_default_response_type: true,
     extras: {
-      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined,
-               phone: digits ? { code: 34, number: digits.replace(/^34/, "") } : undefined } },
+      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined } },  // no phone pre-fill: Meta must offer to connect the existing WhatsApp Business app
       featureType: "whatsapp_business_app_onboarding",
       sessionInfoVersion: "3",
     },
