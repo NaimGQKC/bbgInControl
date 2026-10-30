@@ -555,7 +555,7 @@ async function flow(my) {
 
   // 5. WhatsApp Business check
   await bot("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida BAJA no recibe nada más.");
-  await bot("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)? Tiene que ser Business, con la app actualizada.");
+  await bot("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)? Tiene que ser Business: con el WhatsApp normal, Meta lo bloquea.");
   if (at(step) > at("wa_check")) await me(store.get("waAnswer") || "Uso WhatsApp Business");
   else {
     const proceed = async (label) => { await me(label); store.set("waAnswer", label); await api("/step", { done: "wa_check" }); render(); };
@@ -590,8 +590,8 @@ async function flow(my) {
     $msgs.insertAdjacentHTML("beforeend", `<div class="coach new"><ol>
       <li>Facebook → <b>Continuar</b></li>
       <li>Revisa tus datos → <b>Siguiente</b></li>
-      <li>Elige <b>conectar tu app de WhatsApp Business</b> y pon tu número</li>
-      <li>Confirma en tu móvil, en <b>WhatsApp Business</b></li>
+      <li>Elige <b>«Ingresar un nuevo número de teléfono»</b> y escribe el de tu <b>WhatsApp Business</b> (aunque ya lo uses)</li>
+      <li>Escanea el <b>código QR</b> con WhatsApp Business</li>
       <li>Tarjeta → <b>Finalizar</b></li></ol></div>`);
     chips([["Nombre", a.agent_name + (a.agency ? " · " + a.agency : "")], ["Email", a.email], ["Móvil", (a.personal_whatsapp || "").replace(/^\+34/, "")]]);
     if (!FAKE) loadFB();  // load the SDK now so the popup opens straight from the click (no popup blocker)
@@ -663,8 +663,8 @@ function metaCoach(data) {  // Meta tells us which screen the user is on: speak 
   const hi = n ? `${n}, ` : "";
   const ring = /qr|scan|link|device/.test(step) ? 75 : /phone|number/.test(step) ? 50 : /pay|billing|card/.test(step) ? 90 : /business|portfolio|info/.test(step) ? 25 : null;
   if (ring) setOrb("meta", ring);
-  if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", `${hi}ahora coge tu móvil: abre **WhatsApp Business** y confirma lo que Meta te pida (un código o un mensaje con el botón «Conectar»).`);
-  else if (/phone|number/.test(step)) coach(my, "m-phone", `${hi}Meta te pide tu número: pon el de WhatsApp Business, con el que escribes a tus clientes.`);
+  if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", `${hi}ahora coge tu móvil: abre **WhatsApp Business** → Ajustes → Dispositivos vinculados → Vincular un dispositivo, y **escanea el código QR** de la pantalla.`);
+  else if (/phone|number/.test(step)) coach(my, "m-phone", `${hi}Meta te pide tu número: elige **«Ingresar un nuevo número de teléfono»** y escribe el de tu **WhatsApp Business**. Es lo normal, aunque ya lo uses.`);
   else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
   else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", `${hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.`);
 }
@@ -673,7 +673,7 @@ function startMetaCoaching() {  // short tips that cover most cases; Meta's own 
   metaTimers.forEach(clearTimeout);
   metaTimers = [
     setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
-    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge **tu app de WhatsApp Business**."), 20000),
+    setTimeout(() => coach(my, "m2", "Cuando te pida el número, elige **«Ingresar un nuevo número de teléfono»** y escribe el de tu **WhatsApp Business**. Es lo normal, aunque ya lo uses."), 20000),
     setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 60000),
   ];
 }
@@ -709,6 +709,7 @@ function launchSignup(el) {
   if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
   el.disabled = true; setOrb("meta", 10); startMetaCoaching();
   const a = state.answers;
+  const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
   const realOpen = window.open;  // the SDK opens Meta's window itself; steer it to the right edge, like Google's
   if (window.innerWidth >= 1000) {
     window.open = function (u, n, f) {
@@ -736,7 +737,8 @@ function launchSignup(el) {
     response_type: "code",
     override_default_response_type: true,
     extras: {
-      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined } },  // no phone pre-fill: Meta must offer to connect the existing WhatsApp Business app
+      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined,
+               phone: digits ? { code: 34, number: digits.replace(/^34/, "") } : undefined } },
       featureType: "whatsapp_business_app_onboarding",
       sessionInfoVersion: "3",
     },
