@@ -280,15 +280,28 @@ function inputRow({ ph = "", type = "text", onSubmit, optional = false, skipLabe
   err(""); scroll();
 }
 // zones: tap the city first (Spain shares one timezone, so we can't guess it), then tap neighbourhoods instead of typing commas
-const CITIES = {
+const CITIES_BY = {
+  es: {
   Madrid: ["Chamberí", "Salamanca", "Retiro", "Chamartín", "Centro", "Arganzuela", "Tetuán", "Moncloa"],
   Barcelona: ["Eixample", "Gràcia", "Sarrià", "Les Corts", "Sant Martí", "Poblenou", "Sants", "Horta"],
   Valencia: ["Ruzafa", "El Carmen", "Benimaclet", "Campanar", "Pla del Real", "Algirós", "Patraix"],
   Sevilla: ["Nervión", "Triana", "Los Remedios", "Macarena", "Casco Antiguo", "Heliópolis"],
   Zaragoza: ["Delicias", "Actur", "Centro", "Universidad", "San José", "Las Fuentes", "Casco Histórico"],
   Málaga: ["Centro", "Teatinos", "Limonar", "El Palo", "Pedregalejo", "Huelin"],
+  },
+  fr: {
+  Paris: ["Paris 1er", "Paris 2e", "Paris 3e", "Paris 4e", "Paris 5e", "Paris 6e", "Paris 7e", "Paris 8e", "Paris 9e", "Paris 10e", "Paris 11e", "Paris 12e", "Paris 13e", "Paris 14e", "Paris 15e", "Paris 16e", "Paris 17e", "Paris 18e", "Paris 19e", "Paris 20e"],
+  Lyon: ["Lyon 1er", "Lyon 2e", "Lyon 3e", "Lyon 4e", "Lyon 5e", "Lyon 6e", "Lyon 7e", "Lyon 8e", "Lyon 9e", "Villeurbanne"],
+  Marseille: ["Marseille 1er", "Marseille 2e", "Marseille 6e", "Marseille 7e", "Marseille 8e", "Marseille 9e", "Marseille 10e", "Marseille 12e", "Marseille 13e"],
+  Bordeaux: ["Centre", "Chartrons", "Saint-Pierre", "Bastide", "Caudéran", "Mériadeck", "Saint-Michel", "Bacalan"],
+  Toulouse: ["Capitole", "Saint-Cyprien", "Carmes", "Les Minimes", "Jeanne d'Arc", "Compans-Caffarelli", "Busca"],
+  Nice: ["Centre-ville", "Vieux-Nice", "Cimiez", "Mont Boron", "Libération", "Fabron", "Port"],
+  },
+  en: {},  // no ready-made list: they type their areas
 };
 function zonePicker(row, pill) {
+  const CITIES = CITIES_BY[LL()] || {};
+  if (!Object.keys(CITIES).length) return;
   const cities = () => { row.innerHTML = ""; for (const c of Object.keys(CITIES)) pill(c, () => hoods(c)); };
   const hoods = (c) => {
     row.innerHTML = ""; pill("← " + c, cities);
@@ -316,7 +329,11 @@ function chips(items) {  // copy-paste helpers next to Meta's window
   $msgs.appendChild(d);
 }
 const firstName = (n) => (n || "").trim().split(/\s+/)[0];
-const pretty = (p) => (p || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "+34 $1 $2 $3");
+const pretty = (p) => (p || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "+34 $1 $2 $3").replace(/^\+33(\d)(\d{2})(\d{2})(\d{2})(\d{2})$/, "+33 $1 $2 $3 $4 $5");
+const LL = () => state.lead_lang || "es";  // the language of the agent's owners (leads): not always the screen language
+const PHONE_PH = () => (LL() === "fr" ? "06 12 34 56 78" : "600 000 000");
+const NATIVE = { es: "Español", fr: "Français", en: "English" };
+const langName = (c) => ({ es: tr("español"), fr: tr("francés"), en: tr("inglés") }[c]);
 
 // ---- header: who is talking, progress, help
 document.getElementById("aname").textContent = state.assistant;
@@ -393,11 +410,14 @@ function connectGoogle(my) {
 }
 
 // ---- the conversation: every step lives in the same thread; finished steps replay instantly as history
-const QUESTIONS = [
-  { f: "agent_name", q: tr("¿Cómo te llamas? (nombre y apellido)"), ph: "Laura García" },
-  { f: "agency", q: tr("¿En qué inmobiliaria trabajas?"), ph: "RE/MAX Confort" },
-  { f: "zones", q: tr("¿En qué zonas o barrios captas? Sepáralos con comas."), ph: "Delicias, Actur, Centro" },
-];
+const questions = () => {
+  const fr = LL() === "fr";
+  return [
+    { f: "agent_name", q: tr("¿Cómo te llamas? (nombre y apellido)"), ph: fr ? "Laura Martin" : "Laura García" },
+    { f: "agency", q: tr("¿En qué inmobiliaria trabajas?"), ph: fr ? "Agence Soleil" : "RE/MAX Confort" },
+    { f: "zones", q: tr("¿En qué zonas o barrios captas? Sepáralos con comas."), ph: fr ? "Lyon 3e, Lyon 6e" : "Delicias, Actur, Centro" },
+  ];
+};
 async function render() {
   document.body.classList.remove("split");
   const my = ++gen;
@@ -409,6 +429,7 @@ async function render() {
   $msgs.classList.remove("quiet"); scroll();
 }
 async function flow(my) {
+  const QUESTIONS = questions();
   const bot = (t) => say(t, "bot", my), me = (t) => say(t, "me", my);
   const a = state.answers, integ = state.integrations, step = state.step, pay = state.payment;
   const at = (s) => ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"].indexOf(s);
@@ -444,7 +465,15 @@ async function flow(my) {
   if (v0 && !nameOk() && step === "questions") {
     await bot(tr("Veo que te llamas {nombre}. ¿Te llamo {primero}?", { nombre: v0, primero: firstName(v0) }));
     buttons([{ label: tr("Sí, {primero}", { primero: firstName(v0) }), onClick: () => { store.set("nameOk", "1"); render(); } },
-             { label: tr("Prefiero otro nombre"), secondary: true, onClick: () => { bot(QUESTIONS[0].q); inputRow({ ph: "Laura García", onSubmit: async (val) => { if (!val) return; const r = await api("/answers", { agent_name: val }); if (r.ok === false) return err(tr(r.error)); store.set("nameOk", "1"); render(); } }); } }]);
+             { label: tr("Prefiero otro nombre"), secondary: true, onClick: () => { bot(QUESTIONS[0].q); inputRow({ ph: QUESTIONS[0].ph, onSubmit: async (val) => { if (!val) return; const r = await api("/answers", { agent_name: val }); if (r.ok === false) return err(tr(r.error)); store.set("nameOk", "1"); render(); } }); } }]);
+    return;
+  }
+  // 2b. Which language do their owners speak? (messages, WhatsApp templates, calendar texts)
+  if (store.get("ask:lang") === "1") { await bot(tr("¿En qué idioma hablo con tus propietarios?")); await me(langName(LL())); }
+  else if (early) {
+    await bot(tr("Hablaré con tus propietarios en **{idioma}**: los mensajes, las plantillas de WhatsApp y las citas. ¿Es correcto?", { idioma: langName(LL()) }));
+    buttons([{ label: tr("Sí, en {idioma}", { idioma: langName(LL()) }), onClick: async () => { await api("/answers", { lead_lang: LL() }); store.set("ask:lang", "1"); render(); } },
+             { label: tr("Otro idioma"), secondary: true, onClick: () => chooseLang() }]);
     return;
   }
   const pre = QUESTIONS.filter((q) => q.f !== "agent_name" && a[q.f] && store.get("ask:" + q.f) !== "1");  // given before (website demo): confirm in one line, don't re-ask
@@ -498,20 +527,25 @@ async function flow(my) {
   else if (early && a.personal_whatsapp) {  // came with the website demo
     await bot(tr("Te escribiré y avisaré desde el **{tel}**. ¿Es tu móvil de WhatsApp?", { tel: pretty(a.personal_whatsapp) }));
     buttons([{ label: tr("Sí, es ese"), onClick: () => { store.set("ask:phone", "1"); store.set("alertOk", "1"); render(); } },
-             { label: tr("Es otro número"), secondary: true, onClick: () => inputRow({ ph: "600 000 000", type: "tel", onSubmit: savePhone }) }]);
+             { label: tr("Es otro número"), secondary: true, onClick: () => inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: savePhone }) }]);
     return;
-  } else if (early) { await bot(PHONE_Q); inputRow({ ph: "600 000 000", type: "tel", onSubmit: savePhone }); return; }
+  } else if (early) { await bot(PHONE_Q); inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: savePhone }); return; }
 
   // 3b. Show exactly what an owner receives, as it looks on their phone, and what success looks like
   if (state.first_message && early) {
-    const hhmm = (d) => d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    const DEMO = {  // what the owner sees: always in the owners' language
+      es: { name: "Marta", biz: "Cuenta de empresa", loc: "es-ES", cond: "En buen estado, lo reformamos hace unos años.", offer2: (a, b) => `Genial, gracias. ¿Te va mejor el ${a} o el ${b}?`, offer1: (a) => `Genial, gracias. ¿Te va bien el ${a}?`, pick: (a) => `El ${a}, perfecto.`, done: (n, a) => `Hecho: ${n} pasará el ${a}. Te envío un recordatorio.`, agent: "tu agente" },
+      fr: { name: "Marie", biz: "Compte professionnel", loc: "fr-FR", cond: "En bon état, nous l'avons rénové il y a quelques années.", offer2: (a, b) => `Parfait, merci. Quel créneau vous convient le mieux : le ${a} ou le ${b} ?`, offer1: (a) => `Parfait, merci. Le ${a} vous conviendrait-il ?`, pick: (a) => `Le ${a}, c'est parfait.`, done: (n, a) => `C'est noté : ${n} passera le ${a}. Je vous enverrai un rappel.`, agent: "votre agent" },
+      en: { name: "Emma", biz: "Business account", loc: "en-GB", cond: "In good condition, we renovated it a few years ago.", offer2: (a, b) => `Great, thanks. Does ${a} or ${b} suit you better?`, offer1: (a) => `Great, thanks. Does ${a} suit you?`, pick: (a) => `${a} works, perfect.`, done: (n, a) => `Done: ${n} will come on ${a}. I'll send you a reminder.`, agent: "your agent" },
+    }[LL()];
+    const hhmm = (d) => d.toLocaleTimeString(DEMO.loc, { hour: "2-digit", minute: "2-digit" });
     const slot = ((JSON.parse(store.get("peek") || "null") || {}).first || [])[0];
     const showDemo = store.get("previewOk") !== "1";
-    await bot(showDemo ? tr("Esto es una **demostración** de cómo lo verá Marta, una propietaria de ejemplo (el mensaje va en español). Aún no he escrito a nadie:") : tr("Así ve un propietario mi primer mensaje:"));
+    await bot(showDemo ? tr("Esto es una **demostración** de cómo lo verá {nombre}, una propietaria de ejemplo (el mensaje va en {idioma}). Aún no he escrito a nadie:", { nombre: DEMO.name, idioma: langName(LL()) }) : tr("Así ve un propietario mi primer mensaje:"));
     const wa = document.createElement("div"); wa.className = "wa2 new";
     const nm = (firstName(a.agent_name) || tr("Tu nombre")) + (a.agency ? " · " + a.agency : "");
-    wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b><small>Cuenta de empresa</small></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span><span class="t"></span></div></div>`;
-    wa.querySelector(".wa-av").textContent = (a.agent_name || "T").charAt(0); wa.querySelector("b").textContent = nm;
+    wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b><small></small></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span><span class="t"></span></div></div>`;
+    wa.querySelector(".wa-head small").textContent = DEMO.biz; wa.querySelector(".wa-av").textContent = (a.agent_name || "T").charAt(0); wa.querySelector("b").textContent = nm;
     wa.querySelector(".tx").textContent = state.first_message; wa.querySelector(".t").textContent = hhmm(new Date());
     $msgs.appendChild(wa); scroll();
     if (!showDemo) { await me(tr("Me gusta, seguimos")); }
@@ -531,10 +565,10 @@ async function flow(my) {
           if (!seen.has("demo")) await sleep(wait);
         };
         const other = ((JSON.parse(store.get("peek") || "null") || {}).first || []).find((x) => x !== label);
-        await bubble("out", "En buen estado, lo reformamos hace unos años.", 1100);
-        await bubble("in", other ? `Genial, gracias. ¿Te va mejor el ${label} o el ${other}?` : `Genial, gracias. ¿Te va bien el ${label}?`, 1100);
-        await bubble("out", `El ${label}, perfecto.`, 1000);
-        await bubble("in", `Hecho: ${firstName(a.agent_name) || "tu agente"} pasará el ${label}. Te envío un recordatorio.`, 700);
+        await bubble("out", DEMO.cond, 1100);
+        await bubble("in", other ? DEMO.offer2(label, other) : DEMO.offer1(label), 1100);
+        await bubble("out", DEMO.pick(label), 1000);
+        await bubble("in", DEMO.done(firstName(a.agent_name) || DEMO.agent, label), 700);
         const ok = document.createElement("div"); ok.className = "coach warn new"; ok.textContent = tr("✅ Valoración agendada en tu Google Calendar: {fecha}", { fecha: shown }); $msgs.appendChild(ok); scroll();
         seen.add("demo"); store.set("seen", JSON.stringify([...seen]));
         await bot(real ? tr("Lo que sí es real: acabo de crear una cita de prueba en tu **Google Calendar**. Abre el calendario.") : tr("Así de simple. Esto lo hago yo por ti, con tus huecos reales."));
@@ -562,7 +596,7 @@ async function flow(my) {
   }
 
   // 5. WhatsApp Business check
-  await bot(tr("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida BAJA no recibe nada más."));
+  await bot(tr("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida {stop} no recibe nada más.", { stop: LL() === "es" ? "BAJA" : "STOP" }));
   await bot(tr("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)? Tiene que ser Business: con el WhatsApp normal, Meta lo bloquea."));
   if (at(step) > at("wa_check")) await me(tr(store.get("waAnswer") || "Uso WhatsApp Business"));
   else {
@@ -626,10 +660,10 @@ async function flow(my) {
     if (a.personal_whatsapp) {
       await bot(tr("Un último detalle: si un cliente necesita que intervengas tú, te aviso por WhatsApp al {tel}. ¿Te va bien ese número?", { tel: pretty(a.personal_whatsapp) }));
       buttons([{ label: tr("Sí, perfecto"), onClick: () => { store.set("alertOk", "1"); render(); } },
-               { label: tr("Usar otro número"), secondary: true, onClick: () => inputRow({ ph: "600 000 000", type: "tel", onSubmit: saveAlert }) }]);
+               { label: tr("Usar otro número"), secondary: true, onClick: () => inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: saveAlert }) }]);
     } else {
       await bot(tr("Un último detalle: ¿a qué móvil te aviso si un cliente necesita que intervengas tú? Solo te escribiré para eso."));
-      inputRow({ ph: "600 000 000", type: "tel", onSubmit: saveAlert });
+      inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: saveAlert });
     }
     return;
   }
@@ -643,7 +677,13 @@ async function flow(my) {
   }
   await bot(tr("Listo 🎉 Cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas caerán en tu Google Calendar. No hace falta volver aquí."));
   summaryCard();
-  await bot(tr("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo."));
+  await bot(tr("De conectar tu fuente de leads nos encargamos nosotros; te escribiremos si necesitamos algo."));
+}
+function chooseLang() {  // the three languages, each in its own name
+  buttons(["es", "fr", "en"].filter((c) => c !== LL()).map((c) => ({ label: NATIVE[c], onClick: async () => {
+    const r = await api("/answers", { lead_lang: c }); if (r.ok === false) return err(tr(r.error));
+    store.set("ask:lang", "1"); try { localStorage.removeItem(`sp:${TOKEN}:peek`); } catch (e) {}  // slot labels are in the owners' language
+    render(); } })), true);
 }
 // ---- "Mis datos": change anything they told us, at any moment (scripted, no AI). Or just ask Lucía in the chat.
 function myData() {
@@ -658,6 +698,11 @@ function myData() {
     row.querySelector("button").onclick = () => editField(f, label, q);
     card.appendChild(row);
   }
+  const lrow = document.createElement("div"); lrow.className = "row-edit";
+  lrow.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button"></button>`;
+  lrow.querySelector(".k").textContent = tr("Idioma de tus propietarios"); lrow.querySelector(".v").textContent = NATIVE[LL()];
+  lrow.querySelector("button").textContent = tr("Cambiar"); lrow.querySelector("button").onclick = () => chooseLang();
+  card.appendChild(lrow);
   $msgs.appendChild(card); scroll();
   buttons([{ label: tr("Seguir donde estaba"), onClick: () => render() }]);
 }
@@ -760,7 +805,7 @@ function launchSignup(el) {
     override_default_response_type: true,
     extras: {
       setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined, website: store.get("web") || undefined,
-               phone: digits ? { code: 34, number: digits.replace(/^34/, "") } : undefined } },
+               phone: digits ? { code: +state.cc, number: digits.replace(new RegExp("^" + state.cc), "") } : undefined } },
       featureType: "whatsapp_business_app_onboarding",
       sessionInfoVersion: "3",
     },

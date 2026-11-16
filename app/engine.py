@@ -33,19 +33,17 @@ from .llm import run_tool_loop
 from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Message
 from .prompt import build_system_prompt
 from .transcribe import transcribe
+from . import lang as L
 from .whatsapp import FakeWhatsApp, WhatsAppClient, WhatsAppError
 
 log = logging.getLogger("sparrow.engine")
 _booking_locks: dict[int, threading.Lock] = {}
 
-MONTHS = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
-
 
 # ---------------------------------------------------------------- helpers
 
-def when_label(dt_utc: datetime, tz: str) -> str:
-    d = to_local(dt_utc, tz)
-    return f"{DAYS[d.weekday()]} {d.day} de {MONTHS[d.month - 1]}, {d:%H:%M}"
+def when_label(dt_utc: datetime, tz: str, lang: str = "es") -> str:
+    return L.when_label(to_local(dt_utc, tz), lang)
 
 
 def log_event(s, name: str, account_id=None, lead_id=None, **data):
@@ -108,17 +106,18 @@ def send_to_lead(s, account: Account, lead: Lead, *, kind: str, text: str | None
         log.info("window closed for lead %s, free text not allowed (G7)", lead.id)  # G7
         return False
     wa = agent_wa(s, account)
+    lang = L.lead_lang(account)
     try:
         if template is not None:
-            wid = wa.send_template(lead.phone, template, values or [])
-            _store_out(s, account, lead, sender=sender, type_="template", text=template.render(values or []), template_name=template.name, wa_id=wid)
+            wid = wa.send_template(lead.phone, template, values or [], language=lang)
+            _store_out(s, account, lead, sender=sender, type_="template", text=template.render(values or [], lang), template_name=template.name, wa_id=wid)
         else:
             wid = wa.send_text(lead.phone, text)
             _store_out(s, account, lead, sender=sender, type_="text", text=text, wa_id=wid)
         s.commit()  # the message is out: never lose its record (and never resend it on a retry)
     except WhatsAppError as e:
         _store_out(s, account, lead, sender=sender, type_="template" if template else "text",
-                   text=template.render(values or []) if template else text or "", template_name=template.name if template else "",
+                   text=template.render(values or [], lang) if template else text or "", template_name=template.name if template else "",
                    status="failed", error=str(e))
         log_event(s, "send_failed", account.id, lead.id, error=str(e), code=e.code)
         s.commit()
@@ -127,15 +126,16 @@ def send_to_lead(s, account: Account, lead: Lead, *, kind: str, text: str | None
 
 
 def _sparrow_template(s, account: Account, to: str | None, template: T.Template, values: list[str]) -> None:
+    lang = "es" if template is T.OPS_NEEDS_HELP else L.lead_lang(account)  # agents get their alerts in their language; you (the operator) in Spanish
     wa = sparrow_wa()
     if not wa or not to:
-        log.warning("cannot send %s for account %s (no Sparrow number or no recipient): %s", template.name, account.id, template.render(values))
-        log_event(s, "alert_not_sent", account.id, template=template.name, text=template.render(values))
+        log.warning("cannot send %s for account %s (no Sparrow number or no recipient): %s", template.name, account.id, template.render(values, lang))
+        log_event(s, "alert_not_sent", account.id, template=template.name, text=template.render(values, lang))
         return
     try:
-        wid = wa.send_template(to, template, values)
+        wid = wa.send_template(to, template, values, language=lang)
         s.add(Message(account_id=account.id, direction="out", sender="system", type="template",
-                      text=template.render(values), template_name=template.name, wa_message_id=wid, status="sent"))
+                      text=template.render(values, lang), template_name=template.name, wa_message_id=wid, status="sent"))
     except WhatsAppError as e:
         log.error("%s failed: %s", template.name, e)
         log_event(s, "alert_failed", account.id, template=template.name, error=str(e))
@@ -176,7 +176,7 @@ LEAD_FIELDS = ("name", "property_type", "zone", "address", "listing_url", "stage
 
 def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False) -> tuple[Lead | None, str]:
     """Standard `Lead` in, first message scheduled. Returns (lead, result)."""
-    phone = normalize_phone(data.get("phone"))
+    phone = normalize_phone(data.get("phone"), L.cc_for(account))
     if not phone:
         log_event(s, "lead_rejected", account.id, reason="invalid_phone", raw=str(data.get("phone")))
         return None, "invalid_phone"
@@ -243,11 +243,12 @@ def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:0
 
 
 def first_contact_values(account: Account, lead_name: str, zone: str) -> list[str]:
+    lang = L.lead_lang(account)
     return [
-        first_name(lead_name) or "buenas",
-        first_name(tidy_name(account.agent_name)) or "tu agente",
-        account.agency or "tu inmobiliaria",
-        zone or (account.zones.split(",")[0].strip() if account.zones else "tu zona"),
+        first_name(lead_name) or L.text("greeting_fallback", lang),
+        first_name(tidy_name(account.agent_name)) or L.text("your_agent", lang),
+        account.agency or L.text("your_agency", lang),
+        zone or (account.zones.split(",")[0].strip() if account.zones else L.text("your_zone", lang)),
     ]
 
 
@@ -291,10 +292,11 @@ def job_followup(s, job):
         return
     n = (job.payload or {}).get("n", 1)
     if n == 1:
+        lang = L.lead_lang(account)
         sent = send_to_lead(s, account, lead, kind="followup", template=T.LEAD_FOLLOWUP_1,
-                            values=[first_name(lead.name) or "buenas", lead.zone or "tu zona"])
+                            values=[first_name(lead.name) or L.text("greeting_fallback", lang), lead.zone or L.text("your_zone", lang)])
     else:
-        sent = send_to_lead(s, account, lead, kind="followup", template=T.LEAD_FOLLOWUP_2, values=[first_name(lead.name) or "buenas"])
+        sent = send_to_lead(s, account, lead, kind="followup", template=T.LEAD_FOLLOWUP_2, values=[first_name(lead.name) or L.text("greeting_fallback", L.lead_lang(account))])
         if sent:
             jobs.schedule(s, "mark_no_reply", utcnow() + timedelta(days=2), lead_id=lead.id, account_id=account.id,
                           dedupe_key=f"noreply:{lead.id}")
@@ -338,15 +340,17 @@ def job_reminder(s, job):
     if ev["start"] < utcnow():
         return
     local = to_local(ev["start"], account.timezone)
-    where = meeting.address or ("por teléfono" if meeting.type == "call" else "tu vivienda")
-    agent_first = first_name(account.agent_name) or "el agente"
-    lead_first = first_name(lead.name) or "buenas"
+    lang = L.lead_lang(account)
+    where = L.where_phrase(meeting.address, meeting.type, lang)
+    agent_first = first_name(account.agent_name) or L.text("the_agent", lang)
+    lead_first = first_name(lead.name) or L.text("greeting_fallback", lang)
+    at = L.fmt_time(local, lang)
     if which == "24h":
-        tpl, values = T.MEETING_REMINDER_24H, [lead_first, f"{local:%H:%M}", agent_first, where]
+        tpl, values = T.MEETING_REMINDER_24H, [lead_first, at, agent_first, where]
     else:
-        tpl, values = T.MEETING_REMINDER_2H, [lead_first, agent_first, where, f"{local:%H:%M}"]
+        tpl, values = T.MEETING_REMINDER_2H, [lead_first, agent_first, where, at]
     if window_open(lead):
-        sent = send_to_lead(s, account, lead, kind="reminder", text=tpl.render(values))
+        sent = send_to_lead(s, account, lead, kind="reminder", text=tpl.render(values, lang))
     else:
         sent = send_to_lead(s, account, lead, kind="reminder", template=tpl, values=values)
     if sent:
@@ -357,7 +361,7 @@ def job_reminder(s, job):
 def job_ai_turn_failed(s, job):  # G10: fail closed
     account, lead = _load(s, job)
     if lead.status not in ("handoff", "opted_out"):
-        do_handoff(s, account, lead, "error técnico del asistente", notify_lead=False)
+        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)), notify_lead=False)
 
 
 @jobs.handler("first_contact:failed")
@@ -400,7 +404,7 @@ def job_phone_health(s, job):
         last = account.last_agent_activity_at or account.created_at
         if utcnow() - last > timedelta(days=12):
             if not account.phone_inactive_alerted_at or account.phone_inactive_alerted_at < last:
-                alert_agent(s, account, T.AGENT_PHONE_INACTIVE, [first_name(account.agent_name) or "hola"])
+                alert_agent(s, account, T.AGENT_PHONE_INACTIVE, [L.agent_hi(account)])
                 account.phone_inactive_alerted_at = utcnow()
 
 
@@ -415,6 +419,9 @@ def _find_lead(s, account: Account, phone: str) -> Lead | None:
 
 def _already_have(s, wa_message_id: str | None) -> bool:
     return bool(wa_message_id) and s.execute(select(Message.id).where(Message.wa_message_id == wa_message_id)).first() is not None
+
+
+NO_THANKS = {"no", "no gracias", "no, gracias", "non", "non merci", "non, merci", "no thanks", "no, thanks", "no thank you"}  # a plain "no" answering follow-up 2
 
 
 def _last_template(s, lead: Lead) -> str:
@@ -435,7 +442,7 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
     if mtype == "audio" and msg.get("audio_id"):
         try:
             audio, mime = agent_wa(s, account).download_media(msg["audio_id"])
-            text = transcribe(audio, mime) or ""
+            text = transcribe(audio, mime, L.lead_lang(account)) or ""
         except Exception:
             log.exception("audio download failed")
         text = f"[nota de voz] {text}" if text else "[nota de voz sin transcribir]"
@@ -451,9 +458,9 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
         log_event(s, "replied", account.id, lead.id)
     jobs.cancel(s, lead.id, ["followup", "mark_no_reply", "first_contact"])
 
-    # Exact STOP/BAJA → opt out in code, no LLM needed. A plain "no" counts only as the answer to follow-up 2.
+    # Exact STOP/BAJA/ARRÊT → opt out in code, no LLM needed. A plain "no" counts only as the answer to follow-up 2.
     word = text.strip().lower().rstrip(".!")
-    if word in OPT_OUT_WORDS or (word in ("no", "no gracias", "no, gracias") and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
+    if word in OPT_OUT_WORDS or (word in NO_THANKS and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
         opt_out(s, account, lead, source="keyword")
         return "opted_out"
 
@@ -462,7 +469,7 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
     if lead.status in ("new", "queued", "contacted", "no_reply", "not_interested"):
         lead.status = "in_conversation"
     if mtype == "audio" and "sin transcribir" in text:
-        send_to_lead(s, account, lead, kind="ai_reply", text=T.VOICE_NOT_SUPPORTED)
+        send_to_lead(s, account, lead, kind="ai_reply", text=L.text("voice_not_supported", L.lead_lang(account)))
         return "asked_to_write"
 
     # Burst grouping: wait ~30s after the last message, max ~60s after the first one
@@ -532,9 +539,10 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
         wid = wa.send_text(p, body)
         s.add(Message(account_id=account.id, direction="out", sender="system", type="text", text=body, wa_message_id=wid, status="sent"))
 
-    m = re.match(r"^\s*sigue(?:\s+con)?\s+(.+)$", text, re.IGNORECASE)
+    lang = L.lead_lang(account)
+    m = re.match(r"^\s*(?:sigue|reprends|reprenez|continue)(?:\s+(?:con|avec|with))?\s+(.+)$", text, re.IGNORECASE)
     if not m:
-        reply("Para que tu asistente retome una conversación, escribe: Sigue con <nombre del cliente>")
+        reply(L.text("resume_help", lang))
         return "help"
     wanted = m.group(1).strip().lower()
     candidates = s.execute(
@@ -542,8 +550,8 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
     ).scalars().all()
     matches = [l for l in candidates if wanted in (l.name or "").lower() or wanted.replace(" ", "") in l.phone]
     if len(matches) != 1:
-        names = ", ".join(sorted({l.name or l.phone for l in candidates})[:8]) or "ninguna"
-        reply(f"No he encontrado a una sola persona con ese nombre. Conversaciones en pausa: {names}")
+        names = ", ".join(sorted({l.name or l.phone for l in candidates})[:8]) or L.text("resume_none", lang)
+        reply(L.text("resume_ambiguous", lang, names=names))
         return "ambiguous"
     lead = matches[0]
     lead.human_owned = False
@@ -552,7 +560,7 @@ def handle_sparrow_inbound(s, from_phone: str, msg: dict) -> str:
     log_event(s, "ai_resumed", account.id, lead.id)
     jobs.schedule(s, "ai_turn", utcnow(), lead_id=lead.id, account_id=account.id, dedupe_key=f"ai_turn:{lead.id}",
                   reuse=True, replace_run_at=True, payload={"resumed": True})
-    reply(f"Hecho, sigo yo con {lead.name or lead.phone}.")
+    reply(L.text("resume_done", lang, name=lead.name or lead.phone))
     return "resumed"
 
 
@@ -567,7 +575,7 @@ def opt_out(s, account: Account, lead: Lead, *, source: str) -> None:
     if already:
         return
     try:
-        send_to_lead(s, account, lead, kind="opt_out_confirmation", text=T.OPT_OUT_CONFIRMATION)
+        send_to_lead(s, account, lead, kind="opt_out_confirmation", text=L.text("opt_out_confirmation", L.lead_lang(account)))
     except WhatsAppError:
         pass
 
@@ -580,13 +588,13 @@ def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: boo
     if notify_lead:
         try:
             send_to_lead(s, account, lead, kind="handoff_notice",
-                         text=T.HANDOFF_TO_LEAD.format(agent_first_name=first_name(account.agent_name) or "el agente"))
+                         text=L.text("handoff_to_lead", L.lead_lang(account), agent_first_name=first_name(account.agent_name) or L.text("the_agent", L.lead_lang(account))))
         except WhatsAppError:
             pass
     last_in = s.execute(select(Message.text).where(Message.lead_id == lead.id, Message.direction == "in")
                         .order_by(Message.id.desc())).first()
     why = _clip(reason, 80) + (f' ("{_clip(last_in[0], 80)}")' if last_in else "")
-    alert_agent(s, account, T.AGENT_NEEDS_YOU, [first_name(account.agent_name) or "hola", lead_summary(lead), why])
+    alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
 
 
 # ---------------------------------------------------------------- slots & booking
@@ -614,7 +622,7 @@ def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
                     eu = su + dur
                     if su >= earliest and su <= horizon and not any(b0 < eu + buf and b1 > su - buf for b0, b1 in busy):
                         if per_day.get(day, 0) < 2:
-                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone)})
+                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone, L.lead_lang(account))})
                             per_day[day] = per_day.get(day, 0) + 1
                             t += timedelta(hours=3)  # spread the options within a day
                             continue
@@ -630,30 +638,37 @@ def _slot_to_utc(slot_id: str, tz: str) -> datetime:
 
 
 def event_description(account: Account, lead: Lead, meeting_type: str) -> str:
+    lang = L.lead_lang(account)
+    t = lambda k: L.text(k, lang)
+    ads = {"es": "anuncio", "fr": "annonce", "en": "listing"}[lang]
     f = lead.facts or {}
     lines = [f"📞 {lead.phone} · WhatsApp: wa.me/{lead.phone.lstrip('+')}"]
     prop = ", ".join(p for p in [lead.property_type, lead.zone] if p)
     if lead.price:
-        prop += f" · {lead.price:,.0f} €".replace(",", ".")
+        price = f"{lead.price:,.0f}"
+        prop += f" · {price.replace(',', '.') if lang == 'es' else price.replace(',', ' ' if lang == 'fr' else ',')} €"
     if lead.listing_url:
-        prop += f" (anuncio: {lead.listing_url})"
+        prop += f" ({ads}: {lead.listing_url})"
     if prop:
         lines.append(f"🏠 {prop}")
+    cond = {"es": "Estado", "fr": "État", "en": "Condition"}[lang]
     if f.get("condition"):
-        lines.append(f"🔧 Estado: {f['condition']}")
-    motive = " · ".join(x for x in [f"Motivo: {f['reason']}" if f.get("reason") else "", f"Plazo: {f['timeline']}" if f.get("timeline") else ""] if x)
+        lines.append(f"🔧 {cond}: {f['condition']}")
+    motive = " · ".join(x for x in [f"{t('ev_reason')}: {f['reason']}" if f.get("reason") else "", f"{t('ev_timeline')}: {f['timeline']}" if f.get("timeline") else ""] if x)
     if motive:
         lines.append(f"🗣 {motive}")
     if f.get("occupancy"):
-        lines.append(f"🔑 Ocupación: {f['occupancy']}")
+        lines.append(f"🔑 {t('ev_occupancy')}: {f['occupancy']}")
     if f.get("decision_maker"):
-        lines.append(f"👥 Decide: {f['decision_maker']}")
+        decides = {"es": "Decide", "fr": "Décide", "en": "Decides"}[lang]
+        lines.append(f"👥 {decides}: {f['decision_maker']}")
     if f.get("other_agency"):
-        lines.append(f"🏢 ¿Otra agencia?: {f['other_agency']}")
+        lines.append(f"🏢 {t('ev_other_agency')}: {f['other_agency']}")
     if f.get("notes"):
         lines.append(f"💬 {f['notes']}")
-    lines.append(f"Tipo: {'visita' if meeting_type == 'visit' else 'llamada'} · Origen: {lead.source}")
-    lines.append("— Agendado por Sparrow AI")
+    lines.append(f"{t('ev_type')}: {t('ev_visit') if meeting_type == 'visit' else t('ev_call')} · {t('ev_origin')}: {lead.source}")
+    booked = {"es": "Agendado por Sparrow AI", "fr": "Planifié par Sparrow AI", "en": "Booked by Sparrow AI"}[lang]
+    lines.append(f"— {booked}")
     return "\n".join(lines)
 
 
@@ -672,7 +687,7 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
     with lock:  # G5 (plus the unique lead_id on meetings)
         existing = s.execute(select(Meeting).where(Meeting.lead_id == lead.id)).scalar_one_or_none()
         if existing and existing.status == "booked":
-            return {"ok": False, "error": "already_booked", "when": when_label(existing.start, account.timezone)}
+            return {"ok": False, "error": "already_booked", "when": when_label(existing.start, account.timezone, L.lead_lang(account))}
         cfg = settings_for(account)
         start = _slot_to_utc(slot_id, account.timezone)
         end = start + timedelta(minutes=cfg["meeting_minutes"])
@@ -688,9 +703,9 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         if address:
             lead.address = address
         jobs.cancel(s, lead.id, ["reminder"])  # reminders of an older booking must not fire
-        where = lead.address if meeting_type == "visit" else f"Llamada · {lead.phone}"
+        where = lead.address if meeting_type == "visit" else L.text("ev_call_where", L.lead_lang(account), phone=lead.phone)
         prop = " ".join(p for p in [lead.property_type, lead.zone] if p)
-        summary = f"Valoración · {_short_name(lead)}" + (f" · {prop}" if prop else "") + (" · TEST" if lead.is_test else "")
+        summary = f"{L.text('ev_summary', L.lead_lang(account))} · {_short_name(lead)}" + (f" · {prop}" if prop else "") + (" · TEST" if lead.is_test else "")
         event_id = cal.create_event(
             summary=summary,
             description=event_description(account, lead, meeting_type),
@@ -713,7 +728,7 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         if start - delta > utcnow() + timedelta(minutes=10):
             jobs.schedule(s, "reminder", start - delta, lead_id=lead.id, account_id=account.id,
                           dedupe_key=f"reminder{which}:{lead.id}:{slot_id}", payload={"which": which})
-    return {"ok": True, "when": when_label(start, account.timezone), "where": where}
+    return {"ok": True, "when": when_label(start, account.timezone, L.lead_lang(account)), "where": where}
 
 
 # ---------------------------------------------------------------- the AI turn
@@ -721,14 +736,15 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
 def build_messages(s, account: Account, lead: Lead) -> list[dict]:
     rows = s.execute(select(Message).where(Message.lead_id == lead.id, Message.status != "failed")
                      .order_by(Message.id.desc()).limit(40)).scalars().all()[::-1]
-    agent_first = first_name(account.agent_name) or "el agente"
+    lang = L.lead_lang(account)
+    agent_first = first_name(account.agent_name) or L.text("the_agent", lang)
     cap = get_settings().ai_max_user_chars
     msgs: list[dict] = []
     for m in rows:
         if m.direction == "in":
-            role, text = "user", m.text if len(m.text) <= cap else m.text[:cap] + "… [mensaje recortado]"
+            role, text = "user", m.text if len(m.text) <= cap else m.text[:cap] + L.text("msg_clipped", lang)
         elif m.sender == "agent":
-            role, text = "assistant", f"[Mensaje escrito en persona por {agent_first}, no por ti]: {m.text}"
+            role, text = "assistant", f"{L.text('agent_wrote', lang, agent_first=agent_first)}: {m.text}"
         else:
             role, text = "assistant", m.text
         if not text:
@@ -738,7 +754,7 @@ def build_messages(s, account: Account, lead: Lead) -> list[dict]:
         else:
             msgs.append({"role": role, "content": text})
     if msgs and msgs[0]["role"] == "assistant":
-        msgs.insert(0, {"role": "user", "content": "[Inicio de la conversación]"})
+        msgs.insert(0, {"role": "user", "content": L.text("conversation_start", lang)})
     return msgs
 
 
@@ -785,7 +801,7 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
     if full:  # never call the model: a person takes over (one lead) or we just stop and log it (whole agent)
         log_event(s, "ai_limit_reached", account.id, lead.id, window=full)
         if full.startswith("lead"):
-            do_handoff(s, account, lead, "límite de mensajes del asistente (posible abuso)")
+            do_handoff(s, account, lead, L.text("why_limit", L.lead_lang(account)))
             return "limit_handoff"
         return "account_budget"
 
@@ -828,7 +844,7 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         log.exception("LLM turn failed for lead %s", lead.id)
         turn.error = repr(e)[:2000]
         turn.latency_ms = int((time.time() - t0) * 1000)
-        do_handoff(s, account, lead, "error técnico del asistente")
+        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)))
         return "error_handoff"
     turn.latency_ms = int((time.time() - t0) * 1000)
 
@@ -840,7 +856,7 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         return "newer_message"  # the re-armed job will answer everything together
 
     if state["terminal"] == "handoff":
-        do_handoff(s, account, lead, state["reason"] or "el asistente no está seguro")
+        do_handoff(s, account, lead, state["reason"] or L.text("why_unsure", L.lead_lang(account)))
         return "handoff"
     if state["terminal"] == "stop":
         if state["reason"] == "opted_out":
@@ -851,24 +867,25 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         log_event(s, "not_interested", account.id, lead.id)
         try:
             send_to_lead(s, account, lead, kind="ai_reply",
-                         text=reply or "Entendido, gracias por responder. Si más adelante quieres una valoración, escríbeme por aquí.")
+                         text=reply or L.text("ai_no_reply_fallback", L.lead_lang(account)))
         except WhatsAppError:
             pass
         return "not_interested"
 
     reply = (reply or "").strip()
     if not reply:
-        do_handoff(s, account, lead, "el asistente no generó respuesta")
+        do_handoff(s, account, lead, L.text("why_no_reply", L.lead_lang(account)))
         return "empty_handoff"
-    agent_first = first_name(account.agent_name) or "tu agente"
-    if not lead.introduced and "asistente virtual" not in reply.lower():  # G13
-        reply = f"Soy el asistente virtual de {agent_first}. " + reply
+    lang = L.lead_lang(account)
+    agent_first = first_name(account.agent_name) or L.text("your_agent", lang)
+    if not lead.introduced and L.text("intro_marker", lang) not in reply.lower():  # G13
+        reply = L.text("intro_phrase", lang, agent_first=agent_first) + reply
     parts = [p.strip() for p in re.split(r"\n\s*\n", reply) if p.strip()][:2]
     try:
         for p in parts:
             send_to_lead(s, account, lead, kind="ai_reply", text=p)
             lead.introduced = True
     except WhatsAppError as e:
-        do_handoff(s, account, lead, f"no se pudo enviar la respuesta ({e})", notify_lead=False)
+        do_handoff(s, account, lead, L.text("send_failed_reason", L.lead_lang(account), err=e), notify_lead=False)
         return "send_failed_handoff"
     return "replied"

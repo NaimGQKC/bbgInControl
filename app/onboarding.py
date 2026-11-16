@@ -4,7 +4,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from . import gcal, jobs, templates as T
+from . import gcal, jobs, lang as L, templates as T
 from .config import get_settings
 from .crypto import encrypt
 from .db import utcnow
@@ -122,15 +122,34 @@ def save_google(s, account: Account, token_data: dict) -> None:
 
 def submit_templates(s, account: Account, wa: WhatsAppClient) -> list[dict]:
     results = []
+    lang = L.lead_lang(account)  # this agent's leads speak this language: submit the templates in it
     for tpl in T.AGENT_TEMPLATES:
         try:
-            r = wa.create_template(tpl)
-            results.append({"name": tpl.name, "ok": True, "status": r.get("status", "")})
+            r = wa.create_template(tpl, language=lang)
+            results.append({"name": tpl.name, "language": lang, "ok": True, "status": r.get("status", "")})
         except WhatsAppError as e:
             # "already exists" is fine when re-running
-            results.append({"name": tpl.name, "ok": False, "error": str(e)})
+            results.append({"name": tpl.name, "language": lang, "ok": False, "error": str(e)})
     log_event(s, "templates_submitted", account.id, results=results)
     return results
+
+
+def change_lead_lang(s, account: Account, lang: str) -> None:
+    """The agent's leads speak another language. Their WhatsApp templates must exist (and be approved) in it:
+    if WhatsApp is already connected, submit them now and let the daily check notice the approval."""
+    if lang not in L.LANGS:
+        return
+    L.set_lead_lang(account, lang)
+    account.settings = {**(account.settings or {}), "lang": lang}
+    log_event(s, "lead_lang_changed", account.id, lang=lang)
+    integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+    if integ and integ.status == "active" and integ.token_enc:
+        from .engine import agent_wa
+
+        wa = agent_wa(s, account)
+        wa.waba_id = wa.waba_id or (integ.external or {}).get("waba_id", "")
+        submit_templates(s, account, wa)
+        jobs.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=account.id, dedupe_key=f"check_templates:{account.id}", reuse=True)
 
 
 def _pick_phone_number(numbers: list[dict], account: Account) -> str:
@@ -201,21 +220,21 @@ def job_check_templates(s, job):
         if not wa.waba_id:
             integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
             wa.waba_id = (integ.external or {}).get("waba_id", "") if integ else ""
-        status = {t["name"]: t.get("status") for t in wa.list_templates()}
+        status = {(t["name"], t.get("language", "es")[:2]): t.get("status") for t in wa.list_templates()}
     except WhatsAppError as e:
         status, err = {}, str(e)
         log.warning("template check failed: %s", err)
-    first = status.get(T.LEAD_FIRST_CONTACT.name)
+    first = status.get((T.LEAD_FIRST_CONTACT.name, L.lead_lang(account)))
     if first == "APPROVED":
         if account.status == "onboarding":
             account.status = "live"
             advance(account, "done")
             log_event(s, "account_live", account.id)
-            alert_agent(s, account, T.AGENT_LIVE, [first_name(account.agent_name) or "hola"])
+            alert_agent(s, account, T.AGENT_LIVE, [L.agent_hi(account)])
         return
     if first == "REJECTED":
         log_event(s, "template_rejected", account.id, template=T.LEAD_FIRST_CONTACT.name)
-        alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [first_name(account.agent_name) or "hola", "WhatsApp rechazó un mensaje; lo revisamos nosotros"])
+        alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), L.text("alert_template_rejected", L.lead_lang(account))])
         return
     if utcnow() - job.created_at < timedelta(days=3):
         job.status = "pending"

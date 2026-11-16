@@ -90,11 +90,12 @@ class WhatsAppClient:
         return r.content, meta.get("mime_type", "audio/ogg")
 
     def create_template(self, template: Template, language: str | None = None) -> dict:
+        language = language or get_settings().template_language
         body = {
             "name": template.name,
-            "language": language or get_settings().template_language,
+            "language": language,
             "category": template.category,
-            "components": template.components_for_submit(),
+            "components": template.components_for_submit(language),
         }
         return _check(httpx.post(_graph(f"{self.waba_id}/message_templates"), json=body, headers=self._headers, timeout=20))
 
@@ -205,7 +206,7 @@ class FakeWhatsApp(WhatsAppClient):
         return self._record({"to": to.lstrip("+"), "type": "text", "text": body})
 
     def send_template(self, to, template, values, language=None):
-        return self._record({"to": to.lstrip("+"), "type": "template", "template": template.name, "text": template.render(values)})
+        return self._record({"to": to.lstrip("+"), "type": "template", "template": template.name, "language": language or "es", "text": template.render(values, language or "es")})
 
     def send_raw_template(self, to, name, language="en_US"):
         return self._record({"to": to.lstrip("+"), "type": "template", "template": name, "text": name})
@@ -217,8 +218,8 @@ class FakeWhatsApp(WhatsAppClient):
         return b"fake-audio", "audio/ogg"
 
     def create_template(self, template, language=None):
-        FakeWhatsApp.created_templates.append({"name": template.name, "category": template.category})
+        FakeWhatsApp.created_templates.append({"name": template.name, "category": template.category, "language": language or "es"})
         return {"id": f"tpl-{template.name}", "status": "PENDING", "category": template.category}
 
     def list_templates(self):
-        return [{"name": t["name"], "status": "APPROVED", "category": t["category"]} for t in FakeWhatsApp.created_templates]
+        return [{"name": t["name"], "status": "APPROVED", "category": t["category"], "language": t.get("language", "es")} for t in FakeWhatsApp.created_templates]

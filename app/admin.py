@@ -154,11 +154,12 @@ def sparrow_templates():
     wa.waba_id = st.sparrow_waba_id
     res = []
     for tpl in T.SPARROW_TEMPLATES:
-        try:
-            wa.create_template(tpl)
-            res.append(f"{tpl.name}: ok")
-        except WhatsAppError as e:
-            res.append(f"{tpl.name}: {e}")
+        for lang in (("es",) if tpl is T.OPS_NEEDS_HELP else ("es", "fr", "en")):  # agents get their alerts in their own language
+            try:
+                wa.create_template(tpl, language=lang)
+                res.append(f"{tpl.name}/{lang}: ok")
+            except WhatsAppError as e:
+                res.append(f"{tpl.name}/{lang}: {e}")
     return _back("/admin", "; ".join(res)[:400])
 
 

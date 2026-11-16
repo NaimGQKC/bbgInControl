@@ -42,7 +42,7 @@ TOOLS = [
         ),
         "input_schema": {
             "type": "object",
-            "properties": {"reason": {"type": "string", "description": "Motivo breve, en español"}},
+            "properties": {"reason": {"type": "string", "description": "Motivo breve, en el idioma indicado en las instrucciones"}},
             "required": ["reason"],
         },
     },

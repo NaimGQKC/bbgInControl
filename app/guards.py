@@ -8,7 +8,7 @@ from .models import Account, Lead
 
 HOT_STAGES = {"exclusiva", "cerrado", "cerrada", "vendido", "vendida", "firmado", "en exclusiva", "reservado"}
 NO_AI_TAGS = {"no ia", "sin ia", "no_ia", "noia"}
-OPT_OUT_WORDS = {"stop", "baja"}  # compared after lower-casing and stripping trailing . !
+OPT_OUT_WORDS = {"stop", "baja", "arret", "arrêt", "desabonner", "désabonner", "unsubscribe"}  # es / fr / en  # compared after lower-casing and stripping trailing . !
 
 DEFAULT_SETTINGS = {
     # Allowed hours for first contact / follow-ups (local time). Days: 0=Monday ... 6=Sunday
@@ -42,14 +42,14 @@ def normalize_phone(raw: str | None, default_cc: str = "34") -> str | None:
         digits = "+" + digits[2:]
     if not digits.startswith("+"):
         digits = digits.lstrip("0")
-        if len(digits) == 9:  # Spanish national number
+        if len(digits) == 9:  # national number (Spanish 9 digits; French 10 with the leading 0, removed above)
             digits = "+" + default_cc + digits
         else:
             digits = "+" + digits
     num = digits[1:]
     if not num.isdigit() or not (8 <= len(num) <= 15):
         return None
-    if num.startswith("34") and len(num) != 11:
+    if (num.startswith("34") or num.startswith("33")) and len(num) != 11:  # Spain and France: country code + 9 digits
         return None
     return "+" + num
 
@@ -61,7 +61,7 @@ def wa_id(phone_e164: str) -> str:
 
 # ---------- time ----------
 
-DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+DAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]  # Spanish (kept: used by the Spanish prompt)
 
 
 _PARTICLES = {"de", "del", "la", "las", "los", "y", "van", "von", "da", "di"}

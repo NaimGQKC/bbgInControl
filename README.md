@@ -14,13 +14,13 @@ How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rul
 |---|---|
 | `app/engine.py` | The whole flow: intake → first message → AI turn → booking → follow-ups, reminders, handover, alerts |
 | `app/guards.py` | Hard rules (`can_contact`, allowed hours, 24h window). Every message passes here |
-| `app/prompt.py` | The seller conversation script (system prompt) |
+| `app/prompt.py` | The seller conversation script (system prompt), in Spanish, French and English |
 | `app/llm.py` | AI tool loop (Azure OpenAI by default; OpenAI or Claude also supported): `get_free_slots`, `book_slot`, `handoff`, `stop`, `save_facts` |
-| `app/templates.py` | ALL WhatsApp template names + texts |
+| `app/templates.py` | ALL WhatsApp template names + texts, in Spanish, French and English |
 | `app/whatsapp.py`, `app/gcal.py` | Meta Cloud API and Google Calendar clients (real + fake) |
 | `app/webhooks.py` | Meta webhook: signature check, stored once, processed after |
 | `app/web.py`, `app/onboarding.py`, `web_templates/onboarding.html` | The onboarding: one continuous chat with a named, openly-AI guide (Google Calendar → name, agency, zones, preferences, mobile → preview of the first message with a real test event in the calendar → optional €90 payment → WhatsApp Embedded Signup with Coexistence). Scripted, so it costs no AI tokens. Agents can change any answer ("Mis datos") or ask the guide questions at any time |
-| `app/i18n.py`, `app/i18n_onb.py` | Languages for agents: Spanish (default), English and French. The language comes from `?lang=`, then a cookie, then the browser. Onboarding texts use the Spanish text as the key; English and French live in `i18n_onb.py`, and a test fails if one is missing. Leads in Spain always get Spanish |
+| `app/i18n.py`, `app/i18n_onb.py` | Languages for agents: Spanish (default), English and French. The language comes from `?lang=`, then a cookie, then the browser. Onboarding texts use the Spanish text as the key; English and French live in `i18n_onb.py`, and a test fails if one is missing. This is the screen language only. What an agent's owners receive (templates, the chat, dates, opt-out word) follows the agent's lead language (`account.settings["lang"]`: es, fr or en), see `app/lang.py` |
 | `app/helpchat.py` | Capped AI help inside the onboarding (questions, screenshots, change proposals the agent must confirm) |
 | `app/transcribe.py` | Voice-note transcription for leads (needs an Azure transcription deployment) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |

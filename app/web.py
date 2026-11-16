@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 
-from . import gcal, i18n, i18n_onb, onboarding, templates as T
+from . import gcal, i18n, i18n_onb, lang as L, onboarding, templates as T
 from .gcal import CalendarError
 from .config import get_settings
 from .db import session_scope
@@ -66,8 +66,11 @@ def _state(s, acc: Account) -> dict:
             "extra_context": acc.extra_context,
         },
         "agency_hint": _agency_hint(acc.email),
+        "lead_lang": L.lead_lang(acc),  # the language the agent's owners (leads) are spoken to in
+        "lead_lang_set": "lang" in (acc.settings or {}),
+        "cc": L.cc_for(acc),
         # what a new owner will receive from their number, with a made-up lead name
-        "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, "Marta", "")) if acc.agent_name else "",
+        "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
         "integrations": integrations,
         "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
                     "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
@@ -96,8 +99,12 @@ async def start(request: Request):
         acc = Account()
         s.add(acc)
         s.flush()
+        chosen = clean("lang", 5) or request.query_params.get("lang", "")
+        if chosen in L.LANGS:
+            L.set_lead_lang(acc, chosen)  # a French visitor most likely has French clients: confirmed with them in the chat
+            acc.settings = {**(acc.settings or {}), "lang": chosen}
         acc.agency, acc.zones, acc.agent_name = clean("agency"), clean("zones", 500), tidy_name(clean("name"))
-        phone = normalize_phone(clean("phone", 30)) if clean("phone", 30) else None
+        phone = normalize_phone(clean("phone", 30), L.cc_for(acc)) if clean("phone", 30) else None
         if phone:
             acc.personal_whatsapp = phone
         log_event(s, "onboarding_started", acc.id, prefilled=bool(acc.agency or acc.zones or acc.agent_name))
@@ -148,8 +155,12 @@ async def api_answers(token: str, request: Request):
         for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
                 setattr(acc, f, tidy_name(str(data[f]).strip()[:500]) if f == "agent_name" else str(data[f]).strip()[:500])
+        if data.get("lead_lang") in L.LANGS and data["lead_lang"] != L.lead_lang(acc):
+            onboarding.change_lead_lang(s, acc, data["lead_lang"])
+        elif data.get("lead_lang") in L.LANGS:
+            acc.settings = {**(acc.settings or {}), "lang": data["lead_lang"]}  # confirmed: remember that they chose it
         if "personal_whatsapp" in data:
-            p = normalize_phone(data["personal_whatsapp"])
+            p = normalize_phone(data["personal_whatsapp"], L.cc_for(acc))
             if not p:
                 return JSONResponse({"ok": False, "error": "Ese número no parece válido. Prueba con el formato 600 000 000."}, 400)
             acc.personal_whatsapp = p
@@ -311,7 +322,7 @@ async def api_help(token: str, request: Request):
     data = await request.json()
     with session_scope() as s:
         acc = _account_by_token(s, token)
-        phone = normalize_phone(data.get("phone")) if data.get("phone") else None
+        phone = normalize_phone(data.get("phone"), L.cc_for(acc)) if data.get("phone") else None
         if data.get("phone") and not phone:
             return JSONResponse({"ok": False, "error": "Ese número no parece válido."}, 400)
         contact = phone or acc.personal_whatsapp or acc.email
