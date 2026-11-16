@@ -536,6 +536,85 @@ def test_names_are_tidied_for_people_to_read():
     assert tidy_name("maría de la cruz") == "María de la Cruz" and tidy_name("Laura García") == "Laura García" and tidy_name("") == ""
 
 
+def _tr_keys():
+    import json, re
+    from pathlib import Path
+
+    html = (Path(__file__).parent.parent / "app" / "web_templates" / "onboarding.html").read_text()
+    return {json.loads('"' + m.group(1) + '"') for m in re.finditer(r'tr\(\s*"((?:[^"\\]|\\.)*)"', html)}
+
+
+def test_every_onboarding_text_has_english_and_french():
+    import re
+    from app.i18n_onb import EN_FR
+
+    server_errors = {"Ese número no parece válido. Prueba con el formato 600 000 000.", "Faltan datos de Meta. Vuelve a intentarlo.", "No hemos podido terminar la conexión con WhatsApp. Vuelve a intentarlo.",
+                     "No he podido leer esa captura. Prueba con otra.", "Escribe algo o sube una captura.", "Ese número no parece válido.", "Déjame un móvil para poder escribirte."}
+    missing = (_tr_keys() | server_errors) - set(EN_FR)
+    assert not missing, f"untranslated: {sorted(missing)[:3]}"
+    placeholders = lambda s: sorted(re.findall(r"\{\w+\}", s))
+    for es, (en, fr) in EN_FR.items():
+        assert en.strip() and fr.strip(), es
+        for tx in (en, fr):  # placeholders, **highlights**, tags and line breaks must survive translation
+            assert placeholders(tx) == placeholders(es), (es, tx)
+            assert tx.count("**") == es.count("**") and re.findall(r"</?b>", tx) == re.findall(r"</?b>", es) and tx.count("\n") == es.count("\n"), (es, tx)
+
+
+def test_language_is_picked_from_query_cookie_then_browser(clock):
+    from app.main import app
+
+    with TestClient(app) as c:
+        assert 'lang="es"' in c.get("/").text
+    with TestClient(app) as c:
+        assert "Set up my assistant" in c.get("/", headers={"accept-language": "en-GB,en;q=0.9"}).text  # the browser's language
+    with TestClient(app) as c:
+        assert 'lang="fr"' in c.get("/?lang=fr").text and "Configurer mon assistant" in c.get("/").text  # explicit choice is remembered
+        assert "lang=fr" in c.get("/?lang=fr").headers.get("set-cookie", "")
+        assert c.post("/start?lang=fr", follow_redirects=False).headers["location"].endswith("?lang=fr")
+
+
+def test_onboarding_and_legal_pages_speak_french_and_english(clock):
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        import json
+
+        table = lambda html: json.loads(html.split("I18N = ", 1)[1].split(";\n", 1)[0])
+        fr, en, es = (c.get(f"/o/{token}?lang={x}").text for x in ("fr", "en", "es"))
+        assert table(fr)["Hablar con una persona"] == "Parler à une personne" and table(en)["Hablar con una persona"] == "Talk to a person"
+        assert table(es) == {}  # Spanish needs no table: the key is the text
+        for page, needle in (("privacidad", "Politique de confidentialité"), ("terminos", "Conditions d'utilisation"), ("eliminar-datos", "Suppression des données")):
+            html = c.get(f"/{page}?lang=fr").text
+            assert 'id="fr"' in html and needle in html and 'id="es"' in html and 'id="en"' in html
+        assert "calendar.events" in c.get("/privacidad").text and "Limited Use" in c.get("/privacidad?lang=fr").text
+
+
+def test_slots_come_with_ids_so_the_page_can_format_dates(clock):
+    from app.main import app
+
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        _google_connected(token)
+        r = c.post(f"/api/o/{token}/calendar_check").json()
+        assert r["ok"] and len(r["first"]) == len(r["first_ids"]) and all(len(i) == 16 and "T" in i for i in r["first_ids"])
+        assert len(c.post(f"/api/o/{token}/test_event").json()["slot_id"]) == 16
+
+
+def test_help_chat_answers_in_the_agents_language(clock, monkeypatch):
+    from app import helpchat
+    from app.main import app
+
+    seen = {}
+    monkeypatch.setattr(helpchat, "answer", lambda history, text, image, ctx, current="", lang="es": seen.update(lang=lang) or ("ok", None))
+    with TestClient(app) as c:
+        token = _new_onboarding(c)
+        assert c.post(f"/api/o/{token}/help_chat", json={"text": "hi", "lang": "fr"}).json()["ok"] and seen["lang"] == "fr"
+        c.post(f"/api/o/{token}/help_chat", json={"text": "hi", "lang": "xx"})
+        assert seen["lang"] == "es"  # unknown languages fall back to Spanish
+    assert "français" in helpchat.SYSTEM.format(name="L", fee=1, per=1, context="", current="", idioma=helpchat.LANG_NAMES["fr"])
+
+
 def test_agency_hint_only_from_work_domains():
     from app.web import _agency_hint
 

@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}{% if page == "privacidad" %}Política de privacidad · Privacy policy{% elif page == "terminos" %}Términos del servicio · Terms of service{% else %}Eliminación de datos · Data deletion{% endif %} · Sparrow AI{% endblock %}
+{% block title %}{% if page == "privacidad" %}Política de privacidad · Privacy policy · Confidentialité{% elif page == "terminos" %}Términos del servicio · Terms of service · Conditions{% else %}Eliminación de datos · Data deletion · Suppression des données{% endif %} · Sparrow AI{% endblock %}
 {% block body %}
 <div class="wrap" style="max-width:780px; line-height:1.6">
-<p><a href="/">← Sparrow AI</a> &nbsp;·&nbsp; <a href="#es">Español</a> &nbsp;·&nbsp; <a href="#en">English</a></p>
+<p><a href="/">← Sparrow AI</a> &nbsp;·&nbsp; <a href="#es">Español</a> &nbsp;·&nbsp; <a href="#en">English</a> &nbsp;·&nbsp; <a href="#fr">Français</a></p>
 
 {# ============================================================ PRIVACIDAD / PRIVACY #}
 {% if page == "privacidad" %}
@@ -158,6 +158,82 @@
 <p>Messages are written by a virtual assistant that identifies itself as such at the start of every conversation; the agent can take over the chat at any time. The service is not directed at minors.</p>
 </section>
 
+<hr>
+<section id="fr">
+<h1>Politique de confidentialité</h1>
+<p class="muted">Dernière mise à jour : octobre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+
+<h2>1. Qui sommes-nous</h2>
+<p>Sparrow AI offre aux agents immobiliers indépendants un assistant virtuel qui écrit sur WhatsApp aux propriétaires ayant demandé une estimation, et planifie le rendez-vous dans le Google Agenda de l'agent. Service exploité par {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (numéro fiscal {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contact : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+
+<h2>2. Quelles données nous traitons</h2>
+<ul>
+<li><b>De l'agent (notre client) :</b> nom et e-mail (repris de son compte Google), agence, secteurs de travail, numéro de téléphone, préférences qu'il nous indique, et les autorisations qu'il accorde sur son WhatsApp Business (Meta) et son Google Agenda. Les jetons d'accès sont stockés chiffrés.</li>
+<li><b>Des contacts de l'agent (propriétaires) :</b> nom, numéro de téléphone, informations sur le bien, messages WhatsApp échangés et rendez-vous planifié.</li>
+<li><b>Données utilisateur Google :</b> détaillées à la section 3.</li>
+</ul>
+
+<h2>3. Données utilisateur Google</h2>
+<h3>3.1 Aux données Google auxquelles nous accédons</h3>
+<ul>
+<li><b>Le profil du compte Google de l'agent</b> (périmètres <code>openid</code>, <code>email</code>, <code>profile</code>) : nom et adresse e-mail.</li>
+<li><b>La disponibilité de l'agenda</b> (périmètre <code>calendar.freebusy</code>) : uniquement les plages libres/occupées. Nous ne lisons pas les titres ni les détails des événements de l'agent pour cela.</li>
+<li><b>Les événements créés par Sparrow</b> (périmètre <code>calendar.events</code>) : nous créons le rendez-vous d'estimation et ne relisons que cet événement pour savoir si l'agent l'a déplacé ou annulé. Nous ne lisons ni ne modifions aucun autre événement.</li>
+</ul>
+<h3>3.2 Comment nous utilisons les données Google</h3>
+<ul>
+<li>Nom et e-mail : pour identifier l'agent et remplir son profil.</li>
+<li>Disponibilité : pour déterminer les créneaux libres que nous proposons aux propriétaires.</li>
+<li>Événements : pour créer le rendez-vous dans l'agenda de l'agent (avec les informations du contact et du bien dans la description) et garder les rappels corrects si l'agent le modifie.</li>
+<li>Nous n'utilisons pas les données utilisateur Google pour la publicité, le profilage, ni pour développer, améliorer ou entraîner des modèles d'IA ou d'apprentissage automatique généralistes.</li>
+</ul>
+<h3>3.3 Avec qui nous partageons, transférons ou divulguons les données Google</h3>
+<p>Nous ne vendons pas les données utilisateur Google et ne les remettons ni à des courtiers en données ni à des plateformes publicitaires. Elles sont traitées uniquement par des prestataires agissant pour notre compte afin de fournir le service :</p>
+<ul>
+<li><b>Railway</b> (hébergement et base de données, serveurs aux États-Unis).</li>
+<li><b>Microsoft Azure OpenAI</b> (le modèle d'IA qui rédige les réponses) : il ne reçoit que la liste des créneaux libres que nous proposons, pas l'agenda ni les détails des événements. Selon les conditions d'Azure OpenAI de Microsoft, ces données ne servent pas à entraîner ses modèles.</li>
+<li><b>Aide pendant la configuration</b> : si l'agent écrit ou envoie une capture d'écran dans le chat d'aide, ce texte ou cette image est envoyé à Microsoft Azure OpenAI pour répondre. Nous ne conservons pas la capture et elle ne contient aucune donnée Google. N'envoyez ni mots de passe, ni codes de vérification, ni données de carte.</li>
+<li><b>Dictée vocale</b> : si l'agent utilise le micro, la reconnaissance vocale est réalisée par son navigateur (par exemple Chrome, avec Google). Nous ne recevons que le texte obtenu.</li>
+</ul>
+<p>Autrement, nous ne les divulguons qu'avec le consentement de l'agent, pour la sécurité ou la prévention des abus, pour respecter une obligation légale, ou lors d'une fusion ou acquisition avec préavis à l'agent.</p>
+<h3>3.4 Comment nous protégeons les données Google</h3>
+<ul>
+<li>Toutes les connexions utilisent HTTPS (chiffrement en transit).</li>
+<li>Les jetons d'accès Google sont stockés chiffrés dans la base de données ; la clé de chiffrement est conservée séparément dans la configuration du serveur, jamais dans le code ni dans les journaux.</li>
+<li>Nous demandons les autorisations minimales nécessaires (disponibilité et événements), rien de plus.</li>
+<li>L'accès aux systèmes de production et à la console d'administration est limité aux fondateurs et protégé par mot de passe, et n'est utilisé que pour le support, la sécurité ou les obligations légales. Aucun humain ne lit les données utilisateur Google, sauf avec le consentement de l'agent, pour la sécurité ou les abus, pour respecter la loi, ou pour faire fonctionner le service.</li>
+<li>Nous vérifions la signature des webhooks que nous recevons de Meta.</li>
+</ul>
+<h3>3.5 Conservation et suppression des données Google</h3>
+<ul>
+<li><b>Disponibilité (libre/occupé) :</b> consultée à la demande et non stockée.</li>
+<li><b>Jetons d'accès Google :</b> conservés tant que l'agent utilise le service, car nous en avons besoin pour planifier ses rendez-vous. Nous les supprimons au plus tard 30 jours après que l'agent se déconnecte, nous le demande ou ferme son compte. Si l'agent révoque l'accès dans Google, les jetons cessent de fonctionner immédiatement ; nous vérifions chaque jour et les supprimons dès que nous le détectons.</li>
+<li><b>Nom et e-mail du compte, et trace du rendez-vous</b> (date, type, adresse, identifiant de l'événement) : conservés tant que l'agent utilise le service et jusqu'à 12 mois après, sauf obligation légale contraire.</li>
+<li>Les événements créés dans l'agenda de l'agent lui appartiennent ; il peut les supprimer à tout moment.</li>
+<li><b>Révoquer l'accès</b> à tout moment sur <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>. <b>Demander la suppression</b> sur la page <a href="/eliminar-datos">Suppression des données</a> ou à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+</ul>
+<h3>3.6 Utilisation limitée (Limited Use)</h3>
+<p>L'utilisation et le transfert par Sparrow AI, vers toute autre application, des informations reçues des API Google respecteront la <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, y compris les exigences d'utilisation limitée (Limited Use).</p>
+
+<h2>4. Données WhatsApp et Meta</h2>
+<p>De Meta (WhatsApp Business Platform), nous recevons les messages et les numéros de téléphone des personnes qui écrivent au numéro WhatsApp de l'agent, ainsi que les identifiants et jetons de son compte WhatsApp Business. Nous les utilisons uniquement pour fournir le service à l'agent : répondre aux propriétaires, planifier des rendez-vous et prévenir l'agent. Nous ne les vendons pas et ne les utilisons pas pour la publicité. Ils sont partagés avec les prestataires énumérés à la section 6. Toute personne qui reçoit un message peut répondre <b>BAJA</b> (stop) et n'en recevra plus.</p>
+
+<h2>5. Finalités et rôles</h2>
+<p>Nous traitons les données pour exécuter notre contrat avec l'agent (fournir le service) et pour notre intérêt légitime à assurer la sécurité du service. L'agent est responsable du traitement des données de ses contacts et décide à qui écrire ; Sparrow agit en tant que sous-traitant selon les instructions de l'agent. Sparrow est responsable du traitement des données du compte de l'agent.</p>
+
+<h2>6. Avec qui les données sont partagées (en général)</h2>
+<p>Meta (WhatsApp Business Platform), Google (Agenda), Microsoft Azure OpenAI (IA), Railway (hébergement et base de données) et, lorsque la facturation est activée, Stripe (paiements). Ces prestataires sont nécessaires pour fournir le service. Nous ne vendons pas de données.</p>
+
+<h2>7. Transferts internationaux</h2>
+<p>Notre hébergement se trouve aux États-Unis (Railway) et certains prestataires peuvent traiter des données en dehors de l'Espace économique européen. Les transferts reposent sur les garanties prévues par le RGPD (clauses contractuelles types ou décision d'adéquation).</p>
+
+<h2>8. Conservation et droits</h2>
+<p>Nous conservons les données tant que l'agent utilise le service et jusqu'à 12 mois après, sauf obligation légale contraire ; le détail pour les données Google figure à la section 3.5. Vous pouvez demander l'accès, la rectification, l'effacement, l'opposition, la limitation ou la portabilité à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> ou sur la page <a href="/eliminar-datos">Suppression des données</a>, et introduire une réclamation auprès de l'Agence espagnole de protection des données (AEPD).</p>
+
+<h2>9. Intelligence artificielle et mineurs</h2>
+<p>Les messages sont rédigés par un assistant virtuel qui se présente comme tel au début de chaque conversation ; l'agent peut reprendre la main sur la conversation à tout moment. Le service ne s'adresse pas aux mineurs.</p>
+</section>
+
 {# ============================================================ TÉRMINOS / TERMS #}
 {% elif page == "terminos" %}
 <section id="es">
@@ -185,6 +261,21 @@
 <li><b>Limits.</b> Sparrow does not guarantee a number of meetings or replies, and is not responsible for the agent's business decisions or for outages at Meta, Google or other providers.</li>
 <li><b>Data.</b> Data processing is governed by the <a href="/privacidad">Privacy policy</a>.</li>
 <li><b>Governing law.</b> Spanish law.</li>
+</ul>
+</section>
+
+<hr>
+<section id="fr">
+<h1>Conditions d'utilisation</h1>
+<p class="muted">Dernière mise à jour : octobre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<ul>
+<li><b>Le service.</b> Sparrow configure et exploite un assistant virtuel WhatsApp pour l'agent, connecté à son WhatsApp Business et à son Google Agenda. L'assistant se présente comme un assistant virtuel et l'agent peut reprendre la main sur n'importe quelle conversation.</li>
+<li><b>Responsabilité de l'agent.</b> L'agent décide quels contacts sont inclus et doit disposer d'une base légale pour leur écrire. Sparrow n'écrit pas à toute personne qui demande à ne plus recevoir de messages (BAJA).</li>
+<li><b>Prix.</b> Des frais de mise en service uniques de {{ integration_fee_eur }} € par agent et {{ meeting_fee_eur }} € par rendez-vous planifié (rendez-vous accepté par le contact et créé dans l'agenda ; il n'est pas compté si le contact l'annule plus de 24 heures à l'avance). Pendant la phase pilote, Sparrow peut appliquer des conditions différentes, convenues par écrit avec l'agent. Les frais de messagerie de Meta sont payés par l'agent directement à Meta. Les prix s'entendent hors taxes applicables.</li>
+<li><b>Résiliation.</b> L'agent peut déconnecter le service à tout moment depuis Meta, depuis Google ou en écrivant à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li><b>Limites.</b> Sparrow ne garantit ni un nombre de rendez-vous ni un nombre de réponses, et n'est pas responsable des décisions commerciales de l'agent ni des interruptions de Meta, Google ou d'autres prestataires.</li>
+<li><b>Données.</b> Le traitement des données est régi par la <a href="/privacidad">Politique de confidentialité</a>.</li>
+<li><b>Droit applicable.</b> Droit espagnol.</li>
 </ul>
 </section>
 
@@ -223,6 +314,24 @@
 </ul>
 <p>More information in the <a href="/privacidad">Privacy policy</a>.</p>
 </section>
+<hr>
+<section id="fr">
+<h1>Suppression des données</h1>
+<p class="muted"><a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<h2>Si vous êtes agent (client de Sparrow)</h2>
+<ol>
+<li>Écrivez à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> avec l'objet « Supprimer les données » et votre téléphone ou l'e-mail d'inscription.</li>
+<li>Nous supprimons votre compte et vos données dans un délai maximum de 30 jours et vous le confirmons par e-mail. Les jetons d'accès à Google et à Meta sont supprimés dans ce délai.</li>
+<li>Pour couper l'accès immédiatement, sans attendre : Google → <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a> → Sparrow AI → Supprimer l'accès. Meta/Facebook → Paramètres → Intégrations professionnelles → Sparrow AI → Supprimer.</li>
+</ol>
+<h2>Si vous êtes propriétaire ou contact d'un agent</h2>
+<ul>
+<li>Répondez <b>BAJA</b> au message WhatsApp et vous n'en recevrez plus.</li>
+<li>Pour supprimer vos données (nom, numéro de téléphone, messages), écrivez à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> avec l'objet « Supprimer les données » en indiquant votre numéro de téléphone. Nous les supprimons dans un délai maximum de 30 jours.</li>
+</ul>
+<p>Plus d'informations dans la <a href="/privacidad">Politique de confidentialité</a>.</p>
+</section>
 {% endif %}
 </div>
+<script>if (!location.hash) { var el = document.getElementById({{ lang|tojson }}); if (el && {{ lang|tojson }} !== "es") el.scrollIntoView(); }</script>
 {% endblock %}

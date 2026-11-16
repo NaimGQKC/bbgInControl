@@ -20,6 +20,7 @@ How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rul
 | `app/whatsapp.py`, `app/gcal.py` | Meta Cloud API and Google Calendar clients (real + fake) |
 | `app/webhooks.py` | Meta webhook: signature check, stored once, processed after |
 | `app/web.py`, `app/onboarding.py`, `web_templates/onboarding.html` | The onboarding: one continuous chat with a named, openly-AI guide (Google Calendar → name, agency, zones, preferences, mobile → preview of the first message with a real test event in the calendar → optional €90 payment → WhatsApp Embedded Signup with Coexistence). Scripted, so it costs no AI tokens. Agents can change any answer ("Mis datos") or ask the guide questions at any time |
+| `app/i18n.py`, `app/i18n_onb.py` | Languages for agents: Spanish (default), English and French. The language comes from `?lang=`, then a cookie, then the browser. Onboarding texts use the Spanish text as the key; English and French live in `i18n_onb.py`, and a test fails if one is missing. Leads in Spain always get Spanish |
 | `app/helpchat.py` | Capped AI help inside the onboarding (questions, screenshots, change proposals the agent must confirm) |
 | `app/transcribe.py` | Voice-note transcription for leads (needs an Azure transcription deployment) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |

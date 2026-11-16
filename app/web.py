@@ -10,7 +10,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
 
-from . import gcal, onboarding, templates as T
+from . import gcal, i18n, i18n_onb, onboarding, templates as T
 from .gcal import CalendarError
 from .config import get_settings
 from .db import session_scope
@@ -78,7 +78,10 @@ def _state(s, acc: Account) -> dict:
 
 @router.get("/", response_class=HTMLResponse)
 def landing(request: Request):
-    return templates.TemplateResponse(request, "landing.html", {})
+    lang = i18n.pick_lang(request)
+    r = templates.TemplateResponse(request, "landing.html", {"lang": lang, "L": i18n.LANDING[lang]})
+    i18n.remember(r, request, lang)
+    return r
 
 
 @router.post("/start")
@@ -99,7 +102,8 @@ async def start(request: Request):
             acc.personal_whatsapp = phone
         log_event(s, "onboarding_started", acc.id, prefilled=bool(acc.agency or acc.zones or acc.agent_name))
         token = acc.public_token
-    return RedirectResponse(f"/o/{token}", status_code=303)
+    lang = request.query_params.get("lang", "")  # explicit choice only (the cookie keeps the rest)
+    return RedirectResponse(f"/o/{token}" + (f"?lang={lang}" if lang in i18n.LANGS else ""), status_code=303)
 
 
 @router.get("/o/{token}", response_class=HTMLResponse)
@@ -108,10 +112,14 @@ def onboarding_page(request: Request, token: str):
     with session_scope() as s:
         acc = _account_by_token(s, token)
         state = _state(s, acc)
-    return templates.TemplateResponse(
+    lang = i18n.pick_lang(request)
+    r = templates.TemplateResponse(
         request,
         "onboarding.html",
         {
+            "lang": lang,
+            "i18n": i18n_onb.strings(lang),
+            "page_title": i18n.ONB_TITLE[lang],
             "token": token,
             "state_json": json.dumps(state, ensure_ascii=False),
             "meta_app_id": st.meta_app_id,
@@ -120,6 +128,8 @@ def onboarding_page(request: Request, token: str):
             "fake": st.whatsapp_mode == "fake",
         },
     )
+    i18n.remember(r, request, lang)
+    return r
 
 
 # ---------------------------------------------------------------- onboarding API
@@ -209,7 +219,8 @@ async def api_help_chat(token: str, request: Request):
         context = f"paso del alta={acc.onboarding_step}" + (f"; Meta: evento={last.data.get('event')}, paso={last.data.get('current_step')}" if last else "")
         current = f"nombre={acc.agent_name!r}, inmobiliaria={acc.agency!r}, zonas={acc.zones!r}, cómo trabaja={acc.extra_context!r}, móvil={acc.personal_whatsapp!r}"
         log_event(s, "help_chat", acc.id, chars=len(text), image=bool(image))
-    out = helpchat.answer(history, text, image, context, current)
+    lang = data.get("lang") if data.get("lang") in i18n.LANGS else "es"
+    out = helpchat.answer(history, text, image, context, current, lang)
     if not out or not out[0]:
         return {"ok": False}
     reply, proposal = out
@@ -224,17 +235,19 @@ def api_calendar_check(token: str):
     with session_scope() as s:
         acc = _account_by_token(s, token)
         try:
-            labels = [x["label"] for x in compute_free_slots(s, acc, max_slots=4)]
+            slots = compute_free_slots(s, acc, max_slots=4)
+            labels = [x["label"] for x in slots]
         except CalendarError as e:
             log_event(s, "calendar_check_failed", acc.id, error=str(e)[:300])
             return {"ok": False}
         log_event(s, "calendar_verified", acc.id, free_slots=len(labels))
-        days, picks = set(), []
-        for label in labels:  # two different days read better than two times on the same day
-            if label.split(",")[0] not in days:
-                days.add(label.split(",")[0])
-                picks.append(label)
-        return {"ok": True, "first": picks[:2]}
+        days, picks, ids = set(), [], []
+        for x in slots:  # two different days read better than two times on the same day
+            if x["label"].split(",")[0] not in days:
+                days.add(x["label"].split(",")[0])
+                picks.append(x["label"])
+                ids.append(x["slot_id"])
+        return {"ok": True, "first": picks[:2], "first_ids": ids[:2]}
 
 
 def _google_row(s, acc: Account):
@@ -254,7 +267,7 @@ def api_test_event(token: str):
         try:
             cal = gcal.calendar_for_account(s, acc)
             if ext.get("test_event") and cal.get_event(ext["test_event"]["id"]):  # already created: don't duplicate
-                return {"ok": True, "label": ext["test_event"]["label"]}
+                return {"ok": True, "label": ext["test_event"]["label"], "slot_id": ext["test_event"].get("slot_id", "")}
             slots = compute_free_slots(s, acc, max_slots=1)
             if not slots:
                 return {"ok": False}
@@ -269,10 +282,10 @@ def api_test_event(token: str):
         except CalendarError as e:
             log_event(s, "test_event_failed", acc.id, error=str(e)[:300])
             return {"ok": False}
-        ext["test_event"] = {"id": eid, "label": slots[0]["label"]}
+        ext["test_event"] = {"id": eid, "label": slots[0]["label"], "slot_id": slots[0]["slot_id"]}
         integ.external = ext
         log_event(s, "test_event_created", acc.id)
-        return {"ok": True, "label": slots[0]["label"]}
+        return {"ok": True, "label": slots[0]["label"], "slot_id": slots[0]["slot_id"]}
 
 
 @router.post("/api/o/{token}/test_event/delete")
@@ -355,8 +368,9 @@ async def intake(intake_key: str, request: Request, source: str = "webhook"):
 
 def _legal(request: Request, page: str):
     st = get_settings()
+    lang = i18n.pick_lang(request)
     return templates.TemplateResponse(request, "legal.html", {
-        "page": page, "contact_email": st.contact_email, "legal_entity": st.legal_entity, "legal_nif": st.legal_nif,
+        "lang": lang, "page": page, "contact_email": st.contact_email, "legal_entity": st.legal_entity, "legal_nif": st.legal_nif,
         "legal_address": st.legal_address, "integration_fee_eur": st.integration_fee_eur, "meeting_fee_eur": st.meeting_fee_eur,
     })
 
