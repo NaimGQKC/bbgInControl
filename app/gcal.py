@@ -197,14 +197,14 @@ class FakeCalendar(CalendarClient):
 
 def mark_revoked(session, account, integ) -> None:
     """The agent removed Sparrow in Google (or the refresh token died): delete the tokens (privacy policy) and ask them to reconnect."""
-    from . import templates as T
-    from .engine import alert_agent, first_name, log_event
+    from . import lang as L, templates as T
+    from .engine import alert_agent, log_event
 
     integ.token_enc = ""
     integ.refresh_token_enc = ""
     integ.status = "disconnected"
     log_event(session, "google_disconnected", account.id)
-    alert_agent(session, account, T.AGENT_ACTION_REQUIRED, [first_name(account.agent_name) or "hola", "vuelve a conectar tu Google Calendar desde tu enlace de Sparrow"])
+    alert_agent(session, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), L.text("alert_reconnect_google", L.lead_lang(account))])
 
 
 def calendar_for_account(session, account) -> CalendarClient:

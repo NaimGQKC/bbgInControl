@@ -137,6 +137,17 @@ def sweep_unprocessed() -> int:
     return len(ids)
 
 
+def _refresh_quality_for_waba(s, waba_id: str) -> None:
+    from . import quality
+    if not waba_id:
+        return
+    for integ in s.execute(select(Integration).where(Integration.provider == "meta")).scalars():
+        if (integ.external or {}).get("waba_id") == waba_id:
+            account = s.get(Account, integ.account_id)
+            if account is not None:
+                quality.refresh(s, account)
+
+
 def _process(s, payload: dict) -> None:
     st = get_settings()
     for entry in payload.get("entry", []):
@@ -145,6 +156,10 @@ def _process(s, payload: dict) -> None:
             pnid = (value.get("metadata") or {}).get("phone_number_id", "")
             if field == "message_template_status_update":
                 s.add(Event(name="template_status", data=value))
+                continue
+            if field == "phone_number_quality_update":  # Meta changed the number's quality/limit: re-read the rating now
+                s.add(Event(name=f"webhook_{field}", data={"event": value.get("event"), "current_limit": value.get("current_limit")}))
+                _refresh_quality_for_waba(s, str(entry.get("id") or ""))
                 continue
             if field not in ("messages", "smb_message_echoes"):
                 s.add(Event(name=f"webhook_{field}", data={"phone_number_id": pnid}))

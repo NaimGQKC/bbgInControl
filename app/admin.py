@@ -1,5 +1,6 @@
 """Internal ops console (/admin). Also what you record for Meta App Review:
 video 1 = send a message from here and show it arriving in WhatsApp; video 2 = create a template from here."""
+import html
 import secrets
 from collections import Counter
 
@@ -8,7 +9,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy import func, select
 
-from . import jobs as jobmod, onboarding, templates as T
+from . import jobs as jobmod, onboarding, prospecting, templates as T
 from .config import get_settings
 from .db import session_scope, utcnow
 from .engine import agent_wa, do_handoff, ingest_lead, log_event, sparrow_wa
@@ -79,6 +80,7 @@ def account_page(request: Request, account_id: int, msg: str = ""):
         return jinja.TemplateResponse(request, "admin_account.html", {
             "a": acc, "leads": leads, "integ": integ, "tpl_status": tpl_status, "tpl_error": tpl_error, "msg": msg,
             "base_url": get_settings().base_url, "agent_templates": T.AGENT_TEMPLATES,
+            "prospecting": prospecting_line(s, acc),
         })
 
 
@@ -154,11 +156,12 @@ def sparrow_templates():
     wa.waba_id = st.sparrow_waba_id
     res = []
     for tpl in T.SPARROW_TEMPLATES:
-        try:
-            wa.create_template(tpl)
-            res.append(f"{tpl.name}: ok")
-        except WhatsAppError as e:
-            res.append(f"{tpl.name}: {e}")
+        for lang in (("es",) if tpl is T.OPS_NEEDS_HELP else ("es", "fr", "en")):  # agents get their alerts in their own language
+            try:
+                wa.create_template(tpl, language=lang)
+                res.append(f"{tpl.name}/{lang}: ok")
+            except WhatsAppError as e:
+                res.append(f"{tpl.name}/{lang}: {e}")
     return _back("/admin", "; ".join(res)[:400])
 
 
@@ -205,3 +208,69 @@ def lead_action(lead_id: int, action: str = Form(...)):
             log_event(s, "opted_out", acc.id, lead.id, source="admin")
             return _back(url, "Marcado como no contactar")
         return _back(url)
+
+
+# ---------------------------------------------------------------- prospecting (one line per account)
+
+def prospecting_line(s, acc: Account) -> dict:
+    """What the console shows per account: on/off, zone, leads today, last run, why it is paused, template status."""
+    cfg = prospecting.config_for(acc)
+    last = s.execute(select(Event).where(Event.account_id == acc.id, Event.name == "prospect_run").order_by(Event.at.desc(), Event.id.desc()).limit(1)).scalar_one_or_none()
+    d = (last.data or {}) if last else {}
+    return {
+        "account_id": acc.id,
+        "name": acc.agent_name,
+        "enabled": bool(cfg.get("enabled")),
+        "zone": cfg.get("zone_name") or "",
+        "leads_today": prospecting.created_today(s, acc),
+        "daily_cap": prospecting.effective_cap(cfg),
+        "last_run": {"at": last.at.isoformat(timespec="minutes"), "fetched": d.get("fetched", 0), "created": d.get("created", 0),
+                     "searches": d.get("searches", 0), "error": d.get("error", "")} if last else None,
+        "paused_reason": cfg.get("paused_reason") or "",
+        "cold_template_status": cfg.get("cold_template_status") or "",
+    }
+
+
+@router.get("/prospecting", response_class=HTMLResponse)
+def prospecting_page(msg: str = ""):
+    """Minimal console: one line per account that has prospecting set up, with pause / resume."""
+    e = html.escape
+    rows = []
+    with session_scope() as s:
+        for acc in s.execute(select(Account).order_by(Account.id.desc())).scalars():
+            if not (acc.settings or {}).get("prospecting"):
+                continue
+            ln = prospecting_line(s, acc)
+            lr = ln["last_run"]
+            last = f"{lr['at']} · {lr['fetched']} vistos, {lr['created']} nuevos, {lr['searches']} búsquedas" + (f" · error {lr['error']}" if lr["error"] else "") if lr else "—"
+            btn = ("pause", "Pausar") if ln["enabled"] else ("resume", "Reanudar")
+            rows.append(
+                f"<tr><td><a href='/admin/accounts/{ln['account_id']}'>{e(ln['name'] or str(ln['account_id']))}</a></td>"
+                f"<td>{'ON' if ln['enabled'] else 'off'}</td><td>{e(ln['zone'])}</td><td>{ln['leads_today']}/{ln['daily_cap']}</td>"
+                f"<td>{e(last)}</td><td>{e(ln['paused_reason'] or '—')}</td><td>{e(ln['cold_template_status'] or '—')}</td>"
+                f"<td><form method='post' action='/admin/accounts/{ln['account_id']}/prospecting'><button name='action' value='{btn[0]}'>{btn[1]}</button></form></td></tr>")
+    head = "<tr><th>Agente</th><th>Estado</th><th>Zona</th><th>Hoy</th><th>Última búsqueda</th><th>Pausa</th><th>Plantilla</th><th></th></tr>"
+    flash = f"<p><b>{e(msg)}</b></p>" if msg else ""
+    return HTMLResponse(f"<!doctype html><meta charset='utf-8'><title>Prospecting · Sparrow Ops</title><p><a href='/admin'>← Ops</a></p><h1>Prospecting</h1>{flash}"
+                        f"<table border='1' cellpadding='6' cellspacing='0'>{head}{''.join(rows) or '<tr><td colspan=8>Ninguna cuenta</td></tr>'}</table>")
+
+
+@router.post("/accounts/{account_id}/prospecting")
+def prospecting_action(account_id: int, action: str = Form(...)):
+    """pause: the operator stops it (the agent cannot turn it back on). resume: lifts any pause and restarts the ramp-up."""
+    with session_scope() as s:
+        acc = s.get(Account, account_id)
+        if not acc:
+            raise HTTPException(404)
+        cfg = dict((acc.settings or {}).get("prospecting") or {})
+        if action == "pause":
+            prospecting.pause(s, acc, "operator", tell_agent=False)
+            return _back("/admin/prospecting", "Prospecting en pausa")
+        if action == "resume":
+            if not cfg.get("location_id"):
+                return _back("/admin/prospecting", "Falta la zona: no se puede reanudar")
+            cfg.update({"enabled": True, "paused_reason": "", "confirmed_at": utcnow().isoformat()})
+            acc.settings = {**(acc.settings or {}), "prospecting": cfg}
+            log_event(s, "prospect_resumed", acc.id, by="operator")
+            return _back("/admin/prospecting", "Prospecting reanudado (vuelve a empezar con el límite bajo)")
+        return _back("/admin/prospecting")

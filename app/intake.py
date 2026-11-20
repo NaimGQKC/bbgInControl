@@ -5,22 +5,22 @@ listing_url, stage, tags, source, source_ref.
 """
 
 ALIASES = {
-    "name": ["name", "nombre", "full_name", "contact_name", "propietario", "owner_name"],
-    "phone": ["phone", "telefono", "teléfono", "movil", "móvil", "mobile", "phone_number", "tel"],
+    "name": ["name", "nombre", "full_name", "contact_name", "propietario", "owner_name", "nom", "prenom", "prénom", "propriétaire", "proprietaire"],
+    "phone": ["phone", "telefono", "teléfono", "movil", "móvil", "mobile", "phone_number", "tel", "tél", "telephone", "téléphone", "portable"],
     "lead_type": ["lead_type", "tipo_lead", "tipo_contacto", "operation"],
-    "property_type": ["property_type", "tipo", "tipo_inmueble", "tipologia", "tipología"],
-    "zone": ["zone", "zona", "barrio", "district", "localidad", "city"],
-    "address": ["address", "direccion", "dirección"],
-    "price": ["price", "precio"],
-    "listing_url": ["listing_url", "url", "anuncio", "link"],
-    "stage": ["stage", "etapa", "estado", "fase"],
-    "tags": ["tags", "etiquetas", "labels"],
+    "property_type": ["property_type", "tipo", "tipo_inmueble", "tipologia", "tipología", "type_de_bien", "type_bien", "bien"],
+    "zone": ["zone", "zona", "barrio", "district", "localidad", "city", "ville", "quartier", "secteur"],
+    "address": ["address", "direccion", "dirección", "adresse"],
+    "price": ["price", "precio", "prix"],
+    "listing_url": ["listing_url", "url", "anuncio", "link", "annonce", "lien"],
+    "stage": ["stage", "etapa", "estado", "fase", "etape", "étape", "statut"],
+    "tags": ["tags", "etiquetas", "labels", "étiquettes", "etiquettes"],
     "source_ref": ["source_ref", "id", "ref", "referencia", "lead_id"],
-    "email": ["email", "correo"],
+    "email": ["email", "correo", "courriel", "mail"],
 }
 
-BUYER_WORDS = {"buyer", "comprador", "compra", "demanda", "busca"}
-SELLER_WORDS = {"seller", "vendedor", "venta", "propietario", "captacion", "captación", "particular"}
+BUYER_WORDS = {"buyer", "comprador", "compra", "demanda", "busca", "acheteur", "achat", "recherche"}
+SELLER_WORDS = {"seller", "vendedor", "venta", "propietario", "captacion", "captación", "particular", "vendeur", "vente", "propriétaire", "proprietaire", "particulier", "estimation"}
 
 
 def normalize(payload: dict, source: str) -> dict:
@@ -43,7 +43,7 @@ def normalize(payload: dict, source: str) -> dict:
         out["tags"] = [t.strip() for t in out["tags"].split(",") if t.strip()]
     if out.get("price") not in (None, ""):
         try:
-            out["price"] = float(str(out["price"]).replace("€", "").replace(".", "").replace(",", ".").strip())
+            out["price"] = float(str(out["price"]).replace("€", "").replace("\u202f", "").replace("\xa0", "").replace(" ", "").replace(".", "").replace(",", ".").strip())
         except ValueError:
             out["price"] = None
     return out

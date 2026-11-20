@@ -1,13 +1,15 @@
 {% extends "base.html" %}
+{% block title %}{{ L.title }}{% endblock %}
 {% block body %}
 <div class="wrap" style="max-width:560px; padding-top:12vh">
+  <p class="small muted" style="text-align:right">{% for code in ["es", "en", "fr"] %}{% if not loop.first %} · {% endif %}{% if code == lang %}<b>{{ code|upper }}</b>{% else %}<a href="/?lang={{ code }}">{{ code|upper }}</a>{% endif %}{% endfor %}</p>
   <h1>Sparrow AI</h1>
-  <p class="muted">Tu asistente de WhatsApp escribe a cada nuevo lead en 30 segundos y te agenda la valoración en tu Google Calendar. Solo pagas por cita agendada.</p>
-  <form method="post" action="/start" id="go"><button class="btn" type="submit">Configurar mi asistente</button></form>
-  <p class="small muted" style="margin-top:32px"><a href="/privacidad">Privacidad</a> · <a href="/terminos">Términos</a> · <a href="/eliminar-datos">Eliminación de datos</a></p>
+  <p class="muted">{{ L.text }}</p>
+  <form method="post" action="/start?lang={{ lang }}" id="go"><button class="btn" type="submit">{{ L.cta }}</button></form>
+  <p class="small muted" style="margin-top:32px"><a href="/privacidad?lang={{ lang }}">{{ L.privacy }}</a> · <a href="/terminos?lang={{ lang }}">{{ L.terms }}</a> · <a href="/eliminar-datos?lang={{ lang }}">{{ L.deletion }}</a></p>
 </div>
 <script>
 // coming from our own website: no second click, straight into the conversation (anyone else sees this page and the button)
-try { if (/^https:\/\/(www\.)?sparrowai\.eu\//.test(document.referrer)) { document.querySelector("#go .btn").textContent = "Preparando tu asistente…"; setTimeout(() => document.getElementById("go").submit(), 500); } } catch (e) {}
+try { if (/^https:\/\/(www\.)?sparrowai\.eu\//.test(document.referrer)) { document.querySelector("#go .btn").textContent = {{ L.preparing|tojson }}; setTimeout(() => document.getElementById("go").submit(), 500); } } catch (e) {}
 </script>
 {% endblock %}

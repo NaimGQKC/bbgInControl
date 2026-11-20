@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Configura tu asistente · Sparrow AI{% endblock %}
+{% block title %}{{ page_title }}{% endblock %}
 {% block head %}
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Hanken+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -26,6 +26,8 @@
   .w { opacity:0; animation:wd .55s var(--ease) forwards; } @keyframes wd { from { opacity:0; filter:blur(4px); transform:translateY(4px); } to { opacity:1; filter:none; transform:none; } }
   .who { flex:1; line-height:1.2; min-width:0; } .who b { display:block; font-size:15px; } .who span { font-family:"IBM Plex Mono", monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .tools { max-width:560px; margin:0 auto; padding:0 16px 8px; display:flex; gap:8px; }
+  .langs { margin-left:auto; display:flex; gap:2px; } .langs button { border:0 !important; background:none !important; padding:4px 7px !important; color:var(--muted) !important; font-family:"IBM Plex Mono", monospace !important; font-size:11.5px !important; letter-spacing:.06em; }
+  .langs button.on { color:var(--ink) !important; font-weight:600; text-decoration:underline; }
   .tools button { background:var(--card); border:1px solid var(--line); border-radius:99px; padding:4px 12px; font:inherit; font-size:12.5px; color:var(--ink); cursor:pointer; }
   .tools button:hover { border-color:var(--accent); }
   .row-edit { display:flex; align-items:center; gap:10px; margin:8px 0; } .row-edit .k { min-width:92px; } .row-edit .v { flex:1; min-width:0; word-break:break-word; } .row-edit button { padding:4px 10px; font-size:13px; }
@@ -82,6 +84,14 @@
   .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; flex:none !important; }
   .chip { display:flex; align-items:center; gap:8px; margin:6px 0; } .chip code { flex:1; }
   .chip button { padding:5px 10px; font-size:13px; }
+  .opts .btn.long { border-radius:18px; text-align:left; line-height:1.3; }
+  .pedit { display:flex; flex-direction:column; gap:10px; }
+  .pedit textarea.ed { min-height:120px; font-size:16px; line-height:1.45; resize:vertical; }
+  .fchips { display:flex; flex-wrap:wrap; gap:6px; } .fchips .btn { padding:5px 10px; font-size:13px; border-radius:99px; font-family:"IBM Plex Mono", monospace; font-weight:500; }
+  .plist { margin:0; padding-left:18px; font-size:14px; } .plist:empty { display:none; } .plist.probs { color:var(--bad); } .plist.warns { color:var(--muted); } .plist li { margin:3px 0; }
+  .risks { margin:0; padding-left:20px; } .risks li { margin:7px 0; }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; }
+  .pedit .wa2 { align-self:stretch; } .pedit .wab { max-width:100%; word-break:break-word; }
   @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 {% endblock %}
@@ -90,16 +100,16 @@
   <div class="top">
     <div class="top-in">
       <div class="avatar" id="avatar"></div>
-      <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span>Asistente IA de Sparrow</span></div>
-      <button class="helpbtn" id="helpbtn" type="button">Hablar con una persona</button>
+      <div class="who"><b><span id="aname"></span> <span class="progress" id="progress"></span></b><span id="subtitle"></span></div>
+      <button class="helpbtn" id="helpbtn" type="button"></button>
     </div>
     <div class="bar"><i id="barfill"></i></div>
-    <div class="tools"><button type="button" id="mydata">Mis datos</button><button type="button" id="askbtn">Preguntar algo</button></div>
+    <div class="tools"><button type="button" id="mydata"></button><button type="button" id="askbtn"></button><span class="langs" id="langs"></span></div>
   </div>
   <div class="msgs" id="msgs" aria-live="polite"></div>
   <div class="dock"><div class="actions" id="actions">
     <div id="status"></div>
-    <form class="comp" id="comp"><button class="att" id="att" type="button" aria-label="Subir captura">📎</button><textarea id="ci" rows="1" placeholder="Escribe o toca una opción…" autocomplete="off"></textarea><button class="send" id="send" type="submit" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button><input id="cf" type="file" accept="image/*" hidden></form>
+    <form class="comp" id="comp"><button class="att" id="att" type="button" aria-label="Subir captura">📎</button><textarea id="ci" rows="1" placeholder="" autocomplete="off"></textarea><button class="send" id="send" type="submit" aria-label="Enviar"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button><input id="cf" type="file" accept="image/*" hidden></form>
     <div class="err" id="err"></div>
   </div></div>
 </div>
@@ -110,13 +120,17 @@ const FAKE = {{ 'true' if fake else 'false' }};
 const META = { appId: {{ meta_app_id|tojson }}, configId: {{ meta_config_id|tojson }}, version: {{ graph_version|tojson }} };
 let state = {{ state_json|safe }};
 const params = new URLSearchParams(location.search);
+const LANG = {{ lang|tojson }}, I18N = {{ i18n|tojson }};
+// every agent-facing text goes through tr(): the Spanish text is the key; es shows it as is, en/fr come from app/i18n_onb.py
+const tr = (s, v) => { let r = I18N[s] || s; if (v) for (const k in v) r = r.split("{" + k + "}").join(v[k]); return r; };
+const fmtSlot = (id) => { try { return new Intl.DateTimeFormat(LANG, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit", hour12: LANG === "en" }).format(new Date(id)); } catch (e) { return id; } };
 // Google opens in a side window; when it lands back here, that window reports the result and closes itself
 try {
   const g = params.get("google"), flag = +(localStorage.getItem(`sp:${TOKEN}:popup`) || 0);
   if (g && flag && Date.now() - flag < 600000) {
     localStorage.setItem(`sp:${TOKEN}:popup`, "0"); localStorage.setItem(`sp:${TOKEN}:gres`, g + ":" + Date.now());
     window.close();
-    document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:30vh">Listo. Ya puedes cerrar esta ventana y volver a Sparrow.</p>';
+    document.body.innerHTML = '<p style="font-family:sans-serif;text-align:center;margin-top:30vh"></p>'; document.body.firstChild.textContent = tr("Listo. Ya puedes cerrar esta ventana y volver a Sparrow.");
     throw new Error("popup-done");
   }
 } catch (e) { if (e.message === "popup-done") throw e; }
@@ -165,7 +179,7 @@ async function say(text, who, my) {
 }
 async function api(path, body) {
   const r = await fetch(`/api/o/${TOKEN}${path}`, { method: body ? "POST" : "GET", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-  const data = await r.json().catch(() => ({ ok: false, error: "Error de conexión" }));
+  const data = await r.json().catch(() => ({ ok: false, error: tr("Error de conexión") }));
   if (data.step) state = data;
   return data;
 }
@@ -174,7 +188,7 @@ function err(t) { document.getElementById("err").textContent = t || ""; }
 // ---- the composer (always there): answers the question in view, or chats with Lucía about anything
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
 const CAN_TALK = !!SR && !/iPhone|iPad|iPod/i.test(navigator.userAgent) && !/Firefox/i.test(navigator.userAgent);  // patchy there: hide the button
-const DEFAULT_PH = "Escribe o toca una opción…";
+const DEFAULT_PH = tr("Escribe o toca una opción…");
 let expect = null, chatOnce = false, shot = null, busy = false;
 const helpHistory = [];
 function resize() { $ci.style.height = "auto"; $ci.style.height = Math.min($ci.scrollHeight, 150) + "px"; }
@@ -187,17 +201,17 @@ function talk(input, btn) {  // the browser's own speech recognition: free; the 
   let rec = null, base = "", ph = "";
   btn.onclick = () => {
     if (rec) { rec.stop(); return; }
-    rec = new SR(); rec.lang = "es-ES"; rec.interimResults = true; rec.continuous = true;
+    rec = new SR(); rec.lang = { es: "es-ES", en: "en-GB", fr: "fr-FR" }[LANG]; rec.interimResults = true; rec.continuous = true;
     base = input.value ? input.value.trim() + " " : ""; ph = input.placeholder;
-    btn.classList.add("on"); input.placeholder = "Te escucho…";
+    btn.classList.add("on"); input.placeholder = tr("Te escucho…");
     rec.onresult = (e) => { let t = ""; for (const r of e.results) t += r[0].transcript; input.value = base + t; resize(); };
     const stop = () => { btn.classList.remove("on"); input.placeholder = ph; rec = null; input.focus(); };
-    rec.onend = stop; rec.onerror = (e) => { stop(); if (e.error === "not-allowed") err("Activa el micrófono en el navegador para poder hablar."); };
+    rec.onend = stop; rec.onerror = (e) => { stop(); if (e.error === "not-allowed") err(tr("Activa el micrófono en el navegador para poder hablar.")); };
     rec.start();
   };
 }
 if (CAN_TALK) {
-  const m = document.createElement("button"); m.className = "mic"; m.id = "mic"; m.type = "button"; m.setAttribute("aria-label", "Hablar");
+  const m = document.createElement("button"); m.className = "mic"; m.id = "mic"; m.type = "button"; m.setAttribute("aria-label", tr("Hablar"));
   m.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
   $comp.insertBefore(m, document.getElementById("send")); talk($ci, m);
 }
@@ -208,12 +222,12 @@ async function shrink(file) {  // screenshots are resized in the browser: small,
   return c.toDataURL("image/jpeg", 0.8);
 }
 $att.onclick = () => $cf.click();
-$cf.onchange = async () => { try { shot = await shrink($cf.files[0]); $att.textContent = "✅"; err(""); } catch (e) { shot = null; err("No he podido leer esa imagen."); } };
+$cf.onchange = async () => { try { shot = await shrink($cf.files[0]); $att.textContent = "✅"; err(""); } catch (e) { shot = null; err(tr("No he podido leer esa imagen.")); } };
 $comp.onsubmit = async (e) => {
   e.preventDefault();
   const text = $ci.value.trim();
   if (!text && !shot) return;
-  if (busy) { err("Un segundo, que termino de escribir…"); return; }  // never send an answer to the wrong place while a question is still appearing
+  if (busy) { err(tr("Un segundo, que termino de escribir…")); return; }  // never send an answer to the wrong place while a question is still appearing
   err("");
   if (expect && !chatOnce && !shot) return expect.onSubmit(text, false);  // answering the question in view
   return askLucia(text);  // anything else is a conversation with Lucía
@@ -221,38 +235,38 @@ $comp.onsubmit = async (e) => {
 async function askLucia(text) {
   const image = shot; shot = null; $cf.value = ""; $att.textContent = "📎";
   chatOnce = false; $ci.value = ""; resize(); if (expect) $ci.placeholder = expect.ph || DEFAULT_PH;
-  add((image ? "📷 " : "") + (text || "Captura de pantalla"), "me"); scroll();
+  add((image ? "📷 " : "") + (text || tr("Captura de pantalla")), "me"); scroll();
   helpHistory.push({ role: "user", text });
   const thinking = add("…", "bot", false); thinking.classList.add("think"); scroll();
-  const r = await api("/help_chat", { text, image, history: helpHistory.slice(-6) });
+  const r = await api("/help_chat", { text, image, history: helpHistory.slice(-6), lang: LANG });
   thinking.remove();
   if (r.ok) {
     helpHistory.push({ role: "bot", text: r.reply }); add(r.reply, "bot"); scroll();
     if (r.proposal) offerChange(r.proposal);
   } else {
-    add(r.capped ? "Hemos hablado bastante por aquí. Mejor te ayuda una persona del equipo." : (r.error || "Ahora mismo no puedo ayudarte yo. Mejor te ayuda una persona del equipo."), "bot");
-    buttons([{ label: "Hablar con una persona", onClick: () => document.getElementById("helpbtn").click() }], true);
+    add(r.capped ? tr("Hemos hablado bastante por aquí. Mejor te ayuda una persona del equipo.") : (tr(r.error) || tr("Ahora mismo no puedo ayudarte yo. Mejor te ayuda una persona del equipo.")), "bot");
+    buttons([{ label: tr("Hablar con una persona"), onClick: () => document.getElementById("helpbtn").click() }], true);
   }
 }
 const FIELDS = [
-  ["agent_name", "Nombre", "¿Cómo te llamas?"], ["agency", "Inmobiliaria", "¿En qué inmobiliaria trabajas?"],
-  ["zones", "Zonas", "¿En qué zonas captas? Sepáralas con comas."], ["extra_context", "Cómo trabajo", "Cuéntame cómo quieres que trabaje."],
-  ["personal_whatsapp", "Móvil de avisos", "¿A qué móvil te aviso si un cliente te necesita?"],
+  ["agent_name", tr("Nombre"), tr("¿Cómo te llamas?")], ["agency", tr("Inmobiliaria"), tr("¿En qué inmobiliaria trabajas?")],
+  ["zones", tr("Zonas"), tr("¿En qué zonas captas? Sepáralas con comas.")], ["extra_context", tr("Cómo trabajo"), tr("Cuéntame cómo quieres que trabaje.")],
+  ["personal_whatsapp", tr("Móvil de avisos"), tr("¿A qué móvil te aviso si un cliente te necesita?")],
 ];
 function offerChange(p) {  // Lucía proposes, the agent confirms: the AI never changes their data on its own
   const label = (FIELDS.find((f) => f[0] === p.field) || [0, p.field])[1];
   buttons([
-    { label: `Sí, cambiar ${label.toLowerCase()}`, onClick: async (el) => {
+    { label: tr("Sí, cambiar {campo}", { campo: label.toLowerCase() }), onClick: async (el) => {
         el.disabled = true; const r = await api("/answers", { [p.field]: p.value });
-        if (r.ok === false) { add(r.error || "No he podido cambiarlo.", "bot"); return; }
+        if (r.ok === false) { add(tr(r.error) || tr("No he podido cambiarlo."), "bot"); return; }
         if (p.field === "agent_name") store.set("nameOk", "1");
-        await render(); add("Hecho, cambiado.", "bot"); scroll(); } },
-    { label: "No", secondary: true, onClick: (el) => el.closest(".opts").remove() },
+        await render(); add(tr("Hecho, cambiado."), "bot"); scroll(); } },
+    { label: tr("No"), secondary: true, onClick: (el) => el.closest(".opts").remove() },
   ], true);
 }
 function helpChat(topic) {  // "Preguntar algo" / "Me ha salido otra cosa": the next message goes to Lucía
-  add(topic === "general" ? "Pregúntame lo que quieras: precio, cómo funciona, tus datos… Si algo no sale bien en pantalla, sube una captura con el clip. No escribas aquí contraseñas ni códigos." : "Cuéntame qué te sale en pantalla, con tus palabras o subiendo una captura con el clip, y lo vemos juntos. No escribas aquí contraseñas ni códigos.", "bot");
-  chatOnce = true; $ci.value = ""; $ci.placeholder = "Escribe tu pregunta…"; resize(); $ci.focus(); scroll();
+  add(topic === "general" ? tr("Pregúntame lo que quieras: precio, cómo funciona, tus datos… Si algo no sale bien en pantalla, sube una captura con el clip. No escribas aquí contraseñas ni códigos.") : tr("Cuéntame qué te sale en pantalla, con tus palabras o subiendo una captura con el clip, y lo vemos juntos. No escribas aquí contraseñas ni códigos."), "bot");
+  chatOnce = true; $ci.value = ""; $ci.placeholder = tr("Escribe tu pregunta…"); resize(); $ci.focus(); scroll();
 }
 
 // ---- options live inside the conversation, right under what Lucía just said
@@ -262,27 +276,41 @@ function buttons(list, side = false) {
   list.forEach((b) => { const el = document.createElement("button"); el.type = "button"; el.className = "btn " + (b.secondary ? "secondary " : "") + (b.cls || ""); el.innerHTML = b.label; el.onclick = () => b.onClick(el); row.appendChild(el); });
   $msgs.appendChild(row); scroll();
 }
-function inputRow({ ph = "", type = "text", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false, value = "" }) {
+function inputRow({ ph = "", type = "text", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false, value = "", extra = [] }) {
   document.querySelectorAll(".opts.main").forEach((e) => e.remove());
   setExpect({ ph, type, value, onSubmit });
   const row = document.createElement("div"); row.className = "opts main";
   const pill = (t, on, secondary = true) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn " + (secondary ? "secondary" : ""); b.textContent = t; b.onclick = () => on(b); row.appendChild(b); return b; };
   for (const text of suggestions) pill(text, () => { $ci.value = $ci.value ? `${$ci.value}${joiner}${text}` : text; resize(); $ci.focus(); });  // tap an example to add it; the agent can edit freely
   if (zones) zonePicker(row, pill);
+  for (const x of extra) { const b = pill(x.label, () => x.onClick(), false); b.classList.add("long"); }  // choices that are tapped instead of typed
   if (optional) pill(skipLabel, () => onSubmit("", true));
   if (row.children.length) $msgs.appendChild(row);
   err(""); scroll();
 }
 // zones: tap the city first (Spain shares one timezone, so we can't guess it), then tap neighbourhoods instead of typing commas
-const CITIES = {
+const CITIES_BY = {
+  es: {
   Madrid: ["Chamberí", "Salamanca", "Retiro", "Chamartín", "Centro", "Arganzuela", "Tetuán", "Moncloa"],
   Barcelona: ["Eixample", "Gràcia", "Sarrià", "Les Corts", "Sant Martí", "Poblenou", "Sants", "Horta"],
   Valencia: ["Ruzafa", "El Carmen", "Benimaclet", "Campanar", "Pla del Real", "Algirós", "Patraix"],
   Sevilla: ["Nervión", "Triana", "Los Remedios", "Macarena", "Casco Antiguo", "Heliópolis"],
   Zaragoza: ["Delicias", "Actur", "Centro", "Universidad", "San José", "Las Fuentes", "Casco Histórico"],
   Málaga: ["Centro", "Teatinos", "Limonar", "El Palo", "Pedregalejo", "Huelin"],
+  },
+  fr: {
+  Paris: ["Paris 1er", "Paris 2e", "Paris 3e", "Paris 4e", "Paris 5e", "Paris 6e", "Paris 7e", "Paris 8e", "Paris 9e", "Paris 10e", "Paris 11e", "Paris 12e", "Paris 13e", "Paris 14e", "Paris 15e", "Paris 16e", "Paris 17e", "Paris 18e", "Paris 19e", "Paris 20e"],
+  Lyon: ["Lyon 1er", "Lyon 2e", "Lyon 3e", "Lyon 4e", "Lyon 5e", "Lyon 6e", "Lyon 7e", "Lyon 8e", "Lyon 9e", "Villeurbanne"],
+  Marseille: ["Marseille 1er", "Marseille 2e", "Marseille 6e", "Marseille 7e", "Marseille 8e", "Marseille 9e", "Marseille 10e", "Marseille 12e", "Marseille 13e"],
+  Bordeaux: ["Centre", "Chartrons", "Saint-Pierre", "Bastide", "Caudéran", "Mériadeck", "Saint-Michel", "Bacalan"],
+  Toulouse: ["Capitole", "Saint-Cyprien", "Carmes", "Les Minimes", "Jeanne d'Arc", "Compans-Caffarelli", "Busca"],
+  Nice: ["Centre-ville", "Vieux-Nice", "Cimiez", "Mont Boron", "Libération", "Fabron", "Port"],
+  },
+  en: {},  // no ready-made list: they type their areas
 };
 function zonePicker(row, pill) {
+  const CITIES = CITIES_BY[LL()] || {};
+  if (!Object.keys(CITIES).length) return;
   const cities = () => { row.innerHTML = ""; for (const c of Object.keys(CITIES)) pill(c, () => hoods(c)); };
   const hoods = (c) => {
     row.innerHTML = ""; pill("← " + c, cities);
@@ -292,25 +320,29 @@ function zonePicker(row, pill) {
 }
 function summaryCard() {
   const a = state.answers, d = document.createElement("div"); d.className = "coach new";
-  const rows = [["Agencia", a.agency], ["Zonas", a.zones], ["Calendario", "✅ Google Calendar conectado"], ["WhatsApp", "✅ Tu número, conectado"], ["Avisos a", pretty(a.personal_whatsapp)]].filter((x) => x[1]);
+  const rows = [[tr("Agencia"), a.agency], [tr("Zonas"), a.zones], [tr("Calendario"), tr("✅ Google Calendar conectado")], ["WhatsApp", tr("✅ Tu número, conectado")], [tr("Avisos a"), pretty(a.personal_whatsapp)]].filter((x) => x[1]);
   d.innerHTML = rows.map(([k, v]) => `<div class="chip"><span class="small muted" style="min-width:80px">${k}</span><span class="sv"></span></div>`).join("");
   d.querySelectorAll(".sv").forEach((el, k) => (el.textContent = rows[k][1]));
   $msgs.appendChild(d);
 }
 function chips(items) {  // copy-paste helpers next to Meta's window
   const d = document.createElement("div"); d.className = "coach new";
-  d.innerHTML = "<b>Si Meta te pide algo, cópialo de aquí:</b>";
+  d.innerHTML = "<b></b>"; d.firstChild.textContent = tr("Si Meta te pide algo, cópialo de aquí:");
   for (const [label, value] of items.filter((x) => x[1])) {
     const row = document.createElement("div"); row.className = "chip";
-    row.innerHTML = `<span class="small muted" style="min-width:64px">${label}</span><code></code><button class="btn secondary" type="button">Copiar</button>`;
+    row.innerHTML = `<span class="small muted" style="min-width:64px">${label}</span><code></code><button class="btn secondary" type="button"></button>`; row.querySelector("button").textContent = tr("Copiar");
     row.querySelector("code").textContent = value;
-    row.querySelector("button").onclick = async (e) => { try { await navigator.clipboard.writeText(value); e.target.textContent = "¡Copiado!"; } catch (x) { e.target.textContent = "Cópialo a mano"; } };
+    row.querySelector("button").onclick = async (e) => { try { await navigator.clipboard.writeText(value); e.target.textContent = tr("¡Copiado!"); } catch (x) { e.target.textContent = tr("Cópialo a mano"); } };
     d.appendChild(row);
   }
   $msgs.appendChild(d);
 }
 const firstName = (n) => (n || "").trim().split(/\s+/)[0];
-const pretty = (p) => (p || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "+34 $1 $2 $3");
+const pretty = (p) => (p || "").replace(/^\+34(\d{3})(\d{3})(\d{3})$/, "+34 $1 $2 $3").replace(/^\+33(\d)(\d{2})(\d{2})(\d{2})(\d{2})$/, "+33 $1 $2 $3 $4 $5");
+const LL = () => state.lead_lang || "es";  // the language of the agent's owners (leads): not always the screen language
+const PHONE_PH = () => (LL() === "fr" ? "06 12 34 56 78" : "600 000 000");
+const NATIVE = { es: "Español", fr: "Français", en: "English" };
+const langName = (c) => ({ es: tr("español"), fr: tr("francés"), en: tr("inglés") }[c]);
 
 // ---- header: who is talking, progress, help
 document.getElementById("aname").textContent = state.assistant;
@@ -321,27 +353,28 @@ function updateProgress() {
   document.getElementById("barfill").style.width = (state.step === "done" ? 100 : n * 25 - 12) + "%";
 }
 document.getElementById("helpbtn").onclick = () => {
-  add("¿Prefieres que te llame una persona del equipo o que te escriba?", "bot");
+  add(tr("¿Prefieres que te llame una persona del equipo o que te escriba?"), "bot");
   buttons([
-    { label: "📞 Que me llamen", onClick: () => helpForm("call") },
-    { label: "💬 Que me escriban", onClick: () => helpForm("chat") },
-    { label: "Seguir aquí", secondary: true, onClick: (el) => el.closest(".opts").remove() },
+    { label: tr("📞 Que me llamen"), onClick: () => helpForm("call") },
+    { label: tr("💬 Que me escriban"), onClick: () => helpForm("chat") },
+    { label: tr("Seguir aquí"), secondary: true, onClick: (el) => el.closest(".opts").remove() },
   ], true);
 };
 function helpForm(kind) {
   const call = kind === "call";
   document.querySelectorAll(".opts.side").forEach((e) => e.remove());
   const f = document.createElement("form"); f.className = "coach new"; f.style.cssText = "display:grid;gap:8px";
-  f.innerHTML = `<input id="hm" placeholder="${call ? "¿Cuándo te viene bien? (opcional)" : "¿Qué te pasa? (opcional)"}">
-    ${state.answers.personal_whatsapp ? "" : '<input id="hp" type="tel" placeholder="Tu móvil" required>'}
-    <div class="row"><button class="btn" type="submit">${call ? "Pedir llamada" : "Pedir que me escriban"}</button><button class="btn secondary" type="button" id="hx">Atrás</button></div><div class="err" id="herr"></div>`;
+  f.innerHTML = `<input id="hm"> ${state.answers.personal_whatsapp ? "" : '<input id="hp" type="tel" required>'}
+    <div class="row"><button class="btn" type="submit"></button><button class="btn secondary" type="button" id="hx"></button></div><div class="err" id="herr"></div>`;
+  f.querySelector("#hm").placeholder = call ? tr("¿Cuándo te viene bien? (opcional)") : tr("¿Qué te pasa? (opcional)"); if (f.querySelector("#hp")) f.querySelector("#hp").placeholder = tr("Tu móvil");
+  f.querySelector("button[type=submit]").textContent = call ? tr("Pedir llamada") : tr("Pedir que me escriban"); f.querySelector("#hx").textContent = tr("Atrás");
   $msgs.appendChild(f); scroll();
   f.querySelector("#hx").onclick = () => f.remove();
   f.onsubmit = async (e) => {
     e.preventDefault();
     const r = await api("/help", { kind, message: f.querySelector("#hm").value, phone: (f.querySelector("#hp") || {}).value });
-    if (r.ok === false) { f.querySelector("#herr").textContent = r.error; return; }
-    f.remove(); add(call ? `Hecho: una persona del equipo te llamará al ${pretty(r.contact)} lo antes posible.` : `Hecho: te escribimos al ${pretty(r.contact)} en unos minutos. Mientras, puedes seguir por aquí si quieres.`, "bot"); scroll();
+    if (r.ok === false) { f.querySelector("#herr").textContent = tr(r.error); return; }
+    f.remove(); add(call ? tr("Hecho: una persona del equipo te llamará al {tel} lo antes posible.", { tel: pretty(r.contact) }) : tr("Hecho: te escribimos al {tel} en unos minutos. Mientras, puedes seguir por aquí si quieres.", { tel: pretty(r.contact) }), "bot"); scroll();
   };
 }
 
@@ -353,10 +386,10 @@ async function coach(my, key, text) {
   try { await say(text, "bot", my); } catch (e) { if (e !== STALE) throw e; }
 }
 function waiting(text, again) {
-  $status.innerHTML = `<div class="wait"><span class="spin"></span><span>${text}</span>${again ? '<button class="skip" id="again" type="button">Abrir de nuevo</button>' : ""}</div>`;
+  $status.innerHTML = `<div class="wait"><span class="spin"></span><span>${text}</span>${again ? '<button class="skip" id="again" type="button">${tr("Abrir de nuevo")}</button>' : ""}</div>`;
   if (again) document.getElementById("again").onclick = again;
 }
-const GOOGLE_BTN = { cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> Continuar con Google` };
+const GOOGLE_BTN = { cls: "g", label: `<svg width="18" height="18" viewBox="0 0 48 48" style="vertical-align:-3px;margin-right:10px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.9 2.4 30.4 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.6 5.9c4.4-4.1 7-10.1 7-17.6z"/><path fill="#FBBC05" d="M10.5 28.7A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.2.8-4.7l-7.9-6.1A24 24 0 0 0 0 24c0 3.9.9 7.5 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.6-5.9c-2.1 1.4-4.9 2.3-8.3 2.3-6.3 0-11.6-4.1-13.5-9.8l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg> ` + tr("Continuar con Google") };
 function sideSpot(w) {  // where a side window goes: the right edge of the screen the browser is on, never off-screen
   const right = Math.min((window.screenX || 0) + window.outerWidth, (screen.availLeft || 0) + screen.availWidth) - 12;
   return { left: Math.max(0, right - w), top: Math.max(0, (window.screenY || 0) + 40) };
@@ -371,26 +404,29 @@ function connectGoogle(my) {
     if (w && wide) splitView(pw); } catch (e) {}  // split: chat moves left, Google's window sits on the right, not on top of Lucía
   }
   if (!w) { store.set("popup", "0"); location.href = url; return; }  // phone or blocked: same tab, nothing else to coordinate
-  setOrb("google"); waiting("Esperando a Google… mírala en la ventana de al lado", () => connectGoogle(my));
+  setOrb("google"); waiting(tr("Esperando a Google… mírala en la ventana de al lado"), () => connectGoogle(my));
   const timers = [
-    setTimeout(() => coach(my, "g1", "Elige tu cuenta de Google Calendar."), 3500),
-    setTimeout(() => coach(my, "g3", "Deja **todas las casillas marcadas** y pulsa Continuar."), 9000),
+    setTimeout(() => coach(my, "g1", tr("Elige tu cuenta de Google Calendar.")), 3500),
+    setTimeout(() => coach(my, "g3", tr("Deja **todas las casillas marcadas** y pulsa Continuar.")), 9000),
   ];
   const done = setInterval(async () => {
     const res = (store.get("gres") || "").split(":")[0];
     if (res === "denied") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); params.set("google", "denied"); try { w.close(); } catch (e) {} return render(); }
     await api("");
     if (state.integrations.google && state.integrations.google.status === "active") { clearInterval(done); timers.forEach(clearTimeout); store.set("gres", ""); try { w.close(); } catch (e) {} render(); }
-    else if (w.closed && !(res)) { clearInterval(done); timers.forEach(clearTimeout); $status.innerHTML = ""; await coach(my, "gx", "Se cerró antes de terminar. Otra vez:"); buttons([{ ...GOOGLE_BTN, onClick: () => connectGoogle(my) }]); }
+    else if (w.closed && !(res)) { clearInterval(done); timers.forEach(clearTimeout); $status.innerHTML = ""; await coach(my, "gx", tr("Se cerró antes de terminar. Otra vez:")); buttons([{ ...GOOGLE_BTN, onClick: () => connectGoogle(my) }]); }
   }, 1500);
 }
 
 // ---- the conversation: every step lives in the same thread; finished steps replay instantly as history
-const QUESTIONS = [
-  { f: "agent_name", q: "¿Cómo te llamas? (nombre y apellido)", ph: "Laura García" },
-  { f: "agency", q: "¿En qué inmobiliaria trabajas?", ph: "RE/MAX Confort" },
-  { f: "zones", q: "¿En qué zonas o barrios captas? Sepáralos con comas.", ph: "Delicias, Actur, Centro" },
-];
+const questions = () => {
+  const fr = LL() === "fr";
+  return [
+    { f: "agent_name", q: tr("¿Cómo te llamas? (nombre y apellido)"), ph: fr ? "Laura Martin" : "Laura García" },
+    { f: "agency", q: tr("¿En qué inmobiliaria trabajas?"), ph: fr ? "Agence Soleil" : "RE/MAX Confort" },
+    { f: "zones", q: tr("¿En qué zonas o barrios captas? Sepáralos con comas."), ph: fr ? "Lyon 3e, Lyon 6e" : "Delicias, Actur, Centro" },
+  ];
+};
 async function render() {
   document.body.classList.remove("split");
   const my = ++gen;
@@ -402,6 +438,7 @@ async function render() {
   $msgs.classList.remove("quiet"); scroll();
 }
 async function flow(my) {
+  const QUESTIONS = questions();
   const bot = (t) => say(t, "bot", my), me = (t) => say(t, "me", my);
   const a = state.answers, integ = state.integrations, step = state.step, pay = state.payment;
   const at = (s) => ["google", "questions", "payment", "wa_check", "whatsapp", "waiting_templates", "done"].indexOf(s);
@@ -409,43 +446,52 @@ async function flow(my) {
   updateProgress();
   setOrb(state.status === "live" ? "done" : "idle");
 
-  $msgs.insertAdjacentHTML("beforeend", `<div class="hero"><div class="orb"></div><h1>Hola, soy ${state.assistant}</h1></div>`);
-  await bot("La IA de Sparrow. Contacto a tus propietarios por WhatsApp y te agendo las valoraciones. Lo dejamos listo en 10 minutos.");
+  $msgs.insertAdjacentHTML("beforeend", `<div class="hero"><div class="orb"></div><h1></h1></div>`); $msgs.querySelector(".hero h1").textContent = tr("Hola, soy {name}", { name: state.assistant });
+  await bot(tr("La IA de Sparrow. Contacto a tus propietarios por WhatsApp y te agendo las valoraciones. Lo dejamos listo en 10 minutos."));
 
   // 1. Google: one click, and we learn who they are. Google's screens can't show our words, so we warn first and coach in time.
-  await bot("Primero, tu Google Calendar: ahí verás las citas.");
+  await bot(tr("Primero, tu Google Calendar: ahí verás las citas."));
   if (!integ.google || integ.google.status !== "active") {
-    if (params.get("google") === "denied") await bot("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras.");
+    if (params.get("google") === "denied") await bot(tr("Parece que no se completó el permiso. Sin calendario no puedo agendar: vuelve a intentarlo cuando quieras."));
     buttons([{ ...GOOGLE_BTN, onClick: () => connectGoogle(my) }]);
     return;
   }
   setOrb("ok"); setTimeout(() => { if (document.documentElement.dataset.orb === "ok") setOrb("idle"); }, 3500);
-  await me("✅ Calendario conectado");
+  await me(tr("✅ Calendario conectado"));
   let peek = JSON.parse(store.get("peek") || "null");  // proof that it works, and an early warning if a permission is missing
   if (!peek) { const r = await api("/calendar_check", {}); if (r.ok) { peek = r; store.set("peek", JSON.stringify(r)); } else peek = { failed: true }; }
   if (peek.failed) {
-    await bot("No consigo leer tu calendario: falta algún permiso. Conéctalo otra vez con todas las casillas marcadas.");
-    buttons([{ label: "Conectar de nuevo", onClick: () => connectGoogle(my) }]);
+    await bot(tr("No consigo leer tu calendario: falta algún permiso. Conéctalo otra vez con todas las casillas marcadas."));
+    buttons([{ label: tr("Conectar de nuevo"), onClick: () => connectGoogle(my) }]);
     return;
   }
-  await bot(peek.first.length ? `Veo tu agenda perfectamente: estás libre el ${peek.first.join(" o el ")}.` : "Veo tu agenda perfectamente.");
+  const free = (peek.first_ids && peek.first_ids.length ? peek.first_ids.map(fmtSlot) : peek.first || []);
+  await bot(free.length > 1 ? tr("Veo tu agenda perfectamente: estás libre el {a} o el {b}.", { a: free[0], b: free[1] }) : free.length ? tr("Veo tu agenda perfectamente: estás libre el {a}.", { a: free[0] }) : tr("Veo tu agenda perfectamente."));
 
   // 2. Name (from Google: only confirm it), then what the website demo already told us (confirm once), then whatever is still missing
   const nameOk = () => store.get("nameOk") === "1";
   const v0 = a.agent_name;
   if (v0 && !nameOk() && step === "questions") {
-    await bot(`Veo que te llamas ${v0}. ¿Te llamo ${firstName(v0)}?`);
-    buttons([{ label: `Sí, ${firstName(v0)}`, onClick: () => { store.set("nameOk", "1"); render(); } },
-             { label: "Prefiero otro nombre", secondary: true, onClick: () => { bot(QUESTIONS[0].q); inputRow({ ph: "Laura García", onSubmit: async (val) => { if (!val) return; const r = await api("/answers", { agent_name: val }); if (r.ok === false) return err(r.error); store.set("nameOk", "1"); render(); } }); } }]);
+    await bot(tr("Veo que te llamas {nombre}. ¿Te llamo {primero}?", { nombre: v0, primero: firstName(v0) }));
+    buttons([{ label: tr("Sí, {primero}", { primero: firstName(v0) }), onClick: () => { store.set("nameOk", "1"); render(); } },
+             { label: tr("Prefiero otro nombre"), secondary: true, onClick: () => { bot(QUESTIONS[0].q); inputRow({ ph: QUESTIONS[0].ph, onSubmit: async (val) => { if (!val) return; const r = await api("/answers", { agent_name: val }); if (r.ok === false) return err(tr(r.error)); store.set("nameOk", "1"); render(); } }); } }]);
+    return;
+  }
+  // 2b. Which language do their owners speak? (messages, WhatsApp templates, calendar texts)
+  if (store.get("ask:lang") === "1") { await bot(tr("¿En qué idioma hablo con tus propietarios?")); await me(langName(LL())); }
+  else if (early) {
+    await bot(tr("Hablaré con tus propietarios en **{idioma}**: los mensajes, las plantillas de WhatsApp y las citas. ¿Es correcto?", { idioma: langName(LL()) }));
+    buttons([{ label: tr("Sí, en {idioma}", { idioma: langName(LL()) }), onClick: async () => { await api("/answers", { lead_lang: LL() }); store.set("ask:lang", "1"); render(); } },
+             { label: tr("Otro idioma"), secondary: true, onClick: () => chooseLang() }]);
     return;
   }
   const pre = QUESTIONS.filter((q) => q.f !== "agent_name" && a[q.f] && store.get("ask:" + q.f) !== "1");  // given before (website demo): confirm in one line, don't re-ask
   if (pre.length) {
-    const txt = [a.agency && `trabajas en **${a.agency}**`, a.zones && `captas en **${a.zones}**`].filter(Boolean).join(" y ");
-    await bot(`Ya me has contado que ${txt}.`);
-    if (store.get("preOk") === "1" || !early) await me("Sí, todo bien");
+    const had = a.agency && a.zones ? tr("Ya me has contado que trabajas en **{agencia}** y captas en **{zonas}**.", { agencia: a.agency, zonas: a.zones }) : a.agency ? tr("Ya me has contado que trabajas en **{agencia}**.", { agencia: a.agency }) : tr("Ya me has contado que captas en **{zonas}**.", { zonas: a.zones });
+    await bot(had);
+    if (store.get("preOk") === "1" || !early) await me(tr("Sí, todo bien"));
     else {
-      buttons([{ label: "Sí, todo bien", onClick: () => { store.set("preOk", "1"); render(); } }, { label: "Cambiar algo", secondary: true, onClick: () => myData() }]);
+      buttons([{ label: tr("Sí, todo bien"), onClick: () => { store.set("preOk", "1"); render(); } }, { label: tr("Cambiar algo"), secondary: true, onClick: () => myData() }]);
       return;
     }
   }
@@ -458,7 +504,7 @@ async function flow(my) {
     inputRow({ ph: q.ph, zones: q.f === "zones", joiner: ", ", suggestions: q.f === "agency" && state.agency_hint ? [state.agency_hint] : [], onSubmit: async (val) => {
       if (!val) return;
       const r = await api("/answers", { [q.f]: val });
-      if (r.ok === false) return err(r.error);
+      if (r.ok === false) return err(tr(r.error));
       store.set("ask:" + q.f, "1");
       render();
     } });
@@ -467,53 +513,58 @@ async function flow(my) {
   if (step === "questions") { await api("/answers", {}); return render(); }
 
   // 3. How do they want it to work? (optional, free text; it goes straight into the assistant's instructions)
-  const PREFS_Q = "Opcional: ¿cómo quieres que trabaje? Horarios, tono, lo que NO debo hacer…";
+  const PREFS_Q = tr("Opcional: ¿cómo quieres que trabaje? Horarios, tono, lo que NO debo hacer…");
   if (a.extra_context) { await bot(PREFS_Q); await me(a.extra_context); }
-  else if (store.get("prefs") === "skipped") { await bot(PREFS_Q); await me("Así está bien, de momento"); }
+  else if (store.get("prefs") === "skipped") { await bot(PREFS_Q); await me(tr("Así está bien, de momento")); }
   else if (early) {
     await bot(PREFS_Q);
-    inputRow({ ph: "Escríbelo con tus palabras", optional: true, skipLabel: "Así está bien",
-      suggestions: ["Visitas solo por la tarde", "Trato de usted a los propietarios", "No agendes los viernes", "También valoro locales y terrenos"],
+    inputRow({ ph: tr("Escríbelo con tus palabras"), optional: true, skipLabel: tr("Así está bien"),
+      suggestions: [tr("Visitas solo por la tarde"), tr("Trato de usted a los propietarios"), tr("No agendes los viernes"), tr("También valoro locales y terrenos")],
       onSubmit: async (val, skip) => {
         if (skip || !val) { store.set("prefs", "skipped"); return render(); }
         const r = await api("/answers", { extra_context: val });
-        if (r.ok === false) return err(r.error);
+        if (r.ok === false) return err(tr(r.error));
         render();
       } });
     return;
   }
 
   // 3a. Their mobile: the number I write from and where I alert them
-  const PHONE_Q = "¿Cuál es tu móvil de WhatsApp? Es el número desde el que escribiré a tus propietarios y al que te aviso si un cliente te necesita.";
-  const savePhone = async (val) => { if (!val) return; const r = await api("/answers", { personal_whatsapp: val }); if (r.ok === false) return err(r.error); store.set("ask:phone", "1"); store.set("alertOk", "1"); render(); };
+  const PHONE_Q = tr("¿Cuál es tu móvil de WhatsApp? Es el número desde el que escribiré a tus propietarios y al que te aviso si un cliente te necesita.");
+  const savePhone = async (val) => { if (!val) return; const r = await api("/answers", { personal_whatsapp: val }); if (r.ok === false) return err(tr(r.error)); store.set("ask:phone", "1"); store.set("alertOk", "1"); render(); };
   if (store.get("ask:phone") === "1") { await bot(PHONE_Q); await me(pretty(a.personal_whatsapp)); }
   else if (early && a.personal_whatsapp) {  // came with the website demo
-    await bot(`Te escribiré y avisaré desde el **${pretty(a.personal_whatsapp)}**. ¿Es tu móvil de WhatsApp?`);
-    buttons([{ label: "Sí, es ese", onClick: () => { store.set("ask:phone", "1"); store.set("alertOk", "1"); render(); } },
-             { label: "Es otro número", secondary: true, onClick: () => inputRow({ ph: "600 000 000", type: "tel", onSubmit: savePhone }) }]);
+    await bot(tr("Te escribiré y avisaré desde el **{tel}**. ¿Es tu móvil de WhatsApp?", { tel: pretty(a.personal_whatsapp) }));
+    buttons([{ label: tr("Sí, es ese"), onClick: () => { store.set("ask:phone", "1"); store.set("alertOk", "1"); render(); } },
+             { label: tr("Es otro número"), secondary: true, onClick: () => inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: savePhone }) }]);
     return;
-  } else if (early) { await bot(PHONE_Q); inputRow({ ph: "600 000 000", type: "tel", onSubmit: savePhone }); return; }
+  } else if (early) { await bot(PHONE_Q); inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: savePhone }); return; }
 
   // 3b. Show exactly what an owner receives, as it looks on their phone, and what success looks like
   if (state.first_message && early) {
-    const hhmm = (d) => d.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" });
+    const DEMO = {  // what the owner sees: always in the owners' language
+      es: { name: "Marta", biz: "Cuenta de empresa", loc: "es-ES", cond: "En buen estado, lo reformamos hace unos años.", offer2: (a, b) => `Genial, gracias. ¿Te va mejor el ${a} o el ${b}?`, offer1: (a) => `Genial, gracias. ¿Te va bien el ${a}?`, pick: (a) => `El ${a}, perfecto.`, done: (n, a) => `Hecho: ${n} pasará el ${a}. Te envío un recordatorio.`, agent: "tu agente" },
+      fr: { name: "Marie", biz: "Compte professionnel", loc: "fr-FR", cond: "En bon état, nous l'avons rénové il y a quelques années.", offer2: (a, b) => `Parfait, merci. Quel créneau vous convient le mieux : le ${a} ou le ${b} ?`, offer1: (a) => `Parfait, merci. Le ${a} vous conviendrait-il ?`, pick: (a) => `Le ${a}, c'est parfait.`, done: (n, a) => `C'est noté : ${n} passera le ${a}. Je vous enverrai un rappel.`, agent: "votre agent" },
+      en: { name: "Emma", biz: "Business account", loc: "en-GB", cond: "In good condition, we renovated it a few years ago.", offer2: (a, b) => `Great, thanks. Does ${a} or ${b} suit you better?`, offer1: (a) => `Great, thanks. Does ${a} suit you?`, pick: (a) => `${a} works, perfect.`, done: (n, a) => `Done: ${n} will come on ${a}. I'll send you a reminder.`, agent: "your agent" },
+    }[LL()];
+    const hhmm = (d) => d.toLocaleTimeString(DEMO.loc, { hour: "2-digit", minute: "2-digit" });
     const slot = ((JSON.parse(store.get("peek") || "null") || {}).first || [])[0];
     const showDemo = store.get("previewOk") !== "1";
-    await bot(showDemo ? "Esto es una **demostración** de cómo lo verá Marta, una propietaria de ejemplo. Aún no he escrito a nadie:" : "Así ve un propietario mi primer mensaje:");
+    await bot(showDemo ? tr("Esto es una **demostración** de cómo lo verá {nombre}, una propietaria de ejemplo (el mensaje va en {idioma}). Aún no he escrito a nadie:", { nombre: DEMO.name, idioma: langName(LL()) }) : tr("Así ve un propietario mi primer mensaje:"));
     const wa = document.createElement("div"); wa.className = "wa2 new";
-    const nm = (firstName(a.agent_name) || "Tu nombre") + (a.agency ? " · " + a.agency : "");
-    wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b><small>Cuenta de empresa</small></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span><span class="t"></span></div></div>`;
-    wa.querySelector(".wa-av").textContent = (a.agent_name || "T").charAt(0); wa.querySelector("b").textContent = nm;
+    const nm = (firstName(a.agent_name) || tr("Tu nombre")) + (a.agency ? " · " + a.agency : "");
+    wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b><small></small></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span><span class="t"></span></div></div>`;
+    wa.querySelector(".wa-head small").textContent = DEMO.biz; wa.querySelector(".wa-av").textContent = (a.agent_name || "T").charAt(0); wa.querySelector("b").textContent = nm;
     wa.querySelector(".tx").textContent = state.first_message; wa.querySelector(".t").textContent = hhmm(new Date());
     $msgs.appendChild(wa); scroll();
-    if (!showDemo) { await me("Me gusta, seguimos"); }
+    if (!showDemo) { await me(tr("Me gusta, seguimos")); }
     else {
-      let label = slot, real = false;
+      let label = slot, shown = ((JSON.parse(store.get("peek") || "null") || {}).first_ids || []).length ? fmtSlot(JSON.parse(store.get("peek")).first_ids[0]) : slot, real = false;  // label: Spanish, inside the owner's chat; shown: the agent's language
       if (slot) {
         if (!seen.has("demo")) {
           await sleep(1400);
           const te = await api("/test_event", {});  // a real test event in their calendar: their phone buzzes
-          if (te.ok) { label = te.label; real = true; }
+          if (te.ok) { label = te.label; shown = te.slot_id ? fmtSlot(te.slot_id) : te.label; real = true; }
         }
         const body = wa.querySelector(".wa-body"), tm = () => hhmm(new Date());
         const bubble = async (kind, text, wait = 900) => {  // a short, believable exchange: answer, offer, pick, confirm
@@ -523,131 +574,381 @@ async function flow(my) {
           if (!seen.has("demo")) await sleep(wait);
         };
         const other = ((JSON.parse(store.get("peek") || "null") || {}).first || []).find((x) => x !== label);
-        await bubble("out", "En buen estado, lo reformamos hace unos años.", 1100);
-        await bubble("in", other ? `Genial, gracias. ¿Te va mejor el ${label} o el ${other}?` : `Genial, gracias. ¿Te va bien el ${label}?`, 1100);
-        await bubble("out", `El ${label}, perfecto.`, 1000);
-        await bubble("in", `Hecho: ${firstName(a.agent_name) || "tu agente"} pasará el ${label}. Te envío un recordatorio.`, 700);
-        const ok = document.createElement("div"); ok.className = "coach warn new"; ok.textContent = "✅ Valoración agendada en tu Google Calendar: " + label; $msgs.appendChild(ok); scroll();
+        await bubble("out", DEMO.cond, 1100);
+        await bubble("in", other ? DEMO.offer2(label, other) : DEMO.offer1(label), 1100);
+        await bubble("out", DEMO.pick(label), 1000);
+        await bubble("in", DEMO.done(firstName(a.agent_name) || DEMO.agent, label), 700);
+        const ok = document.createElement("div"); ok.className = "coach warn new"; ok.textContent = tr("✅ Valoración agendada en tu Google Calendar: {fecha}", { fecha: shown }); $msgs.appendChild(ok); scroll();
         seen.add("demo"); store.set("seen", JSON.stringify([...seen]));
-        await bot(real ? "Lo que sí es real: acabo de crear una cita de prueba en tu **Google Calendar**. Abre el calendario." : "Así de simple. Esto lo hago yo por ti, con tus huecos reales.");
+        await bot(real ? tr("Lo que sí es real: acabo de crear una cita de prueba en tu **Google Calendar**. Abre el calendario.") : tr("Así de simple. Esto lo hago yo por ti, con tus huecos reales."));
       }
-      await bot("El primer mensaje es siempre este texto, aprobado por WhatsApp. El tono del resto de la conversación lo adapto a lo que me pidas.");
+      await bot(tr("El primer mensaje es siempre este texto, aprobado por WhatsApp. El tono del resto de la conversación lo adapto a lo que me pidas."));
       const go = async () => { if (real) await api("/test_event/delete", {}); store.set("previewOk", "1"); render(); };
-      buttons(real ? [{ label: "Lo he visto · borrar la prueba y seguir", onClick: go }, { label: "No me ha llegado, seguir", secondary: true, onClick: go }, { label: "Cambiar cómo trabajas", secondary: true, onClick: () => editField("extra_context", "Cómo trabajo", "Cuéntame cómo quieres que trabaje.") }]
-                   : [{ label: "Me gusta, seguimos", onClick: go }, { label: "Cambiar cómo trabajas", secondary: true, onClick: () => editField("extra_context", "Cómo trabajo", "Cuéntame cómo quieres que trabaje.") }]);
+      buttons(real ? [{ label: tr("Lo he visto · borrar la prueba y seguir"), onClick: go }, { label: tr("No me ha llegado, seguir"), secondary: true, onClick: go }, { label: tr("Cambiar cómo trabajas"), secondary: true, onClick: () => editField("extra_context", tr("Cómo trabajo"), tr("Cuéntame cómo quieres que trabaje.")) }]
+                   : [{ label: tr("Me gusta, seguimos"), onClick: go }, { label: tr("Cambiar cómo trabajas"), secondary: true, onClick: () => editField("extra_context", tr("Cómo trabajo"), tr("Cuéntame cómo quieres que trabaje.")) }]);
       return;
     }
   }
 
+  // 3c. Prospecting (optional, never blocks): the agent sets up automatic searches of private owners and writes the message
+  if (!(await prospecting(my, early))) return;
+
   // 4. Payment (only when a Stripe link is configured)
   if (pay.required) {
-    await bot(`Ya casi. La puesta en marcha cuesta ${pay.fee} € una sola vez. Después, solo pagas ${pay.per_meeting} € por cada cita que te agende: si no hay citas, no pagas nada más.`);
-    if (pay.paid) await me("✅ Pago recibido");
+    await bot(tr("Ya casi. La puesta en marcha cuesta {fee} € una sola vez. Después, solo pagas {per} € por cada cita que te agende: si no hay citas, no pagas nada más.", { fee: pay.fee, per: pay.per_meeting }));
+    if (pay.paid) await me(tr("✅ Pago recibido"));
     else {
       buttons([
-        { label: `Pagar ${pay.fee} €`, onClick: () => { window.open(pay.url, "_blank"); pollTimer = setInterval(async () => { await api(""); if (state.payment.paid) render(); }, 3000);
-            err("Cuando termines de pagar, sigo yo sola."); } },
-        { label: "Ya he pagado", secondary: true, onClick: async () => { await api(""); render(); } },
+        { label: tr("Pagar {fee} €", { fee: pay.fee }), onClick: () => { window.open(pay.url, "_blank"); pollTimer = setInterval(async () => { await api(""); if (state.payment.paid) render(); }, 3000);
+            err(tr("Cuando termines de pagar, sigo yo sola.")); } },
+        { label: tr("Ya he pagado"), secondary: true, onClick: async () => { await api(""); render(); } },
       ]);
       return;
     }
   }
 
   // 5. WhatsApp Business check
-  await bot("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida BAJA no recibe nada más.");
-  await bot("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)? Tiene que ser Business, con la app actualizada.");
-  if (at(step) > at("wa_check")) await me(store.get("waAnswer") || "Uso WhatsApp Business");
+  await bot(tr("Escribiré desde tu propio número de WhatsApp.\n• Solo a leads, nunca al resto de tus chats.\n• Si escribes tú, me aparto.\n• Quien pida {stop} no recibe nada más.", { stop: LL() === "es" ? "BAJA" : "STOP" }));
+  await bot(tr("¿Qué WhatsApp usas: el normal o WhatsApp Business (icono con una B)? Tiene que ser Business: con el WhatsApp normal, Meta lo bloquea."));
+  if (at(step) > at("wa_check")) await me(tr(store.get("waAnswer") || "Uso WhatsApp Business"));
   else {
-    const proceed = async (label) => { await me(label); store.set("waAnswer", label); await api("/step", { done: "wa_check" }); render(); };
+    const proceed = async (label) => { await me(tr(label)); store.set("waAnswer", label); await api("/step", { done: "wa_check" }); render(); };
     const downloadGuide = async () => {
-      await bot("Sin problema, son 2 minutos:\n1. Descarga «WhatsApp Business» (es gratis).\n2. Ábrelo con tu mismo número: tus chats se pasan solos.\n3. Vuelve aquí.");
-      buttons([{ label: "Ya lo tengo instalado", onClick: () => proceed("Ya tengo WhatsApp Business") }]);
+      await bot(tr("Sin problema, son 2 minutos:\n1. Descarga «WhatsApp Business» (es gratis).\n2. Ábrelo con tu mismo número: tus chats se pasan solos.\n3. Vuelve aquí."));
+      buttons([{ label: tr("Ya lo tengo instalado"), onClick: () => proceed("Ya tengo WhatsApp Business") }]);
     };
     buttons([
-      { label: "Uso WhatsApp Business", onClick: () => proceed("Uso WhatsApp Business") },
-      { label: "Uso el WhatsApp normal", secondary: true, onClick: async () => { await me("Uso el WhatsApp normal"); await downloadGuide(); } },
-      { label: "No lo sé", secondary: true, onClick: async () => {
-          await me("No lo sé");
-          await bot("Fácil: mira el icono de WhatsApp en tu móvil. Si tiene una B blanca, es Business. Si no la tiene, es el normal.");
+      { label: tr("Uso WhatsApp Business"), onClick: () => proceed("Uso WhatsApp Business") },
+      { label: tr("Uso el WhatsApp normal"), secondary: true, onClick: async () => { await me(tr("Uso el WhatsApp normal")); await downloadGuide(); } },
+      { label: tr("No lo sé"), secondary: true, onClick: async () => {
+          await me(tr("No lo sé"));
+          await bot(tr("Fácil: mira el icono de WhatsApp en tu móvil. Si tiene una B blanca, es Business. Si no la tiene, es el normal."));
           buttons([
-            { label: "Sí, tiene la B", onClick: () => proceed("Sí, tiene la B") },
-            { label: "No, no tiene la B", secondary: true, onClick: async () => { await me("No, no tiene la B"); await downloadGuide(); } },
+            { label: tr("Sí, tiene la B"), onClick: () => proceed("Sí, tiene la B") },
+            { label: tr("No, no tiene la B"), secondary: true, onClick: async () => { await me(tr("No, no tiene la B")); await downloadGuide(); } },
           ]);
       } },
     ]);
     return;
   }
 
+  // 5b. Meta asks for a website (or a social page) in its business step: ask once, optionally, and hand it over
+  const WEB_Q = tr("Antes de conectar: Meta te pedirá una web o un perfil de Instagram o Facebook de tu inmobiliaria. ¿Cuál uso? (opcional)");
+  if (at(step) <= at("whatsapp")) {
+    if (store.get("web")) { await bot(WEB_Q); await me(store.get("web")); }
+    else if (store.get("webSkip") === "1") { await bot(WEB_Q); await me(tr("Ya lo pongo yo en Meta")); }
+    else {
+      await bot(WEB_Q);
+      inputRow({ ph: "https://", optional: true, skipLabel: tr("Ya lo pongo yo en Meta"), onSubmit: (val, skip) => { if (skip || !val) store.set("webSkip", "1"); else store.set("web", val.slice(0, 200)); render(); } });
+      return;
+    }
+  }
+
   // 6. Meta signup
-  await bot("Último paso: conectar tu WhatsApp. Se abre una ventana de Meta. Ten a mano el móvil y una tarjeta.");
-  if (at(step) > at("whatsapp")) await me("✅ WhatsApp conectado");
+  await bot(tr("Último paso: conectar tu WhatsApp. Se abre una ventana de Meta. Ten a mano el móvil y una tarjeta."));
+  if (at(step) > at("whatsapp")) await me(tr("✅ WhatsApp conectado"));
   else {
     if (isMobile) {
-      await bot("Ojo: este paso es mucho más fácil desde un ordenador, porque tienes que escanear un código con el móvil.");
-      const mail = `mailto:${encodeURIComponent(a.email || "")}?subject=${encodeURIComponent("Continuar la configuración de Sparrow")}&body=${encodeURIComponent(location.href)}`;
-      $msgs.insertAdjacentHTML("beforeend", `<div class="coach small new"><a href="${mail}">Envíame el enlace por email</a> para seguir desde el ordenador.</div>`);
+      await bot(tr("Ojo: este paso es mucho más fácil desde un ordenador, porque tienes que escanear un código con el móvil."));
+      const mail = `mailto:${encodeURIComponent(a.email || "")}?subject=${encodeURIComponent(tr("Continuar la configuración de Sparrow"))}&body=${encodeURIComponent(location.href)}`;
+      $msgs.insertAdjacentHTML("beforeend", `<div class="coach small new"><a href="${mail}">${tr("Envíame el enlace por email")}</a> ${tr("para seguir desde el ordenador.")}</div>`);
     }
     $msgs.insertAdjacentHTML("beforeend", `<div class="coach new"><ol>
-      <li>Facebook → <b>Continuar</b></li>
-      <li>Revisa tus datos → <b>Siguiente</b></li>
-      <li>Elige <b>conectar tu app de WhatsApp Business</b> y pon tu número</li>
-      <li>Confirma en tu móvil, en <b>WhatsApp Business</b></li>
-      <li>Tarjeta → <b>Finalizar</b></li></ol></div>`);
-    chips([["Nombre", a.agent_name + (a.agency ? " · " + a.agency : "")], ["Email", a.email], ["Móvil", (a.personal_whatsapp || "").replace(/^\+34/, "")]]);
+      <li>${tr("Facebook → <b>Continuar</b>")}</li>
+      <li>${tr("Revisa tus datos → <b>Siguiente</b>")}</li>
+      <li>${tr("Elige <b>«Ingresar un nuevo número de teléfono»</b> y escribe el de tu <b>WhatsApp Business</b> (aunque ya lo uses)")}</li>
+      <li>${tr("Escanea el <b>código QR</b> con WhatsApp Business")}</li>
+      <li>${tr("Tarjeta → <b>Finalizar</b>")}</li></ol></div>`);
+    await bot(tr("Importante: Meta te pedirá añadir **un método de pago**. Es para sus céntimos por mensaje (se pagan a Meta, no a nosotros). **Sin él no podré escribir a tus propietarios.**"));
+    chips([[tr("Nombre"), a.agent_name + (a.agency ? " · " + a.agency : "")], ["Email", a.email], [tr("Móvil"), (a.personal_whatsapp || "").replace(/^\+34/, "")], [tr("Web"), store.get("web") || ""]]);
     if (!FAKE) loadFB();  // load the SDK now so the popup opens straight from the click (no popup blocker)
-    buttons([{ label: "Conectar WhatsApp", onClick: (el) => launchSignup(el) }, { label: "Me ha salido otra cosa", secondary: true, onClick: () => helpChat("meta") }]);
+    buttons([{ label: tr("Conectar WhatsApp"), onClick: (el) => launchSignup(el) }, { label: tr("Me ha salido otra cosa"), secondary: true, onClick: () => helpChat("meta") }]);
     return;
   }
 
   // 7. Where to alert them (only if we have not asked for their mobile earlier)
   if (store.get("alertOk") !== "1") {
-    const saveAlert = async (val) => { const r = await api("/answers", { personal_whatsapp: val }); if (r.ok === false) return err(r.error); store.set("alertOk", "1"); render(); };
+    const saveAlert = async (val) => { const r = await api("/answers", { personal_whatsapp: val }); if (r.ok === false) return err(tr(r.error)); store.set("alertOk", "1"); render(); };
     if (a.personal_whatsapp) {
-      await bot(`Un último detalle: si un cliente necesita que intervengas tú, te aviso por WhatsApp al ${pretty(a.personal_whatsapp)}. ¿Te va bien ese número?`);
-      buttons([{ label: "Sí, perfecto", onClick: () => { store.set("alertOk", "1"); render(); } },
-               { label: "Usar otro número", secondary: true, onClick: () => inputRow({ ph: "600 000 000", type: "tel", onSubmit: saveAlert }) }]);
+      await bot(tr("Un último detalle: si un cliente necesita que intervengas tú, te aviso por WhatsApp al {tel}. ¿Te va bien ese número?", { tel: pretty(a.personal_whatsapp) }));
+      buttons([{ label: tr("Sí, perfecto"), onClick: () => { store.set("alertOk", "1"); render(); } },
+               { label: tr("Usar otro número"), secondary: true, onClick: () => inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: saveAlert }) }]);
     } else {
-      await bot("Un último detalle: ¿a qué móvil te aviso si un cliente necesita que intervengas tú? Solo te escribiré para eso.");
-      inputRow({ ph: "600 000 000", type: "tel", onSubmit: saveAlert });
+      await bot(tr("Un último detalle: ¿a qué móvil te aviso si un cliente necesita que intervengas tú? Solo te escribiré para eso."));
+      inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: saveAlert });
     }
     return;
   }
 
   // 8. Waiting for Meta / done
   if (state.status !== "live") {
-    await bot("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté.");
+    await bot(tr("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté."));
     summaryCard();
     pollTimer = setInterval(async () => { await api(""); if (state.status === "live") render(); }, 20000);
     return;
   }
-  await bot("Listo 🎉 Cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas caerán en tu Google Calendar. No hace falta volver aquí.");
+  await bot(tr("Listo 🎉 Cada lead nuevo recibirá un WhatsApp en 30 segundos y las citas caerán en tu Google Calendar. No hace falta volver aquí."));
   summaryCard();
-  await bot("De conectar tu fuente de leads (Lystos) nos encargamos nosotros; te escribiremos si necesitamos algo.");
+  await bot(tr("De conectar tu fuente de leads nos encargamos nosotros; te escribiremos si necesitamos algo."));
+}
+// ---- prospecting: new private owners in one zone, found and written to automatically. Opt-in; the agent writes the message and accepts the risks.
+const PT = { flats: ["apartment"], houses: ["house"], both: ["apartment", "house"] };
+const pdraft = {  // answers so far, kept in this browser so a reload resumes; the server only learns at the final tap
+  get() { try { return JSON.parse(store.get("pdraft") || "{}") || {}; } catch (e) { return {}; } },
+  set(p) { store.set("pdraft", JSON.stringify({ ...pdraft.get(), ...p })); },
+  clear() { store.set("pdraft", ""); },
+};
+const nz = (x) => (x == null ? null : x);
+const ptypeKey = (arr) => { arr = arr || []; return arr.includes("apartment") && arr.includes("house") ? "both" : arr.includes("house") ? "houses" : arr.includes("apartment") ? "flats" : undefined; };
+const ptypeLabel = (k) => ({ flats: tr("Pisos"), houses: tr("Casas"), both: tr("Ambos") }[k]);
+const eur = (n) => n.toLocaleString({ es: "es-ES", fr: "fr-FR", en: "en-GB" }[LANG]) + " €";
+const prospSaved = (P) => !!(P && P.done && P.location_id) || store.get("prosp") === "done";  // the server keeps `done` once they answered this step
+const prospSkipped = (P) => store.get("prosp") === "skipped" || !!(P && P.done && !P.location_id);
+function parsePrice(t) {  // "150.000", "150000", "150k", "150 mil", "1,5M" -> 150000...; null when it can't be a price
+  const s = String(t || "").toLowerCase().replace(/euros?|€|\s/g, ""); let v = null, m;
+  if ((m = s.match(/^(\d+(?:[.,]\d+)?)(millon(?:es)?|million(?:s)?|mil|mm|k|m)$/))) v = parseFloat(m[1].replace(",", ".")) * (/^(k|mil)$/.test(m[2]) ? 1e3 : 1e6);
+  else if (/^\d{1,3}([.,]\d{3})+$/.test(s) || /^\d+$/.test(s)) v = parseInt(s.replace(/[.,]/g, ""), 10);
+  v = v == null ? null : Math.round(v);
+  return v != null && v >= 1000 && v <= 20000000 ? v : null;
+}
+const priceText = (mn, mx) => mn && mx ? `${eur(mn)} – ${eur(mx)}` : mn ? tr("Desde {a}", { a: eur(mn) }) : mx ? tr("Hasta {a}", { a: eur(mx) }) : tr("Sin límite");
+const probText = (c) => {  // the checks of the message, in plain words
+  if (c === "too_short") return tr("Es demasiado corto: escribe al menos una frase que diga quién eres y por qué escribes.");
+  if (c === "too_long") return tr("Es demasiado largo: máximo 600 caracteres, para que se lea de un vistazo.");
+  if (c === "link_not_allowed") return tr("Sin enlaces en tu texto: WhatsApp suele rechazar los mensajes a desconocidos que llevan enlaces. El único enlace necesario ya lo pongo yo al final.");
+  if (c === "starts_or_ends_with_field") return tr("No puede empezar ni terminar con un campo entre llaves: añade alguna palabra antes o después (por ejemplo «Hola» al principio).");
+  if (c.startsWith("unknown_field:")) return tr("Hay un campo que no conozco: {campo}. Usa solo los cinco que te he indicado.", { campo: c.slice(14).split(",").map((x) => "{" + x + "}").join(", ") });
+  return c;
+};
+const warnText = (c) => c === "promise_words" ? tr("Consejo: palabras como «garantizado» o «gratis» hacen que Meta rechace el mensaje o que el propietario desconfíe. Puedes dejarlas, pero yo las quitaría.")
+  : c === "shouting" ? tr("Consejo: hay muchas mayúsculas y suena a grito. Mejor en minúsculas normales. Tú decides.") : c;
+const outcomeText = (kind) => kind === "on" ? tr("Antes de empezar, Meta tiene que aprobar tu mensaje (normalmente tarda de minutos a unas horas). En cuanto lo apruebe, empiezo sola. Si quieres cambiar algo más adelante, pulsa «Hablar con una persona».")
+  : kind === "not_live" ? tr("Empezaré sola en cuanto tu WhatsApp esté conectado. Y antes, Meta tiene que aprobar tu mensaje (normalmente tarda de minutos a unas horas). Si quieres cambiar algo más adelante, pulsa «Hablar con una persona».")
+  : tr("Lo he guardado, pero de momento no está en marcha. Pulsa «Hablar con una persona» y lo revisamos juntos.");
+
+function waBubble(text) {  // the message as the owner reads it (same look as the first-message demo)
+  const wa = document.createElement("div"); wa.className = "wa2";
+  wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span></div></div>`;
+  wa.querySelector(".wa-av").textContent = (state.answers.agent_name || "T").charAt(0);
+  wa.querySelector("b").textContent = (firstName(state.answers.agent_name) || tr("Tu nombre")) + (state.answers.agency ? " · " + state.answers.agency : "");
+  wa.querySelector(".tx").textContent = text; return wa;
+}
+function startProspectingEdit() {  // from "Mis datos": start from what is saved, change anything, confirm again
+  const P = state.prospecting || {}, saved = prospSaved(P) && P.location_id;
+  store.set("pdraft", JSON.stringify(saved ? { offer: "yes", place: { id: P.location_id, name: P.zone_name || "" }, types: ptypeKey(P.property_types), min: nz(P.min_price), max: nz(P.max_price), cap: P.daily_cap, body: P.cold_body, last: P.cold_body, pitch: P.success_pitch || "", ack: true } : { offer: "yes" }));
+  store.set("prosp", ""); store.set("prosp:edit", "1"); render();
+}
+async function skipProspecting() {  // "not now" never blocks anything; the server just learns they answered
+  store.set("prosp", "skipped"); store.set("prosp:edit", "0"); pdraft.clear();
+  try { await api("/prospecting", { enabled: false }); } catch (e) {}
+  render();
+}
+function bodyEditor(initial, P, onUse) {  // simple inline editor: the exact message is shown underneath and re-checked as they type
+  document.querySelectorAll(".opts.main").forEach((e) => e.remove());
+  const card = document.createElement("div"); card.className = "coach pedit new";
+  card.innerHTML = `<textarea class="ed" rows="5" maxlength="1500"></textarea><div class="fchips"></div><div class="small muted cnt"></div>
+    <div class="small muted lbl"></div><div class="prev"></div><ul class="plist probs"></ul><ul class="plist warns"></ul>
+    <div class="btnrow"><button class="btn use" type="button" disabled></button><button class="btn secondary orig" type="button"></button></div>`;
+  const ta = card.querySelector("textarea"), use = card.querySelector(".use"), probs = card.querySelector(".probs"), warns = card.querySelector(".warns"), prev = card.querySelector(".prev"), cnt = card.querySelector(".cnt");
+  ta.value = initial; ta.setAttribute("aria-label", tr("Tu primer mensaje"));
+  card.querySelector(".lbl").textContent = tr("Así lo leerá un propietario (con datos de ejemplo):");
+  use.textContent = tr("Usar este mensaje"); card.querySelector(".orig").textContent = tr("Volver al texto sugerido");
+  for (const f of ["nombre", "tipo", "zona", "agente", "agencia"]) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn secondary"; b.textContent = "{" + f + "}";
+    b.onclick = () => { ta.setRangeText("{" + f + "}", ta.selectionStart, ta.selectionEnd, "end"); ta.focus(); ta.dispatchEvent(new Event("input")); };
+    card.querySelector(".fchips").appendChild(b);
+  }
+  let seq = 0, timer = null;
+  const li = (el, t) => { const x = document.createElement("li"); x.textContent = t; el.appendChild(x); };
+  const run = async (mine) => {
+    const body = ta.value, r = await api("/prospecting/preview", { cold_body: body });
+    if (mine !== seq || !card.isConnected) return;
+    probs.innerHTML = ""; warns.innerHTML = "";
+    if (!r || typeof r.text !== "string" || !Array.isArray(r.problems)) { li(probs, tr("No puedo comprobar el texto ahora mismo. Inténtalo de nuevo en un momento.")); return; }
+    prev.innerHTML = ""; prev.appendChild(waBubble(r.text));
+    r.problems.forEach((c) => li(probs, probText(c))); (r.warnings || []).forEach((c) => li(warns, warnText(c)));
+    use.disabled = r.problems.length > 0;
+  };
+  const changed = () => { const mine = ++seq; use.disabled = true; cnt.textContent = ta.value.trim().length + " / 600"; clearTimeout(timer); timer = setTimeout(() => run(mine), 450); };
+  ta.addEventListener("input", changed);
+  card.querySelector(".orig").onclick = () => { ta.value = P.cold_body || initial; changed(); };
+  use.onclick = () => { if (!use.disabled) onUse(ta.value.trim()); };
+  $msgs.appendChild(card); scroll(); changed();
+}
+// returns true when the conversation can go on to the next step, false when it is waiting for the agent
+async function prospecting(my, early) {
+  const P = state.prospecting;
+  if (!P) return true;  // nothing to set up for this account
+  const editing = store.get("prosp:edit") === "1", saved = prospSaved(P);
+  if (!early && !editing && !saved) return true;  // they went past this point before the step existed
+  const bot = (t) => say(t, "bot", my), me = (t) => say(t, "me", my);
+  const OFFER = tr("¿Quieres que además busque propietarios particulares nuevos en tu zona y les escriba por ti?");
+  if (prospSkipped(P) && !editing && !saved) { await bot(OFFER); await me(tr("Ahora no")); return true; }
+  if (saved && !editing) {  // done: short recap, then on to the next step
+    await bot(OFFER); await me(tr("Sí, quiero"));
+    await bot(tr("Hecho: busco propietarios particulares nuevos en **{zona}** (como máximo {n} al día) y les escribo por ti.", { zona: P.zone_name || "", n: P.daily_cap || "" }));
+    await bot(outcomeText(store.get("pres") || (P.enabled ? "on" : "not_live")));
+    return true;
+  }
+  const d = pdraft.get();
+  // 1. offer
+  await bot(OFFER);
+  if (!d.offer) {
+    await bot(tr("Cada día miro los anuncios nuevos de particulares, les escribo desde tu WhatsApp, descubro si venden de verdad y te agendo la valoración en tu calendario."));
+    buttons([{ label: tr("Sí, quiero"), onClick: () => { pdraft.set({ offer: "yes" }); render(); } },
+             { label: tr("Ahora no"), secondary: true, onClick: () => skipProspecting() }]);
+    return false;
+  }
+  await me(tr("Sí, quiero"));
+  // 2. one zone: type it, tap the match
+  const ZQ = tr("¿Qué zona quieres que vigile? Escribe un municipio o un distrito (solo una zona por ahora).");
+  await bot(ZQ);
+  if (d.place) await me(d.place.name);
+  else {
+    const first = String(state.answers.zones || "").split(",")[0].trim();
+    const ask = (extra = []) => inputRow({ ph: tr("Municipio o distrito"), suggestions: first ? [first] : [], extra, onSubmit: search });
+    const search = async (val) => {
+      if (!val) return;
+      if (val.length < 3) return err(tr("Escribe al menos 3 letras."));
+      add(val, "me"); scroll(); document.querySelectorAll(".opts.main").forEach((e) => e.remove());
+      const thinking = add("…", "bot", false); thinking.classList.add("think"); scroll();
+      const r = await api("/places?q=" + encodeURIComponent(val)); thinking.remove();
+      const list = r && Array.isArray(r.places) ? r.places.slice(0, 5) : null;
+      if (r && r.error === "rate_limited") { add(tr("Has hecho muchas búsquedas seguidas. Espera un poco y vuelve a probar, o pulsa «Hablar con una persona» arriba."), "bot"); return ask(); }
+      if (!list || r.error) { add(tr("No he podido buscar ahora mismo. Inténtalo otra vez en un momento."), "bot"); return ask(); }
+      if (!list.length) { add(tr("No encuentro esa zona. Prueba con otro nombre: el municipio o el distrito, como lo escribirías en un portal."), "bot"); return ask(); }
+      add(tr("Toca tu zona, o escribe otra:"), "bot");
+      ask(list.map((p) => ({ label: p.detail ? `${p.name} — ${p.detail}` : p.name, onClick: () => { pdraft.set({ place: { id: p.id, name: p.name } }); render(); } })));
+    };
+    ask(); return false;
+  }
+  // 3. what to look for
+  const TQ = tr("¿Qué quieres que busque: pisos, casas o los dos?");
+  await bot(TQ);
+  if (d.types) await me(ptypeLabel(d.types));
+  else {
+    buttons(["flats", "houses", "both"].map((k, i) => ({ label: ptypeLabel(k), secondary: i < 2, onClick: () => { pdraft.set({ types: k }); render(); } })));
+    return false;
+  }
+  const priceAsk = (key, ph) => inputRow({ ph, optional: true, skipLabel: tr("Sin límite"), onSubmit: (val, skip) => {
+    if (skip || !val) { pdraft.set({ [key]: null }); return render(); }
+    const v = parsePrice(val);
+    if (v == null) return err(tr("No entiendo esa cifra. Escríbela con números, por ejemplo 150.000 o 150k."));
+    if (key === "max" && d.min && v < d.min) return err(tr("El máximo tiene que ser mayor que el mínimo."));
+    pdraft.set({ [key]: v }); render(); } });
+  await bot(tr("¿Desde qué precio? Puedes escribirlo como 150.000 o 150k. (opcional)"));
+  if (d.min !== undefined) await me(d.min ? eur(d.min) : tr("Sin límite")); else { priceAsk("min", "150.000"); return false; }
+  await bot(tr("¿Y hasta qué precio? (opcional)"));
+  if (d.max !== undefined) await me(d.max ? eur(d.max) : tr("Sin límite")); else { priceAsk("max", "300.000"); return false; }
+  await bot(tr("¿Cuántos propietarios nuevos quieres, como máximo, cada día?"));
+  if (d.cap) await me(tr("{n} al día", { n: d.cap }));
+  else {
+    await bot(tr("La primera semana empiezo despacio a propósito, para proteger tu número de WhatsApp; luego subo hasta el máximo que elijas."));
+    buttons([3, 5, 10].map((n) => ({ label: tr("{n} al día", { n }), secondary: n !== 5, onClick: () => { pdraft.set({ cap: n }); render(); } })));
+    return false;
+  }
+  // 4. the message is theirs
+  await bot(tr("Ahora lo más importante: **el primer mensaje es tuyo**. Te propongo este; cámbialo como quieras."));
+  if (d.body) await me(d.body);
+  else {
+    await bot(tr("Puedes usar estos campos y yo los relleno con los datos de cada anuncio: {nombre}, {tipo}, {zona}, {agente} y {agencia}."));
+    await bot(tr("Al final de tu texto añado siempre una línea fija: cómo darse de baja ({baja}) y de dónde salió el número. No se puede quitar: lo piden WhatsApp y la normativa de protección de datos.", { baja: LL() === "es" ? "BAJA" : "STOP" }));
+    bodyEditor(d.last || P.cold_body || "", P, (body) => { pdraft.set({ body, last: body, ack: undefined }); render(); });
+    return false;
+  }
+  await bot(tr("Opcional: si un propietario me dice que no, puedo mencionar tus resultados. Escríbelos tal como quieras que se digan, solo con datos reales (por ejemplo: «He vendido 12 pisos en esta zona este año»)."));
+  if (d.pitch !== undefined) await me(d.pitch || tr("Sin resultados"));
+  else {
+    inputRow({ ph: tr("Tus resultados, con tus palabras"), optional: true, skipLabel: tr("Sin resultados"), onSubmit: (val, skip) => {
+      if (skip || !val) { pdraft.set({ pitch: "" }); return render(); }
+      if (val.length > 400) return err(tr("Máximo 400 caracteres: ahora llevas {n}.", { n: val.length }));
+      pdraft.set({ pitch: val }); render(); } });
+    return false;
+  }
+  // 5. risks, in plain words; only an explicit tap counts
+  const risks = Array.isArray(P.risks) ? P.risks : [];
+  await bot(tr("Antes de activarlo, cuatro cosas que conviene que sepas. Te las cuento como te las diría un compañero:"));
+  const rc = document.createElement("div"); rc.className = "coach warn new"; const ul = document.createElement("ul"); ul.className = "risks";
+  risks.forEach((t) => { const l = document.createElement("li"); l.textContent = t; ul.appendChild(l); }); rc.appendChild(ul); $msgs.appendChild(rc); scroll();
+  const ACK = tr("Entiendo los riesgos y me hago responsable del texto y de los contactos");
+  if (d.ack) await me(ACK);
+  else {
+    buttons([{ label: ACK, onClick: () => { pdraft.set({ ack: true }); render(); } },
+             { label: tr("Ahora no"), secondary: true, onClick: () => skipProspecting() }]);
+    return false;
+  }
+  // 6. summary and the final tap
+  await bot(tr("Esto es lo que voy a activar. ¿Lo dejo en marcha?"));
+  const card = document.createElement("div"); card.className = "coach new";
+  const rows = [[tr("Zona"), d.place.name], [tr("Inmuebles"), d.types === "both" ? tr("Pisos y casas") : ptypeLabel(d.types)], [tr("Precio"), priceText(d.min, d.max)], [tr("Máximo al día"), String(d.cap)], [tr("Mensaje"), d.body]];
+  if (d.pitch) rows.push([tr("Tus resultados"), d.pitch]);
+  card.innerHTML = rows.map(() => `<div class="chip" style="align-items:flex-start"><span class="small muted" style="min-width:112px"></span><span class="sv" style="flex:1;white-space:pre-line;word-break:break-word"></span></div>`).join("");
+  card.querySelectorAll(".chip").forEach((el, k) => { el.firstChild.textContent = rows[k][0]; el.querySelector(".sv").textContent = rows[k][1]; });
+  $msgs.appendChild(card); scroll();
+  const activate = async (el) => {
+    el.disabled = true; err("");
+    const r = await api("/prospecting", { enabled: true, location_id: d.place.id, zone_name: d.place.name, property_types: PT[d.types], min_price: nz(d.min), max_price: nz(d.max), daily_cap: d.cap, cold_body: d.body, success_pitch: d.pitch || "", ack_risk: true });
+    if (!r || r.saved !== true) {
+      el.disabled = false;
+      const why = r && Array.isArray(r.problems) && r.problems.length ? r.problems.map(probText).join(" ") : r && r.error ? tr(r.error) : "";
+      add((why ? why + " " : "") + tr("No he podido guardarlo ahora mismo. Inténtalo otra vez; si se repite, pulsa «Hablar con una persona» arriba."), "bot"); return scroll();
+    }
+    store.set("pres", r.enabled ? "on" : r.reason === "not_live" ? "not_live" : "other"); store.set("prosp", "done"); store.set("prosp:edit", "0"); pdraft.clear();
+    await api(""); render();
+  };
+  const change = (patch, label) => ({ label, secondary: true, onClick: () => { pdraft.set(patch); render(); } });
+  buttons([{ label: tr("Sí, actívalo"), onClick: activate },
+    { label: tr("Cambiar algo"), secondary: true, onClick: () => {
+        add(tr("¿Qué quieres cambiar?"), "bot");
+        buttons([change({ place: undefined }, tr("Zona")), change({ types: undefined }, tr("Inmuebles")), change({ min: undefined, max: undefined }, tr("Precio")), change({ cap: undefined }, tr("Máximo al día")),
+                 change({ body: undefined, ack: undefined }, tr("Mensaje")), change({ pitch: undefined }, tr("Tus resultados")),
+                 ...(editing ? [{ label: tr("Dejarlo como estaba"), onClick: () => { store.set("prosp:edit", "0"); pdraft.clear(); render(); } }] : [])]);
+      } }]);
+  return false;
+}
+function chooseLang() {  // the three languages, each in its own name
+  buttons(["es", "fr", "en"].filter((c) => c !== LL()).map((c) => ({ label: NATIVE[c], onClick: async () => {
+    const r = await api("/answers", { lead_lang: c }); if (r.ok === false) return err(tr(r.error));
+    store.set("ask:lang", "1"); try { localStorage.removeItem(`sp:${TOKEN}:peek`); } catch (e) {}  // slot labels are in the owners' language
+    render(); } })), true);
 }
 // ---- "Mis datos": change anything they told us, at any moment (scripted, no AI). Or just ask Lucía in the chat.
 function myData() {
   document.querySelectorAll(".opts").forEach((e) => e.remove());
-  add("Esto es lo que tengo. Toca **Cambiar** en lo que quieras, o dímelo aquí abajo.", "bot");
+  add(tr("Esto es lo que tengo. Toca **Cambiar** en lo que quieras, o dímelo aquí abajo."), "bot");
   const card = document.createElement("div"); card.className = "coach new";
   for (const [f, label, q] of FIELDS) {
     const row = document.createElement("div"); row.className = "row-edit";
-    row.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button">Cambiar</button>`;
+    row.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button"></button>`; row.querySelector("button").textContent = tr("Cambiar");
     row.querySelector(".k").textContent = label;
     row.querySelector(".v").textContent = (f === "personal_whatsapp" ? pretty(state.answers[f]) : state.answers[f]) || "—";
     row.querySelector("button").onclick = () => editField(f, label, q);
     card.appendChild(row);
   }
+  const lrow = document.createElement("div"); lrow.className = "row-edit";
+  lrow.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button"></button>`;
+  lrow.querySelector(".k").textContent = tr("Idioma de tus propietarios"); lrow.querySelector(".v").textContent = NATIVE[LL()];
+  lrow.querySelector("button").textContent = tr("Cambiar"); lrow.querySelector("button").onclick = () => chooseLang();
+  card.appendChild(lrow);
+  if (state.prospecting) {  // prospecting choices live here too
+    const P = state.prospecting, on = prospSaved(P), prow = document.createElement("div"); prow.className = "row-edit";
+    prow.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button"></button>`;
+    prow.querySelector(".k").textContent = tr("Prospección");
+    prow.querySelector(".v").textContent = on && P.zone_name ? [P.zone_name, ptypeKey(P.property_types) === "both" ? tr("Pisos y casas") : ptypeLabel(ptypeKey(P.property_types)), tr("{n} al día", { n: P.daily_cap })].filter(Boolean).join(" · ") : tr("No activada");
+    prow.querySelector("button").textContent = on ? tr("Cambiar") : tr("Activar"); prow.querySelector("button").onclick = () => startProspectingEdit();
+    card.appendChild(prow);
+  }
   $msgs.appendChild(card); scroll();
-  buttons([{ label: "Seguir donde estaba", onClick: () => render() }]);
+  buttons([{ label: tr("Seguir donde estaba"), onClick: () => render() }]);
 }
 function editField(f, label, q) {
   add(q, "bot");
-  inputRow({ ph: label, type: f === "personal_whatsapp" ? "tel" : "text", value: state.answers[f] || "", zones: f === "zones", joiner: ", ", optional: true, skipLabel: "Cancelar",
+  inputRow({ ph: label, type: f === "personal_whatsapp" ? "tel" : "text", value: state.answers[f] || "", zones: f === "zones", joiner: ", ", optional: true, skipLabel: tr("Cancelar"),
     onSubmit: async (val, skip) => {
       if (skip) return render();
       if (!val && f !== "extra_context") return;
       const r = await api("/answers", { [f]: val });
-      if (r.ok === false) return err(r.error);
+      if (r.ok === false) return err(tr(r.error));
       if (f === "agent_name") store.set("nameOk", "1");
       if (f === "personal_whatsapp") { store.set("ask:phone", "1"); store.set("alertOk", "1"); }
       if (f === "agency" || f === "zones") store.set("ask:" + f, "1");
@@ -663,18 +964,18 @@ function metaCoach(data) {  // Meta tells us which screen the user is on: speak 
   const hi = n ? `${n}, ` : "";
   const ring = /qr|scan|link|device/.test(step) ? 75 : /phone|number/.test(step) ? 50 : /pay|billing|card/.test(step) ? 90 : /business|portfolio|info/.test(step) ? 25 : null;
   if (ring) setOrb("meta", ring);
-  if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", `${hi}ahora coge tu móvil: abre **WhatsApp Business** y confirma lo que Meta te pida (un código o un mensaje con el botón «Conectar»).`);
-  else if (/phone|number/.test(step)) coach(my, "m-phone", `${hi}Meta te pide tu número: pon el de WhatsApp Business, con el que escribes a tus clientes.`);
-  else if (/pay|billing|card/.test(step)) coach(my, "m-pay", `${hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos.`);
-  else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", `${hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.`);
+  if (/qr|scan|link|device/.test(step)) coach(my, "m-qr", tr("{hi}ahora coge tu móvil: abre **WhatsApp Business** → Ajustes → Dispositivos vinculados → Vincular un dispositivo, y **escanea el código QR** de la pantalla.", { hi }));
+  else if (/phone|number/.test(step)) coach(my, "m-phone", tr("{hi}Meta te pide tu número: elige **«Ingresar un nuevo número de teléfono»** y escribe el de tu **WhatsApp Business**. Es lo normal, aunque ya lo uses.", { hi }));
+  else if (/pay|billing|card/.test(step)) coach(my, "m-pay", tr("{hi}Meta pide una tarjeta: es para que WhatsApp te cobre sus céntimos por conversación. Nosotros no la vemos. **Sin ella no podré escribir a tus propietarios.**", { hi }));
+  else if (/business|portfolio|info/.test(step)) coach(my, "m-biz", tr("{hi}revisa que tus datos estén bien y pulsa Siguiente. No hace falta CIF.", { hi }));
 }
 function startMetaCoaching() {  // short tips that cover most cases; Meta's own step signals take over when they arrive; the help chat is the safety net
   const my = gen, n = firstName(state.answers.agent_name), hi = n ? `${n}, ` : "";
   metaTimers.forEach(clearTimeout);
   metaTimers = [
-    setTimeout(() => coach(my, "m1", `${hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.`), 4000),
-    setTimeout(() => coach(my, "m2", "Cuando llegues a elegir cómo conectar, escoge **tu app de WhatsApp Business**."), 20000),
-    setTimeout(() => coach(my, "m3", "¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo."), 60000),
+    setTimeout(() => coach(my, "m1", tr("{hi}Meta te va a pedir iniciar sesión en Facebook. Si no tienes cuenta, puedes crearla ahí mismo.", { hi })), 4000),
+    setTimeout(() => coach(my, "m2", tr("Cuando te pida el número, elige **«Ingresar un nuevo número de teléfono»** y escribe el de tu **WhatsApp Business**. Es lo normal, aunque ya lo uses.")), 20000),
+    setTimeout(() => coach(my, "m3", tr("¿Algo no sale como esperabas? Pulsa «Me ha salido otra cosa» y te ayudo.")), 60000),
   ];
 }
 window.addEventListener("message", (event) => {
@@ -686,29 +987,31 @@ window.addEventListener("message", (event) => {
     else { api("/meta_event", { event: data.event, current_step: data.data && data.data.current_step }); metaCoach(data); }
   } catch (e) {}
 });
+const FB_LOCALE = { es: "es_ES", en: "en_US", fr: "fr_FR" };
 function loadFB() {
   if (fbPromise) return fbPromise;
   return fbPromise = new Promise((resolve) => {
     if (window.FB) return resolve();
     window.fbAsyncInit = () => { FB.init({ appId: META.appId, autoLogAppEvents: true, xfbml: false, version: META.version }); fbReady = true; resolve(); };
-    const s = document.createElement("script"); s.src = "https://connect.facebook.net/es_ES/sdk.js"; s.async = true; s.crossOrigin = "anonymous";
+    const s = document.createElement("script"); s.src = "https://connect.facebook.net/" + FB_LOCALE[LANG] + "/sdk.js"; s.async = true; s.crossOrigin = "anonymous";
     document.body.appendChild(s);
   });
 }
 async function finishSignup(code) {
-  add("Conectando…", "me"); scroll();
+  add(tr("Conectando…"), "me"); scroll();
   const r = await api("/meta", { code, waba_id: signup.waba_id, phone_number_id: signup.phone_number_id });
-  if (r.ok === false) { add((r.error || "Algo falló.") + " Puedes reintentarlo; si se repite, pulsa «Hablar con una persona» arriba y te escribimos.", "bot"); buttons([{ label:"Reintentar", onClick: (el) => launchSignup(el) }, { label: "Me ha salido otra cosa", secondary: true, onClick: () => helpChat("meta") }]); return scroll(); }
+  if (r.ok === false) { add((tr(r.error) || tr("Algo falló.")) + " " + tr("Puedes reintentarlo; si se repite, pulsa «Hablar con una persona» arriba y te escribimos."), "bot"); buttons([{ label: tr("Reintentar"), onClick: (el) => launchSignup(el) }, { label: tr("Me ha salido otra cosa"), secondary: true, onClick: () => helpChat("meta") }]); return scroll(); }
   render();
 }
 let fbPromise = null, fbReady = false;
 function launchSignup(el) {
   const bizName = state.answers.agent_name + (state.answers.agency ? " · " + state.answers.agency : "");
-  try { navigator.clipboard.writeText(bizName).then(() => coach(gen, "copied", `Ya tienes tu nombre copiado («${bizName}»). Si Meta te lo pide, pégalo con Ctrl+V (⌘V en Mac).`)).catch(() => {}); } catch (e) {}  // inside the click: browsers allow it
+  try { navigator.clipboard.writeText(bizName).then(() => coach(gen, "copied", tr("Ya tienes tu nombre copiado («{nombre}»). Si Meta te lo pide, pégalo con Ctrl+V (⌘V en Mac).", { nombre: bizName }))).catch(() => {}); } catch (e) {}  // inside the click: browsers allow it
   if (FAKE) { el.disabled = true; signup = { waba_id:"fake-waba", phone_number_id:"fake-phone-" + TOKEN.slice(0,6) }; return finishSignup("fake-code"); }
-  if (!fbReady) { err("Cargando Meta… pulsa de nuevo en un segundo."); loadFB(); return; }
+  if (!fbReady) { err(tr("Cargando Meta… pulsa de nuevo en un segundo.")); loadFB(); return; }
   el.disabled = true; setOrb("meta", 10); startMetaCoaching();
   const a = state.answers;
+  const digits = (a.personal_whatsapp || "").replace(/\D/g, "");
   const realOpen = window.open;  // the SDK opens Meta's window itself; steer it to the right edge, like Google's
   if (window.innerWidth >= 1000) {
     window.open = function (u, n, f) {
@@ -729,14 +1032,15 @@ function launchSignup(el) {
       const wait = (n) => signup.waba_id ? finishSignup(code) : (n > 0 ? setTimeout(() => wait(n-1), 300) : finishSignup(code));
       wait(20);
     } else {
-      add("La ventana se cerró antes de terminar. Puedes volver a intentarlo cuando quieras.", "bot"); scroll();
+      add(tr("La ventana se cerró antes de terminar. Puedes volver a intentarlo cuando quieras."), "bot"); scroll();
     }
   }, {
     config_id: META.configId,
     response_type: "code",
     override_default_response_type: true,
     extras: {
-      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined } },  // no phone pre-fill: Meta must offer to connect the existing WhatsApp Business app
+      setup: { business: { name: a.agent_name + (a.agency ? " · " + a.agency : ""), email: a.email || undefined, website: store.get("web") || undefined,
+               phone: digits ? { code: +state.cc, number: digits.replace(new RegExp("^" + state.cc), "") } : undefined } },
       featureType: "whatsapp_business_app_onboarding",
       sessionInfoVersion: "3",
     },
@@ -744,6 +1048,18 @@ function launchSignup(el) {
   window.open = realOpen;
 }
 
+// ---- static texts and the language switch
+document.documentElement.lang = LANG;
+document.getElementById("subtitle").textContent = tr("Asistente IA de Sparrow");
+document.getElementById("helpbtn").textContent = tr("Hablar con una persona");
+document.getElementById("mydata").textContent = tr("Mis datos");
+document.getElementById("askbtn").textContent = tr("Preguntar algo");
+$att.setAttribute("aria-label", tr("Subir captura")); document.getElementById("send").setAttribute("aria-label", tr("Enviar"));
+for (const code of ["es", "en", "fr"]) {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = code.toUpperCase(); if (code === LANG) b.className = "on";
+  b.onclick = () => { try { document.cookie = `lang=${code};path=/;max-age=31536000;samesite=lax`; } catch (e) {} const u = new URL(location.href); u.searchParams.set("lang", code); location.href = u.toString(); };
+  document.getElementById("langs").appendChild(b);
+}
 render();
 </script>
 {% endblock %}
