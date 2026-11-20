@@ -207,6 +207,7 @@ def test_api_errors_stop_the_run_without_retry(account):
     FakeCasafari.fail_with = casafari.CasafariOutOfTokens("no tokens", "https://example.test/upgrade")
     r = run(account)
     assert r["error"] == "CasafariOutOfTokens" and r["created"] == 0
+    configure(account)  # a 402 now pauses the account (source_credit); switch it back on to test the 429 case
     FakeCasafari.fail_with = casafari.CasafariRateLimited("slow down", 30)
     assert run(account)["error"] == "CasafariRateLimited"
 

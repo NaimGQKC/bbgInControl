@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     casafari_mode: str = "fake"  # live | fake
     casafari_api_key: str = ""
     prospecting_max_pages_per_run: int = 1  # paid searches per account per run (10 tokens each); hard-capped at 4
+    prospecting_poll_hours: int = 3  # how often new listings are pulled per enabled account (inside allowed hours); 1 page = 10 tokens = EUR 0.40
     prospecting_retention_days: int = 365  # a never-answered CASAFARI lead is deleted after this
     casafari_closed_on: str = ""  # YYYY-MM-DD the CASAFARI account closed: their data must go within 30 days
 

@@ -84,6 +84,14 @@
   .suggest button { padding:6px 12px; font-size:13px; border-radius:99px; flex:none !important; }
   .chip { display:flex; align-items:center; gap:8px; margin:6px 0; } .chip code { flex:1; }
   .chip button { padding:5px 10px; font-size:13px; }
+  .opts .btn.long { border-radius:18px; text-align:left; line-height:1.3; }
+  .pedit { display:flex; flex-direction:column; gap:10px; }
+  .pedit textarea.ed { min-height:150px; font-size:16px; line-height:1.45; resize:vertical; }
+  .fchips { display:flex; flex-wrap:wrap; gap:6px; } .fchips .btn { padding:5px 10px; font-size:13px; border-radius:99px; font-family:"IBM Plex Mono", monospace; font-weight:500; }
+  .plist { margin:0; padding-left:18px; font-size:14px; } .plist:empty { display:none; } .plist.probs { color:var(--bad); } .plist.warns { color:var(--muted); } .plist li { margin:3px 0; }
+  .risks { margin:0; padding-left:20px; } .risks li { margin:7px 0; }
+  .btnrow { display:flex; flex-wrap:wrap; gap:8px; }
+  .pedit .wa2 { align-self:stretch; } .pedit .wab { max-width:100%; word-break:break-word; }
   @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 </style>
 {% endblock %}
@@ -268,13 +276,14 @@ function buttons(list, side = false) {
   list.forEach((b) => { const el = document.createElement("button"); el.type = "button"; el.className = "btn " + (b.secondary ? "secondary " : "") + (b.cls || ""); el.innerHTML = b.label; el.onclick = () => b.onClick(el); row.appendChild(el); });
   $msgs.appendChild(row); scroll();
 }
-function inputRow({ ph = "", type = "text", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false, value = "" }) {
+function inputRow({ ph = "", type = "text", onSubmit, optional = false, skipLabel = "Saltar", suggestions = [], joiner = ". ", zones = false, value = "", extra = [] }) {
   document.querySelectorAll(".opts.main").forEach((e) => e.remove());
   setExpect({ ph, type, value, onSubmit });
   const row = document.createElement("div"); row.className = "opts main";
   const pill = (t, on, secondary = true) => { const b = document.createElement("button"); b.type = "button"; b.className = "btn " + (secondary ? "secondary" : ""); b.textContent = t; b.onclick = () => on(b); row.appendChild(b); return b; };
   for (const text of suggestions) pill(text, () => { $ci.value = $ci.value ? `${$ci.value}${joiner}${text}` : text; resize(); $ci.focus(); });  // tap an example to add it; the agent can edit freely
   if (zones) zonePicker(row, pill);
+  for (const x of extra) { const b = pill(x.label, () => x.onClick(), false); b.classList.add("long"); }  // choices that are tapped instead of typed
   if (optional) pill(skipLabel, () => onSubmit("", true));
   if (row.children.length) $msgs.appendChild(row);
   err(""); scroll();
@@ -581,6 +590,9 @@ async function flow(my) {
     }
   }
 
+  // 3c. Prospecting (optional, never blocks): the agent sets up automatic searches of private owners and writes the message
+  if (!(await prospecting(my, early))) return;
+
   // 4. Payment (only when a Stripe link is configured)
   if (pay.required) {
     await bot(tr("Ya casi. La puesta en marcha cuesta {fee} € una sola vez. Después, solo pagas {per} € por cada cita que te agende: si no hay citas, no pagas nada más.", { fee: pay.fee, per: pay.per_meeting }));
@@ -679,6 +691,222 @@ async function flow(my) {
   summaryCard();
   await bot(tr("De conectar tu fuente de leads nos encargamos nosotros; te escribiremos si necesitamos algo."));
 }
+// ---- prospecting: new private owners in one zone, found and written to automatically. Opt-in; the agent writes the message and accepts the risks.
+const PT = { flats: ["apartment"], houses: ["house"], both: ["apartment", "house"] };
+const pdraft = {  // answers so far, kept in this browser so a reload resumes; the server only learns at the final tap
+  get() { try { return JSON.parse(store.get("pdraft") || "{}") || {}; } catch (e) { return {}; } },
+  set(p) { store.set("pdraft", JSON.stringify({ ...pdraft.get(), ...p })); },
+  clear() { store.set("pdraft", ""); },
+};
+const nz = (x) => (x == null ? null : x);
+const ptypeKey = (arr) => { arr = arr || []; return arr.includes("apartment") && arr.includes("house") ? "both" : arr.includes("house") ? "houses" : arr.includes("apartment") ? "flats" : undefined; };
+const ptypeLabel = (k) => ({ flats: tr("Pisos"), houses: tr("Casas"), both: tr("Ambos") }[k]);
+const eur = (n) => n.toLocaleString({ es: "es-ES", fr: "fr-FR", en: "en-GB" }[LANG]) + " €";
+const prospSaved = (P) => !!(P && P.done && P.location_id) || store.get("prosp") === "done";  // the server keeps `done` once they answered this step
+const prospSkipped = (P) => store.get("prosp") === "skipped" || !!(P && P.done && !P.location_id);
+function parsePrice(t) {  // "150.000", "150000", "150k", "150 mil", "1,5M" -> 150000...; null when it can't be a price
+  const s = String(t || "").toLowerCase().replace(/euros?|€|\s/g, ""); let v = null, m;
+  if ((m = s.match(/^(\d+(?:[.,]\d+)?)(millon(?:es)?|million(?:s)?|mil|mm|k|m)$/))) v = parseFloat(m[1].replace(",", ".")) * (/^(k|mil)$/.test(m[2]) ? 1e3 : 1e6);
+  else if (/^\d{1,3}([.,]\d{3})+$/.test(s) || /^\d+$/.test(s)) v = parseInt(s.replace(/[.,]/g, ""), 10);
+  v = v == null ? null : Math.round(v);
+  return v != null && v >= 1000 && v <= 20000000 ? v : null;
+}
+const priceText = (mn, mx) => mn && mx ? `${eur(mn)} – ${eur(mx)}` : mn ? tr("Desde {a}", { a: eur(mn) }) : mx ? tr("Hasta {a}", { a: eur(mx) }) : tr("Sin límite");
+const probText = (c) => {  // the checks of the message, in plain words
+  if (c === "too_short") return tr("Es demasiado corto: escribe al menos una frase que diga quién eres y por qué escribes.");
+  if (c === "too_long") return tr("Es demasiado largo: máximo 600 caracteres, para que se lea de un vistazo.");
+  if (c === "link_not_allowed") return tr("Sin enlaces en tu texto: WhatsApp suele rechazar los mensajes a desconocidos que llevan enlaces. El único enlace necesario ya lo pongo yo al final.");
+  if (c === "starts_or_ends_with_field") return tr("No puede empezar ni terminar con un campo entre llaves: añade alguna palabra antes o después (por ejemplo «Hola» al principio).");
+  if (c.startsWith("unknown_field:")) return tr("Hay un campo que no conozco: {campo}. Usa solo los cinco que te he indicado.", { campo: c.slice(14).split(",").map((x) => "{" + x + "}").join(", ") });
+  return c;
+};
+const warnText = (c) => c === "promise_words" ? tr("Consejo: palabras como «garantizado» o «gratis» hacen que Meta rechace el mensaje o que el propietario desconfíe. Puedes dejarlas, pero yo las quitaría.")
+  : c === "shouting" ? tr("Consejo: hay muchas mayúsculas y suena a grito. Mejor en minúsculas normales. Tú decides.") : c;
+const outcomeText = (kind) => kind === "on" ? tr("Antes de empezar, Meta tiene que aprobar tu mensaje (normalmente tarda de minutos a unas horas). En cuanto lo apruebe, empiezo sola. Si quieres cambiar algo más adelante, pulsa «Hablar con una persona».")
+  : kind === "not_live" ? tr("Empezaré sola en cuanto tu WhatsApp esté conectado. Y antes, Meta tiene que aprobar tu mensaje (normalmente tarda de minutos a unas horas). Si quieres cambiar algo más adelante, pulsa «Hablar con una persona».")
+  : tr("Lo he guardado, pero de momento no está en marcha. Pulsa «Hablar con una persona» y lo revisamos juntos.");
+
+function waBubble(text) {  // the message as the owner reads it (same look as the first-message demo)
+  const wa = document.createElement("div"); wa.className = "wa2";
+  wa.innerHTML = `<div class="wa-head"><div class="wa-av"></div><div><b></b></div></div><div class="wa-body"><div class="wab in"><span class="tx"></span></div></div>`;
+  wa.querySelector(".wa-av").textContent = (state.answers.agent_name || "T").charAt(0);
+  wa.querySelector("b").textContent = (firstName(state.answers.agent_name) || tr("Tu nombre")) + (state.answers.agency ? " · " + state.answers.agency : "");
+  wa.querySelector(".tx").textContent = text; return wa;
+}
+function startProspectingEdit() {  // from "Mis datos": start from what is saved, change anything, confirm again
+  const P = state.prospecting || {}, saved = prospSaved(P) && P.location_id;
+  store.set("pdraft", JSON.stringify(saved ? { offer: "yes", place: { id: P.location_id, name: P.zone_name || "" }, types: ptypeKey(P.property_types), min: nz(P.min_price), max: nz(P.max_price), cap: P.daily_cap, body: P.cold_body, last: P.cold_body, pitch: P.success_pitch || "", ack: true } : { offer: "yes" }));
+  store.set("prosp", ""); store.set("prosp:edit", "1"); render();
+}
+async function skipProspecting() {  // "not now" never blocks anything; the server just learns they answered
+  store.set("prosp", "skipped"); store.set("prosp:edit", "0"); pdraft.clear();
+  try { await api("/prospecting", { enabled: false }); } catch (e) {}
+  render();
+}
+function bodyEditor(initial, P, onUse) {  // simple inline editor: the exact message is shown underneath and re-checked as they type
+  document.querySelectorAll(".opts.main").forEach((e) => e.remove());
+  const card = document.createElement("div"); card.className = "coach pedit new";
+  card.innerHTML = `<textarea class="ed" rows="7" maxlength="1500"></textarea><div class="fchips"></div><div class="small muted cnt"></div>
+    <div class="small muted lbl"></div><div class="prev"></div><ul class="plist probs"></ul><ul class="plist warns"></ul>
+    <div class="btnrow"><button class="btn use" type="button" disabled></button><button class="btn secondary orig" type="button"></button></div>`;
+  const ta = card.querySelector("textarea"), use = card.querySelector(".use"), probs = card.querySelector(".probs"), warns = card.querySelector(".warns"), prev = card.querySelector(".prev"), cnt = card.querySelector(".cnt");
+  ta.value = initial; ta.setAttribute("aria-label", tr("Tu primer mensaje"));
+  card.querySelector(".lbl").textContent = tr("Así lo leerá un propietario (con datos de ejemplo):");
+  use.textContent = tr("Usar este mensaje"); card.querySelector(".orig").textContent = tr("Volver al texto sugerido");
+  for (const f of ["nombre", "tipo", "zona", "agente", "agencia"]) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "btn secondary"; b.textContent = "{" + f + "}";
+    b.onclick = () => { ta.setRangeText("{" + f + "}", ta.selectionStart, ta.selectionEnd, "end"); ta.focus(); ta.dispatchEvent(new Event("input")); };
+    card.querySelector(".fchips").appendChild(b);
+  }
+  let seq = 0, timer = null;
+  const li = (el, t) => { const x = document.createElement("li"); x.textContent = t; el.appendChild(x); };
+  const run = async (mine) => {
+    const body = ta.value, r = await api("/prospecting/preview", { cold_body: body });
+    if (mine !== seq || !card.isConnected) return;
+    probs.innerHTML = ""; warns.innerHTML = "";
+    if (!r || typeof r.text !== "string" || !Array.isArray(r.problems)) { li(probs, tr("No puedo comprobar el texto ahora mismo. Inténtalo de nuevo en un momento.")); return; }
+    prev.innerHTML = ""; prev.appendChild(waBubble(r.text));
+    r.problems.forEach((c) => li(probs, probText(c))); (r.warnings || []).forEach((c) => li(warns, warnText(c)));
+    if (!/asistente virtual|assistant virtuel|virtual assistant|assistante virtuelle/i.test(body)) li(warns, tr("Consejo: deja claro que escribes como asistente virtual de {agente}, como en el texto sugerido."));
+    use.disabled = r.problems.length > 0;
+  };
+  const changed = () => { const mine = ++seq; use.disabled = true; cnt.textContent = ta.value.trim().length + " / 600"; clearTimeout(timer); timer = setTimeout(() => run(mine), 450); };
+  ta.addEventListener("input", changed);
+  card.querySelector(".orig").onclick = () => { ta.value = P.cold_body || initial; changed(); };
+  use.onclick = () => { if (!use.disabled) onUse(ta.value.trim()); };
+  $msgs.appendChild(card); scroll(); changed();
+}
+// returns true when the conversation can go on to the next step, false when it is waiting for the agent
+async function prospecting(my, early) {
+  const P = state.prospecting;
+  if (!P) return true;  // nothing to set up for this account
+  const editing = store.get("prosp:edit") === "1", saved = prospSaved(P);
+  if (!early && !editing && !saved) return true;  // they went past this point before the step existed
+  const bot = (t) => say(t, "bot", my), me = (t) => say(t, "me", my);
+  const OFFER = tr("¿Quieres que además busque propietarios particulares nuevos en tu zona y les escriba por ti?");
+  if (prospSkipped(P) && !editing && !saved) { await bot(OFFER); await me(tr("Ahora no")); return true; }
+  if (saved && !editing) {  // done: short recap, then on to the next step
+    await bot(OFFER); await me(tr("Sí, quiero"));
+    await bot(tr("Hecho: busco propietarios particulares nuevos en **{zona}** (como máximo {n} al día) y les escribo por ti.", { zona: P.zone_name || "", n: P.daily_cap || "" }));
+    await bot(outcomeText(store.get("pres") || (P.enabled ? "on" : "not_live")));
+    return true;
+  }
+  const d = pdraft.get();
+  // 1. offer
+  await bot(OFFER);
+  if (!d.offer) {
+    await bot(tr("Cada día miro los anuncios nuevos de particulares, les escribo desde tu WhatsApp, descubro si venden de verdad y te agendo la valoración en tu calendario."));
+    buttons([{ label: tr("Sí, quiero"), onClick: () => { pdraft.set({ offer: "yes" }); render(); } },
+             { label: tr("Ahora no"), secondary: true, onClick: () => skipProspecting() }]);
+    return false;
+  }
+  await me(tr("Sí, quiero"));
+  // 2. one zone: type it, tap the match
+  const ZQ = tr("¿Qué zona quieres que vigile? Escribe un municipio o un distrito (solo una zona por ahora).");
+  await bot(ZQ);
+  if (d.place) await me(d.place.name);
+  else {
+    const first = String(state.answers.zones || "").split(",")[0].trim();
+    const ask = (extra = []) => inputRow({ ph: tr("Municipio o distrito"), suggestions: first ? [first] : [], extra, onSubmit: search });
+    const search = async (val) => {
+      if (!val) return;
+      if (val.length < 3) return err(tr("Escribe al menos 3 letras."));
+      add(val, "me"); scroll(); document.querySelectorAll(".opts.main").forEach((e) => e.remove());
+      const thinking = add("…", "bot", false); thinking.classList.add("think"); scroll();
+      const r = await api("/places?q=" + encodeURIComponent(val)); thinking.remove();
+      const list = r && Array.isArray(r.places) ? r.places.slice(0, 5) : null;
+      if (r && r.error === "rate_limited") { add(tr("Has hecho muchas búsquedas seguidas. Espera un poco y vuelve a probar, o pulsa «Hablar con una persona» arriba."), "bot"); return ask(); }
+      if (!list || r.error) { add(tr("No he podido buscar ahora mismo. Inténtalo otra vez en un momento."), "bot"); return ask(); }
+      if (!list.length) { add(tr("No encuentro esa zona. Prueba con otro nombre: el municipio o el distrito, como lo escribirías en un portal."), "bot"); return ask(); }
+      add(tr("Toca tu zona, o escribe otra:"), "bot");
+      ask(list.map((p) => ({ label: p.detail ? `${p.name} — ${p.detail}` : p.name, onClick: () => { pdraft.set({ place: { id: p.id, name: p.name } }); render(); } })));
+    };
+    ask(); return false;
+  }
+  // 3. what to look for
+  const TQ = tr("¿Qué quieres que busque: pisos, casas o los dos?");
+  await bot(TQ);
+  if (d.types) await me(ptypeLabel(d.types));
+  else {
+    buttons(["flats", "houses", "both"].map((k, i) => ({ label: ptypeLabel(k), secondary: i < 2, onClick: () => { pdraft.set({ types: k }); render(); } })));
+    return false;
+  }
+  const priceAsk = (key, ph) => inputRow({ ph, optional: true, skipLabel: tr("Sin límite"), onSubmit: (val, skip) => {
+    if (skip || !val) { pdraft.set({ [key]: null }); return render(); }
+    const v = parsePrice(val);
+    if (v == null) return err(tr("No entiendo esa cifra. Escríbela con números, por ejemplo 150.000 o 150k."));
+    if (key === "max" && d.min && v < d.min) return err(tr("El máximo tiene que ser mayor que el mínimo."));
+    pdraft.set({ [key]: v }); render(); } });
+  await bot(tr("¿Desde qué precio? Puedes escribirlo como 150.000 o 150k. (opcional)"));
+  if (d.min !== undefined) await me(d.min ? eur(d.min) : tr("Sin límite")); else { priceAsk("min", "150.000"); return false; }
+  await bot(tr("¿Y hasta qué precio? (opcional)"));
+  if (d.max !== undefined) await me(d.max ? eur(d.max) : tr("Sin límite")); else { priceAsk("max", "300.000"); return false; }
+  await bot(tr("¿Cuántos propietarios nuevos quieres, como máximo, cada día?"));
+  if (d.cap) await me(tr("{n} al día", { n: d.cap }));
+  else {
+    await bot(tr("La primera semana empiezo despacio a propósito, para proteger tu número de WhatsApp; luego subo hasta el máximo que elijas."));
+    buttons([3, 5, 10].map((n) => ({ label: tr("{n} al día", { n }), secondary: n !== 5, onClick: () => { pdraft.set({ cap: n }); render(); } })));
+    return false;
+  }
+  // 4. the message is theirs
+  await bot(tr("Ahora lo más importante: **el primer mensaje es tuyo**. Te propongo este; cámbialo como quieras."));
+  if (d.body) await me(d.body);
+  else {
+    await bot(tr("Puedes usar estos campos y yo los relleno con los datos de cada anuncio: {nombre}, {tipo}, {zona}, {agente} y {agencia}."));
+    await bot(tr("Al final de tu texto añado siempre una línea fija: cómo darse de baja ({baja}) y de dónde salió el número. No se puede quitar: lo piden WhatsApp y la normativa de protección de datos.", { baja: LL() === "es" ? "BAJA" : "STOP" }));
+    bodyEditor(d.last || P.cold_body || "", P, (body) => { pdraft.set({ body, last: body, ack: undefined }); render(); });
+    return false;
+  }
+  await bot(tr("Opcional: si un propietario me dice que no, puedo mencionar tus resultados. Escríbelos tal como quieras que se digan, solo con datos reales (por ejemplo: «He vendido 12 pisos en esta zona este año»)."));
+  if (d.pitch !== undefined) await me(d.pitch || tr("Sin resultados"));
+  else {
+    inputRow({ ph: tr("Tus resultados, con tus palabras"), optional: true, skipLabel: tr("Sin resultados"), onSubmit: (val, skip) => {
+      if (skip || !val) { pdraft.set({ pitch: "" }); return render(); }
+      if (val.length > 400) return err(tr("Máximo 400 caracteres: ahora llevas {n}.", { n: val.length }));
+      pdraft.set({ pitch: val }); render(); } });
+    return false;
+  }
+  // 5. risks, in plain words; only an explicit tap counts
+  const risks = Array.isArray(P.risks) ? P.risks : [];
+  await bot(tr("Antes de activarlo, cuatro cosas que conviene que sepas. Te las cuento como te las diría un compañero:"));
+  const rc = document.createElement("div"); rc.className = "coach warn new"; const ul = document.createElement("ul"); ul.className = "risks";
+  risks.forEach((t) => { const l = document.createElement("li"); l.textContent = t; ul.appendChild(l); }); rc.appendChild(ul); $msgs.appendChild(rc); scroll();
+  const ACK = tr("Entiendo los riesgos y me hago responsable del texto y de los contactos");
+  if (d.ack) await me(ACK);
+  else {
+    buttons([{ label: ACK, onClick: () => { pdraft.set({ ack: true }); render(); } },
+             { label: tr("Ahora no"), secondary: true, onClick: () => skipProspecting() }]);
+    return false;
+  }
+  // 6. summary and the final tap
+  await bot(tr("Esto es lo que voy a activar. ¿Lo dejo en marcha?"));
+  const card = document.createElement("div"); card.className = "coach new";
+  const rows = [[tr("Zona"), d.place.name], [tr("Inmuebles"), d.types === "both" ? tr("Pisos y casas") : ptypeLabel(d.types)], [tr("Precio"), priceText(d.min, d.max)], [tr("Máximo al día"), String(d.cap)], [tr("Mensaje"), d.body]];
+  if (d.pitch) rows.push([tr("Tus resultados"), d.pitch]);
+  card.innerHTML = rows.map(() => `<div class="chip" style="align-items:flex-start"><span class="small muted" style="min-width:88px"></span><span class="sv" style="flex:1;white-space:pre-line;word-break:break-word"></span></div>`).join("");
+  card.querySelectorAll(".chip").forEach((el, k) => { el.firstChild.textContent = rows[k][0]; el.querySelector(".sv").textContent = rows[k][1]; });
+  $msgs.appendChild(card); scroll();
+  const activate = async (el) => {
+    el.disabled = true; err("");
+    const r = await api("/prospecting", { enabled: true, location_id: d.place.id, zone_name: d.place.name, property_types: PT[d.types], min_price: nz(d.min), max_price: nz(d.max), daily_cap: d.cap, cold_body: d.body, success_pitch: d.pitch || "", ack_risk: true });
+    if (!r || r.saved !== true) {
+      el.disabled = false;
+      const why = r && Array.isArray(r.problems) && r.problems.length ? r.problems.map(probText).join(" ") : r && r.error ? tr(r.error) : "";
+      add((why ? why + " " : "") + tr("No he podido guardarlo ahora mismo. Inténtalo otra vez; si se repite, pulsa «Hablar con una persona» arriba."), "bot"); return scroll();
+    }
+    store.set("pres", r.enabled ? "on" : r.reason === "not_live" ? "not_live" : "other"); store.set("prosp", "done"); store.set("prosp:edit", "0"); pdraft.clear();
+    await api(""); render();
+  };
+  const change = (patch, label) => ({ label, secondary: true, onClick: () => { pdraft.set(patch); render(); } });
+  buttons([{ label: tr("Sí, actívalo"), onClick: activate },
+    { label: tr("Cambiar algo"), secondary: true, onClick: () => {
+        add(tr("¿Qué quieres cambiar?"), "bot");
+        buttons([change({ place: undefined }, tr("Zona")), change({ types: undefined }, tr("Inmuebles")), change({ min: undefined, max: undefined }, tr("Precio")), change({ cap: undefined }, tr("Máximo al día")),
+                 change({ body: undefined, ack: undefined }, tr("Mensaje")), change({ pitch: undefined }, tr("Tus resultados")),
+                 ...(editing ? [{ label: tr("Dejarlo como estaba"), onClick: () => { store.set("prosp:edit", "0"); pdraft.clear(); render(); } }] : [])]);
+      } }]);
+  return false;
+}
 function chooseLang() {  // the three languages, each in its own name
   buttons(["es", "fr", "en"].filter((c) => c !== LL()).map((c) => ({ label: NATIVE[c], onClick: async () => {
     const r = await api("/answers", { lead_lang: c }); if (r.ok === false) return err(tr(r.error));
@@ -703,6 +931,14 @@ function myData() {
   lrow.querySelector(".k").textContent = tr("Idioma de tus propietarios"); lrow.querySelector(".v").textContent = NATIVE[LL()];
   lrow.querySelector("button").textContent = tr("Cambiar"); lrow.querySelector("button").onclick = () => chooseLang();
   card.appendChild(lrow);
+  if (state.prospecting) {  // prospecting choices live here too
+    const P = state.prospecting, on = prospSaved(P), prow = document.createElement("div"); prow.className = "row-edit";
+    prow.innerHTML = `<span class="small muted k"></span><span class="v"></span><button class="btn secondary" type="button"></button>`;
+    prow.querySelector(".k").textContent = tr("Prospección");
+    prow.querySelector(".v").textContent = on && P.zone_name ? [P.zone_name, ptypeKey(P.property_types) === "both" ? tr("Pisos y casas") : ptypeLabel(ptypeKey(P.property_types)), tr("{n} al día", { n: P.daily_cap })].filter(Boolean).join(" · ") : tr("No activada");
+    prow.querySelector("button").textContent = on ? tr("Cambiar") : tr("Activar"); prow.querySelector("button").onclick = () => startProspectingEdit();
+    card.appendChild(prow);
+  }
   $msgs.appendChild(card); scroll();
   buttons([{ label: tr("Seguir donde estaba"), onClick: () => render() }]);
 }

@@ -5,6 +5,7 @@ and every variable needs an example. Change the version suffix when you change a
 """
 from dataclasses import dataclass, field
 
+from . import coldmsg
 from .lang import TEXTS as _TEXTS
 
 
@@ -194,6 +195,29 @@ OPS_NEEDS_HELP = Template(
     example=("Laura García", "whatsapp", "+34611111111", "no me sale el código QR"),
     number="sparrow",
 )
+
+# --- Cold first contact to private owners (prospecting): one template PER AGENT, written by the agent ---
+# The agent's text + Sparrow's mandatory footer (app/coldmsg.py). Lives in the agent's own WhatsApp account, so the
+# name only has to be unique per agent; a new text gets a new version (Meta never lets an approved text change).
+COLD_PREFIX = "cold_first_contact_v"
+
+
+def cold_name(version: int) -> str:
+    return f"{COLD_PREFIX}{int(version)}"
+
+
+def cold_first_contact(version: int, lang: str, body: str, privacy_url: str) -> Template:
+    """The per-agent template, only in the agent's lead language. {{n}} follow coldmsg.used_fields(body)."""
+    text, example = coldmsg.to_template_body(body, lang, privacy_url)
+    return Template(
+        name=cold_name(version),
+        category="MARKETING",
+        body=text,
+        params=tuple(coldmsg.used_fields(body)),
+        example=tuple(example),
+        texts={lang: (text, tuple(example))},
+    )
+
 
 AGENT_TEMPLATES = [
     LEAD_FIRST_CONTACT,

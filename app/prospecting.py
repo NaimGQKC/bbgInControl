@@ -6,6 +6,18 @@ agent's filters, removes duplicates (same phone, same URL, same flat on several 
 anywhere), stops at the daily cap, and hands each one to `engine.ingest_lead`. Nothing here messages anybody: the
 normal first_contact job, `can_contact` and `send_to_lead` do that, with all their guards.
 
+Cost: every pull (one CASAFARI page, up to 25 listings) costs 10 CASAFARI tokens = EUR 0.40 (casafari.TOKENS_PER_SEARCH,
+EUR_PER_TOKEN). With PROSPECTING_MAX_PAGES_PER_RUN=1 and a pull every PROSPECTING_POLL_HOURS (default 3) inside the allowed
+hours (09:00-21:00, about 4 pulls a day) one enabled account costs about EUR 1.60 a day at most. A run that finds the daily
+cap already reached pulls nothing.
+
+Safety: before every pull the account is checked. If the WhatsApp number quality is not healthy, or more than 15% of the
+last 50 prospecting leads opted out, prospecting is switched off for that account ("paused_reason") and the operator (and
+the agent) are alerted. A CASAFARI 402 (no tokens) pauses it too, operator alert only. Nothing resumes by itself: only the
+operator ("Reanudar" in /admin/prospecting). The agent's own cold first message must have an APPROVED Meta template
+("cold_template_status") before anything is pulled. New accounts ramp up: at most 3 leads a day for the first 3 days after
+the agent confirmed, 5 a day until day 7, then their own cap.
+
 Each lead keeps where it came from in `facts["_source"]` (keys starting with "_" never reach the AI), including the
 date CASAFARI's terms make us delete it (`expires`). The daily `source_cleanup` job does that deletion.
 """
@@ -22,11 +34,16 @@ from . import lang as L
 from .config import get_settings
 from .db import utcnow
 from .guards import in_allowed_hours, next_allowed_time, normalize_phone, tidy_name, to_local, to_utc_naive
-from .models import Account, Event, Job, Lead, LlmTurn, Meeting, Message
+from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Message
 
 log = logging.getLogger("sparrow.prospecting")
 
 SOURCE = "casafari"
+RAMP = ((3, 3), (7, 5))  # (days since confirmed_at below which, daily cap): 3 a day for 3 days, 5 a day until day 7
+OPT_OUT_WINDOW = 50  # the last N prospecting leads
+OPT_OUT_MAX_RATE = 0.15  # more than this share opted out -> pause
+OPT_OUT_MIN_SAMPLE = 10  # fewer leads than this say nothing yet (one "no" out of two is not a trend)
+QUALITY_OK = {"", "GREEN", "UNKNOWN"}  # Meta quality_rating of the agent's number; YELLOW, RED, FLAGGED... are not healthy
 MAX_PAGES_HARD = 4  # the Free plan's page depth (100 results); never more, whatever the settings say
 MAX_DAILY_CAP = 50
 MAX_LOOKBACK_DAYS = 89  # the API accepts at most 90 days back
@@ -253,7 +270,87 @@ def why_not(account: Account, cfg: dict) -> str | None:
         return "account_not_live"
     if L.lead_lang(account) != "es":
         return "not_spain"
+    if cfg.get("cold_body") and cfg.get("cold_template_status") != "approved":
+        return "template_pending"  # the agent's own first message waits for Meta's approval; accounts set by hand (no cold_body) use the standard template
     return None
+
+
+def effective_cap(cfg: dict, now: datetime | None = None) -> int:
+    """The agent's daily cap, held down while the number is new to this: 3 a day for the first 3 days after the agent
+    confirmed (cfg["confirmed_at"]), 5 a day until day 7. Without confirmed_at (set by hand) there is no ramp."""
+    cap = max(0, min(int(cfg.get("daily_cap") or 0), MAX_DAILY_CAP))
+    raw = cfg.get("confirmed_at")
+    if raw:
+        try:
+            days = ((now or utcnow()) - datetime.fromisoformat(str(raw)).replace(tzinfo=None)).days
+        except ValueError:
+            days = 0
+        for limit_days, ramp_cap in RAMP:
+            if days < limit_days:
+                return min(cap, ramp_cap)
+    return cap
+
+
+# ---------------------------------------------------------------- auto-pause (never resumes by itself)
+
+PAUSE_TEXT_AGENT = {  # what the agent reads after "necesita que revises algo:" (agent alerts use the agent's language)
+    "quality": {
+        "es": "tu prospección automática está en pausa porque WhatsApp marca la calidad de tu número como baja. Revisa tu número y escríbenos",
+        "fr": "votre prospection automatique est en pause car WhatsApp juge la qualité de votre numéro trop basse. Vérifiez votre numéro et écrivez-nous",
+        "en": "your automatic prospecting is paused because WhatsApp rates your number's quality as low. Check your number and write to us",
+    },
+    "opt_outs": {
+        "es": "tu prospección automática está en pausa porque muchos propietarios han pedido no recibir más mensajes. Revisa el texto del primer mensaje y escríbenos",
+        "fr": "votre prospection automatique est en pause car beaucoup de propriétaires ont demandé à ne plus recevoir de messages. Revoyez le premier message et écrivez-nous",
+        "en": "your automatic prospecting is paused because many owners asked not to receive more messages. Review your first message and write to us",
+    },
+}
+PAUSE_TEXT_OPS = {
+    "quality": "Prospecting pausado: la calidad del número de WhatsApp no es buena",
+    "opt_outs": "Prospecting pausado: más del 15% de los últimos propietarios pidió la baja",
+    "source_credit": "Prospecting pausado: CASAFARI sin tokens (402). Recarga y reanuda a mano",
+}
+
+
+def wa_quality(s, account: Account) -> str:
+    """The Meta quality rating of the agent's number as stored on the meta integration (`external["quality_rating"]`:
+    GREEN / YELLOW / RED / FLAGGED ...). Read only: this module never calls Meta. Empty = unknown = healthy."""
+    integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+    return str(((integ.external or {}) if integ else {}).get("quality_rating") or "").strip().upper()
+
+
+def opt_out_rate(s, account: Account) -> tuple[int, int]:
+    """(opted out, total) among the last OPT_OUT_WINDOW prospecting leads of the account (test leads excluded)."""
+    rows = s.execute(select(Lead.do_not_contact).where(Lead.account_id == account.id, Lead.source == SOURCE, Lead.is_test.is_(False))
+                     .order_by(Lead.id.desc()).limit(OPT_OUT_WINDOW)).scalars().all()
+    return sum(1 for r in rows if r), len(rows)
+
+
+def health_problem(s, account: Account) -> str | None:
+    if wa_quality(s, account) not in QUALITY_OK:
+        return "quality"
+    out, total = opt_out_rate(s, account)
+    if total >= OPT_OUT_MIN_SAMPLE and out / total > OPT_OUT_MAX_RATE:
+        return "opt_outs"
+    return None
+
+
+def pause(s, account: Account, reason: str, *, tell_agent: bool) -> None:
+    """Switch prospecting off for this account and say why ("quality" | "opt_outs" | "source_credit" | "operator").
+    The operator gets an alert; the agent too when it is their number or text that caused it. Never resumes by itself."""
+    from . import engine
+    from . import templates as T
+
+    cfg = dict((account.settings or {}).get("prospecting") or {})
+    cfg.update({"enabled": False, "paused_reason": reason, "paused_at": utcnow().isoformat()})
+    account.settings = {**(account.settings or {}), "prospecting": cfg}
+    engine.log_event(s, "prospect_paused", account.id, reason=reason)
+    log.warning("prospecting for account %s paused: %s", account.id, reason)
+    if reason in PAUSE_TEXT_OPS:
+        engine.alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or "Un agente", "prospecting", account.personal_whatsapp or account.email or "-", PAUSE_TEXT_OPS[reason]])
+    if tell_agent and reason in PAUSE_TEXT_AGENT:
+        lang = L.lead_lang(account)
+        engine.alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), PAUSE_TEXT_AGENT[reason][lang]])
 
 
 def run_for_account(s, account: Account, *, client=None) -> dict:
@@ -264,10 +361,14 @@ def run_for_account(s, account: Account, *, client=None) -> dict:
     off = why_not(account, cfg)
     if off:
         return {"ran": False, "reason": off}
+    problem = health_problem(s, account)  # before spending a token
+    if problem:
+        pause(s, account, problem, tell_agent=True)
+        return {"ran": False, "reason": "paused", "paused_reason": problem}
     st = get_settings()
     today = _local_today(account)
     since = _since(s, account, cfg, today)
-    cap = max(0, min(int(cfg.get("daily_cap") or 0), MAX_DAILY_CAP))
+    cap = effective_cap(cfg)
     room = cap - created_today(s, account)
     counts = {"ran": True, "fetched": 0, "created": 0, "searches": 0, "skipped": Counter(), "since": since.isoformat(), "until": today.isoformat()}
     if room <= 0:
@@ -285,6 +386,8 @@ def run_for_account(s, account: Account, *, client=None) -> dict:
             counts["error"] = type(e).__name__
             counts["error_status"] = e.status
             log.warning("prospecting for account %s stopped: %s", account.id, e)
+            if e.status == 402:  # out of CASAFARI tokens: stop until the operator tops up and resumes
+                pause(s, account, "source_credit", tell_agent=False)
             break
         counts["searches"] += 1
         listings = page.get("listings") or []
@@ -333,15 +436,24 @@ def enabled_accounts(s) -> list[Account]:
     return [a for a in s.execute(select(Account).where(Account.status == "live")).scalars() if why_not(a, config_for(a)) is None]
 
 
+def poll_interval() -> timedelta:
+    return timedelta(hours=max(1, int(get_settings().prospecting_poll_hours or 3)))
+
+
 def schedule_prospecting(s) -> int:
-    """Queue one `prospect` job per enabled account, at its next allowed hour (one per account per local day)."""
+    """Queue a `prospect` job for each enabled account that is due: none pending, and the last run at least one poll
+    interval (PROSPECTING_POLL_HOURS) ago. The job runs at the account's next allowed hour. Returns how many were queued."""
     if not get_settings().prospecting_enabled:
         return 0
-    n = 0
+    n, now, poll = 0, utcnow(), poll_interval()
     for a in enabled_accounts(s):
-        run_at = next_allowed_time(a, utcnow())
-        day = to_local(run_at, a.timezone).date()
-        key = f"prospect:{a.id}:{day:%Y-%m-%d}"
+        if s.execute(select(Job.id).where(Job.type == "prospect", Job.account_id == a.id, Job.status.in_(("pending", "running")))).first():
+            continue
+        last = s.execute(select(Event.at).where(Event.account_id == a.id, Event.name == "prospect_run").order_by(Event.at.desc(), Event.id.desc()).limit(1)).scalar_one_or_none()
+        if last and now - last < poll - timedelta(minutes=5):  # a little slack: the scan itself drifts by minutes
+            continue
+        run_at = next_allowed_time(a, now)
+        key = f"prospect:{a.id}:{run_at:%Y-%m-%dT%H}"
         if s.execute(select(Job.id).where(Job.dedupe_key == key)).first() is None:
             jobs.schedule(s, "prospect", run_at, account_id=a.id, dedupe_key=key)
             n += 1
@@ -350,8 +462,11 @@ def schedule_prospecting(s) -> int:
 
 @jobs.handler("prospect_scan")
 def job_prospect_scan(s, job):
-    nxt = utcnow() + timedelta(days=1)
-    jobs.schedule(s, "prospect_scan", nxt, dedupe_key=f"prospect_scan:{nxt:%Y-%m-%d}")
+    nxt = utcnow() + poll_interval()
+    jobs.schedule(s, "prospect_scan", nxt, dedupe_key=f"prospect_scan:{nxt:%Y-%m-%dT%H}")
+    if get_settings().prospecting_enabled:
+        from . import quality  # fresh Meta quality rating of each agent's number, so the auto-pause sees it
+        quality.refresh_prospecting_accounts(s, enabled_accounts(s))
     schedule_prospecting(s)
 
 

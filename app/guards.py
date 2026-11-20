@@ -10,6 +10,46 @@ HOT_STAGES = {"exclusiva", "cerrado", "cerrada", "vendido", "vendida", "firmado"
 NO_AI_TAGS = {"no ia", "sin ia", "no_ia", "noia"}
 OPT_OUT_WORDS = {"stop", "baja", "arret", "arrêt", "desabonner", "désabonner", "unsubscribe"}  # es / fr / en  # compared after lower-casing and stripping trailing . !
 
+COLD_SOURCES = {"casafari"}  # leads we found ourselves (a private owner's own public listing): they never asked to be contacted
+
+
+def is_cold(lead: Lead) -> bool:
+    """A private owner found through prospecting (CASAFARI), not someone who asked the agent for anything."""
+    src = (lead.facts or {}).get("_source")
+    return (isinstance(src, dict) and src.get("provider") in COLD_SOURCES) or (lead.source or "").lower() in COLD_SOURCES
+
+
+# Cold owners: replies that end the conversation at once, in code, before (and whatever) the model says.
+# "data" = a data-protection request (also handed to the agent, who must answer it); "threat" = reporting / legal
+# threats (handed to the agent too); "stop" = "don't write to me again" in words (a plain opt-out).
+_COLD_HARD_STOPS = {
+    "data": re.compile(
+        r"(borr|elimin|suprim|cancel)\w*\s+(todos\s+)?(mis|los|de mis)\s+datos|protecci[oó]n de datos|\brgpd\b|\bgdpr\b|\blopd\b|"
+        r"derecho (de|al) (supresi[oó]n|olvido|acceso)|"
+        r"(supprim|effac)\w*\s+(toutes\s+)?mes donn[ée]es|protection des donn[ée]es|droit (à l'oubli|d'acc[eè]s|à l'effacement)|"
+        r"(delete|erase|remove)\s+(all\s+)?(of\s+)?my\s+(personal\s+)?(data|details|information)|data protection|right to be forgotten",
+        re.I),
+    "threat": re.compile(
+        r"\bdenunci\w*|\baepd\b|\babogad[oa]\b|\bpolic[ií]a\b|\bjuzgado\b|"
+        r"\bporter plainte\b|\bplainte\b|\bcnil\b|\bavocat\b|\bvous signaler\b|"
+        r"\breport (you|this)\b|\blawyer\b|\bsue\b|\bpolice\b",
+        re.I),
+    "stop": re.compile(
+        r"no me (escrib|mand|molest|contact|llam)\w*( m[aá]s)?|dej(a|ad|e) de (escribir|molestar|mandar)|no (quiero|deseo) (que me escrib|recibir)\w*|"
+        r"ne m'(écrivez|ecrivez|envoyez|contactez) plus|arr[êe]tez de m'|ne me (contactez|dérangez|derangez) plus|"
+        r"(don't|do not|stop) (message|messaging|text|texting|write|writing|contact|contacting|bother|bothering) (to )?me",
+        re.I),
+}
+
+
+def cold_hard_stop(text: str | None) -> str | None:
+    """'data' | 'threat' | 'stop' | None for a cold owner's reply (checked in this order: the strongest wins)."""
+    t = (text or "").strip()
+    for kind in ("data", "threat", "stop"):
+        if _COLD_HARD_STOPS[kind].search(t):
+            return kind
+    return None
+
 DEFAULT_SETTINGS = {
     # Allowed hours for first contact / follow-ups (local time). Days: 0=Monday ... 6=Sunday
     "contact_days": [0, 1, 2, 3, 4, 5],

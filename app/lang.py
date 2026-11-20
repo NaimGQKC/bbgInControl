@@ -95,6 +95,28 @@ TEXTS: dict[str, dict[str, str]] = {
     "your_agency": {"es": "tu inmobiliaria", "fr": "votre agence", "en": "your agency"},
     "your_agent": {"es": "tu agente", "fr": "votre agent", "en": "your agent"},
     "the_agent": {"es": "el agente", "fr": "l'agent", "en": "the agent"},
+    # cold owners (prospecting): never name the data provider, only what the owner can check themselves
+    "cold_origin": {"es": "anuncio que el propietario publicó en un portal inmobiliario", "fr": "annonce publiée par le propriétaire sur un portail immobilier",
+                    "en": "listing the owner posted on a property portal"},
+    "your_property": {"es": "vivienda", "fr": "bien", "en": "property"},
+    # the ONE answer to a soft no ("no quiero agencias"): an acknowledgement, then the agent's own pitch or this default
+    "cold_soft_no_ack": {"es": "Entendido, gracias por contestarme.", "fr": "C'est noté, merci de m'avoir répondu.", "en": "Understood, thanks for getting back to me."},
+    "cold_door_open": {"es": "Si al final por tu cuenta no sale como esperas, {agent_first} estará por aquí para ayudarte; solo tienes que escribirme.",
+                       "fr": "Si finalement la vente par vous-même ne se passe pas comme prévu, {agent_first} reste disponible pour vous aider ; il suffit de m'écrire.",
+                       "en": "If selling on your own doesn't go as planned, {agent_first} will be here to help; just write to me."},
+    # a data-protection request or a threat: the only message they get before we stop for good
+    "privacy_ack": {"es": "Entendido, no te escribiremos más. He pasado tu petición a {agent_first} para que la gestione.",
+                    "fr": "C'est bien noté, nous ne vous écrirons plus. J'ai transmis votre demande à {agent_first}.",
+                    "en": "Understood, we won't write to you again. I've passed your request to {agent_first}."},
+    "why_cold_data": {"es": "un propietario contactado en frío pide sus datos o que los borres: respóndele tú (plazo legal de un mes)",
+                      "fr": "un propriétaire contacté à froid demande ses données ou leur suppression : répondez-lui vous-même (délai légal d'un mois)",
+                      "en": "a cold-contacted owner asks for their data or its deletion: answer them yourself (one-month legal deadline)"},
+    "why_cold_threat": {"es": "un propietario contactado en frío amenaza con denunciar: ya no le escribimos más",
+                        "fr": "un propriétaire contacté à froid menace de porter plainte : nous ne lui écrivons plus",
+                        "en": "a cold-contacted owner threatens to report us: we no longer write to them"},
+    "alert_cold_template_rejected": {"es": "WhatsApp rechazó tu primer mensaje a propietarios ({reason}); cámbialo desde tu enlace de Sparrow",
+                                     "fr": "WhatsApp a refusé votre premier message aux propriétaires ({reason}) ; modifiez-le depuis votre lien Sparrow",
+                                     "en": "WhatsApp rejected your first message to owners ({reason}); change it from your Sparrow link"},
     # handoff reasons shown to the agent
     "why_tech_error": {"es": "error técnico del asistente", "fr": "erreur technique de l'assistant", "en": "technical error in the assistant"},
     "why_limit": {"es": "límite de mensajes del asistente (posible abuso)", "fr": "limite de messages de l'assistant (abus possible)", "en": "assistant message limit (possible abuse)"},
@@ -112,6 +134,29 @@ TEXTS: dict[str, dict[str, str]] = {
     "ev_origin": {"es": "Origen", "fr": "Origine", "en": "Source"},
     "ev_call_where": {"es": "Llamada · {phone}", "fr": "Appel · {phone}", "en": "Call · {phone}"},
 }
+
+
+# Property types as prospecting stores them (Spanish words, or the provider's English key) → the lead's language
+PROPERTY_TYPES = {
+    "piso": {"es": "piso", "fr": "appartement", "en": "flat"},
+    "apartment": {"es": "piso", "fr": "appartement", "en": "flat"},
+    "casa": {"es": "casa", "fr": "maison", "en": "house"},
+    "house": {"es": "casa", "fr": "maison", "en": "house"},
+    "chalet": {"es": "chalet", "fr": "maison", "en": "house"},
+    "estudio": {"es": "estudio", "fr": "studio", "en": "studio"},
+    "studio": {"es": "estudio", "fr": "studio", "en": "studio"},
+    "dúplex": {"es": "dúplex", "fr": "duplex", "en": "duplex"},
+    "duplex": {"es": "dúplex", "fr": "duplex", "en": "duplex"},
+    "ático": {"es": "ático", "fr": "appartement en attique", "en": "penthouse"},
+    "penthouse": {"es": "ático", "fr": "appartement en attique", "en": "penthouse"},
+}
+
+
+def property_word(ptype: str | None, lang: str) -> str:
+    """'piso' → 'piso' / 'appartement' / 'flat'; unknown or empty → 'vivienda' / 'bien' / 'property'
+    (a raw provider word we don't know never reaches the owner)."""
+    p = PROPERTY_TYPES.get((ptype or "").strip().lower())
+    return p.get(lang, p["es"]) if p else text("your_property", lang)
 
 
 def text(key: str, lang: str, **kw) -> str:

@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select
 
-from . import gcal, jobs, templates as T
+from . import coldmsg, gcal, jobs, templates as T
 from .config import get_settings
 from .crypto import decrypt, encrypt
 from .db import utcnow
@@ -19,7 +19,9 @@ from .guards import (
     NO_AI_TAGS,
     OPT_OUT_WORDS,
     can_contact,
+    cold_hard_stop,
     first_name,
+    is_cold,
     next_allowed_time,
     normalize_phone,
     tidy_name,
@@ -252,6 +254,84 @@ def first_contact_values(account: Account, lead_name: str, zone: str) -> list[st
     ]
 
 
+# ---------------------------------------------------------------- cold first contact (prospecting, CASAFARI)
+# The agent writes the first message (settings["prospecting"]["cold_body"]); Sparrow adds the footer (coldmsg) and
+# submits it to Meta as the agent's own template (onboarding.submit_cold_template). What we send is the snapshot that
+# was submitted ("cold_submitted"), never the draft being edited, and only once Meta approved it.
+
+def prospecting_cfg(account: Account) -> dict:
+    return dict((account.settings or {}).get("prospecting") or {})
+
+
+def set_prospecting(account: Account, **kw) -> None:
+    """Update settings["prospecting"] (reassigns the JSON so the change is saved)."""
+    account.settings = {**(account.settings or {}), "prospecting": {**prospecting_cfg(account), **kw}}
+
+
+def cold_privacy_url() -> str:
+    return get_settings().base_url.rstrip("/") + "/privacidad"
+
+
+def cold_template_for(account: Account) -> T.Template | None:
+    """The cold template as it was submitted to Meta (None if nothing was submitted)."""
+    sub = prospecting_cfg(account).get("cold_submitted") or {}
+    if not sub.get("body") or not sub.get("version"):
+        return None
+    return T.cold_first_contact(sub["version"], sub.get("lang") or "es", sub["body"], sub.get("privacy_url") or cold_privacy_url())
+
+
+def cold_values(account: Account, lead: Lead, body: str) -> list[str]:
+    """Values in coldmsg.used_fields(body) order. Every variable needs a value: a missing name is the neutral greeting."""
+    lang = L.lead_lang(account)
+    vals = {
+        "nombre": first_name(tidy_name(lead.name)) or L.text("greeting_fallback", lang),
+        "tipo": L.property_word(lead.property_type, lang),
+        "zona": lead.zone or (account.zones.split(",")[0].strip() if account.zones else L.text("your_zone", lang)),
+        "agente": first_name(tidy_name(account.agent_name)) or L.text("your_agent", lang),
+        "agencia": account.agency or L.text("your_agency", lang),
+    }
+    return [vals[f] for f in coldmsg.used_fields(body)]
+
+
+def cold_first_message(account: Account, lead: Lead) -> tuple[T.Template | None, list[str] | str]:
+    """(template, values) when the agent's cold template is approved in the current lead language,
+    else (None, why): the lead then stays queued until release_cold_queue re-arms it."""
+    cfg = prospecting_cfg(account)
+    sub = cfg.get("cold_submitted") or {}
+    if cfg.get("cold_template_status") != "approved":
+        return None, f"cold_template_{cfg.get('cold_template_status') or 'missing'}"
+    tpl = cold_template_for(account)
+    if tpl is None or sub.get("lang") != L.lead_lang(account) or int(sub.get("version") or 0) != int(cfg.get("cold_version") or 0):
+        return None, "cold_template_missing"
+    return tpl, cold_values(account, lead, sub["body"])
+
+
+def preview_cold_message(account: Account, body: str | None = None) -> str:
+    """What an owner would read (agent text + footer), with the sample owner/listing from coldmsg.SAMPLE and the
+    agent's own name and agency when we have them. body: preview a draft before saving it."""
+    lang = L.lead_lang(account)
+    text = body if body is not None else (prospecting_cfg(account).get("cold_body") or coldmsg.default_body(lang))
+    vals = dict(coldmsg.SAMPLE.get(lang, coldmsg.SAMPLE["es"]))
+    if first_name(tidy_name(account.agent_name)):
+        vals["agente"] = first_name(tidy_name(account.agent_name))
+    if account.agency:
+        vals["agencia"] = account.agency
+    return coldmsg.render(text, lang, cold_privacy_url(), vals)
+
+
+def release_cold_queue(s, account: Account) -> int:
+    """The cold template was just approved: re-arm the first message of cold leads that were waiting for it
+    (spaced 2 minutes apart, inside allowed hours; can_contact still decides at send time)."""
+    waiting = [l for l in s.execute(select(Lead).where(Lead.account_id == account.id, Lead.status == "queued")).scalars() if is_cold(l)]
+    start = next_allowed_time(account, utcnow())
+    for i, lead in enumerate(waiting):
+        jobs.schedule(s, "first_contact", start + timedelta(minutes=2 * i), lead_id=lead.id, account_id=account.id,
+                      dedupe_key=f"first:{lead.id}", reuse=True)
+    if waiting:
+        log_event(s, "cold_queue_released", account.id, n=len(waiting))
+    return len(waiting)
+
+
 @jobs.handler("first_contact")
 def job_first_contact(s, job):
     account, lead = _load(s, job)
@@ -267,6 +347,9 @@ def job_first_contact(s, job):
             lead.status = "skipped"
         log_event(s, "first_contact_blocked", account.id, lead.id, reason=why)
         return
+    if is_cold(lead):
+        _cold_first_contact(s, account, lead)
+        return
     if send_to_lead(s, account, lead, kind="first", template=T.LEAD_FIRST_CONTACT, values=first_contact_values(account, lead.name, lead.zone)):
         lead.status = "contacted"
         lead.introduced = True
@@ -276,6 +359,22 @@ def job_first_contact(s, job):
                       dedupe_key=f"followup1:{lead.id}", payload={"n": 1})
         jobs.schedule(s, "followup", _at_local(account, utcnow(), 3), lead_id=lead.id, account_id=account.id,
                       dedupe_key=f"followup2:{lead.id}", payload={"n": 2})
+
+
+def _cold_first_contact(s, account: Account, lead: Lead) -> None:
+    tpl, values = cold_first_message(account, lead)
+    if tpl is None:  # not approved (yet): the lead stays queued, like a lead of a not-yet-live account
+        log_event(s, "first_contact_blocked", account.id, lead.id, reason=values)
+        return
+    if send_to_lead(s, account, lead, kind="first", template=tpl, values=values):
+        lang = L.lead_lang(account)
+        lead.status = "contacted"
+        # G13 safety net: if the agent's text doesn't say it, the AI introduces itself in its first reply
+        lead.introduced = L.text("intro_marker", lang) in tpl.render(values, lang).lower()
+        log_event(s, "first_message_sent", account.id, lead.id, seconds_after_lead=round((utcnow() - lead.created_at).total_seconds()),
+                  template=tpl.name)
+        # The owner never asked us: one message, no follow-ups (they read as pressure and hurt the agent's number).
+        jobs.schedule(s, "mark_no_reply", utcnow() + timedelta(days=3), lead_id=lead.id, account_id=account.id, dedupe_key=f"noreply:{lead.id}")
 
 
 @jobs.handler("followup")
@@ -466,6 +565,12 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
 
     if lead.do_not_contact or lead.human_owned or lead.status in ("handoff", "opted_out", "skipped"):
         return "stored_only"
+    if is_cold(lead):  # an owner we wrote to first: the hard stops and the soft-no ladder are decided here, in code
+        hard = cold_hard_stop(text)
+        if hard:
+            return cold_hard_stop_out(s, account, lead, hard)
+        if word in NO_THANKS:
+            return cold_soft_no(s, account, lead)
     if lead.status in ("new", "queued", "contacted", "no_reply", "not_interested"):
         lead.status = "in_conversation"
     if mtype == "audio" and "sin transcribir" in text:
@@ -595,6 +700,65 @@ def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: boo
                         .order_by(Message.id.desc())).first()
     why = _clip(reason, 80) + (f' ("{_clip(last_in[0], 80)}")' if last_in else "")
     alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
+
+
+def cold_hard_stop_out(s, account: Account, lead: Lead, kind: str) -> str:
+    """A cold owner said stop in words, asked about their data, or threatened to report: final, no pitch.
+    'stop' → the normal opt-out. 'data' / 'threat' → do_not_contact, one acknowledgement, and the agent is told why."""
+    if kind == "stop":
+        opt_out(s, account, lead, source="cold_words")
+        return "opted_out"
+    lang = L.lead_lang(account)
+    lead.do_not_contact = True
+    log_event(s, "opted_out", account.id, lead.id, source=f"cold_{kind}")
+    try:  # the opt-out confirmation kind is the only one allowed once do_not_contact is set
+        send_to_lead(s, account, lead, kind="opt_out_confirmation",
+                     text=L.text("privacy_ack", lang, agent_first=first_name(account.agent_name) or L.text("the_agent", lang)))
+    except WhatsAppError:
+        pass
+    do_handoff(s, account, lead, L.text(f"why_cold_{kind}", lang), notify_lead=False)
+    return f"handoff_{kind}"
+
+
+def cold_soft_no(s, account: Account, lead: Lead) -> str:
+    """'No quiero agencias' and the like, from an owner we wrote to first. The first time: ONE reply that respects
+    the answer and leaves the door open (the agent's own success_pitch, verbatim, or a neutral line; never the
+    model's words, so nothing can be invented). Any later no: the final goodbye and do_not_contact.
+    The count lives in lead.facts["_soft_no"] (a code-only key: save_facts can't touch it, the prompt never sees it)."""
+    facts = dict(lead.facts or {})
+    n = int(facts.get("_soft_no") or 0)
+    facts["_soft_no"] = n + 1
+    lead.facts = facts
+    if n >= 1:
+        opt_out(s, account, lead, source="cold_second_no")
+        return "opted_out"
+    lang = L.lead_lang(account)
+    agent_first = first_name(tidy_name(account.agent_name)) or L.text("the_agent", lang)
+    pitch = " ".join(str(prospecting_cfg(account).get("success_pitch") or "").split())
+    text = f"{L.text('cold_soft_no_ack', lang)} {pitch or L.text('cold_door_open', lang, agent_first=agent_first)}"
+    if not lead.introduced:  # G13
+        text = L.text("intro_phrase", lang, agent_first=agent_first) + text
+    lead.status = "not_interested"
+    jobs.cancel(s, lead.id, ["ai_turn", "followup", "mark_no_reply"])
+    log_event(s, "cold_soft_no", account.id, lead.id, n=1)
+    try:
+        if send_to_lead(s, account, lead, kind="ai_reply", text=text):
+            lead.introduced = True
+    except WhatsAppError:
+        pass
+    return "soft_no_pitch"
+
+
+def _cold_pitch_repeated(account: Account, lead: Lead, reply: str) -> bool:
+    """After the one pitch, the model must not send it (or the default door-open line) again."""
+    if int((lead.facts or {}).get("_soft_no") or 0) < 1:
+        return False
+    lang = L.lead_lang(account)
+    norm = lambda x: " ".join((x or "").lower().split())
+    pitch = norm(prospecting_cfg(account).get("success_pitch"))
+    door = norm(L.text("cold_door_open", lang, agent_first=""))
+    r = norm(reply)
+    return bool((pitch and pitch[:40] in r) or door[:30] in r)
 
 
 # ---------------------------------------------------------------- slots & booking
@@ -855,13 +1019,19 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
     if lead.last_inbound_at and lead.last_inbound_at > started and state["terminal"] is None:
         return "newer_message"  # the re-armed job will answer everything together
 
+    cold = is_cold(lead)
     if state["terminal"] == "handoff":
+        tag = (state["reason"] or "").strip().lower()
+        if cold and (tag.startswith("[privacy]") or tag.startswith("[threat]")):  # the prompt's tags for data requests / threats
+            return cold_hard_stop_out(s, account, lead, "data" if tag.startswith("[privacy]") else "threat")
         do_handoff(s, account, lead, state["reason"] or L.text("why_unsure", L.lead_lang(account)))
         return "handoff"
     if state["terminal"] == "stop":
         if state["reason"] == "opted_out":
             opt_out(s, account, lead, source="llm")
             return "opted_out"
+        if cold:  # the soft-no ladder is code: one pitch (our text, not the model's), then the end
+            return cold_soft_no(s, account, lead)
         lead.status = "not_interested"
         jobs.cancel(s, lead.id, ["followup", "mark_no_reply"])
         log_event(s, "not_interested", account.id, lead.id)
@@ -876,6 +1046,10 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
     if not reply:
         do_handoff(s, account, lead, L.text("why_no_reply", L.lead_lang(account)))
         return "empty_handoff"
+    if cold and _cold_pitch_repeated(account, lead, reply):  # a second pitch is never sent: the agent decides what next
+        log_event(s, "cold_second_pitch_blocked", account.id, lead.id)
+        do_handoff(s, account, lead, L.text("why_unsure", L.lead_lang(account)), notify_lead=False)
+        return "second_pitch_blocked"
     lang = L.lead_lang(account)
     agent_first = first_name(account.agent_name) or L.text("your_agent", lang)
     if not lead.introduced and L.text("intro_marker", lang) not in reply.lower():  # G13

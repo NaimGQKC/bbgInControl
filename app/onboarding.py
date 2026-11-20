@@ -1,10 +1,10 @@
 """Onboarding actions: Google Calendar, Meta Embedded Signup, templates, activation."""
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import select
 
-from . import gcal, jobs, lang as L, templates as T
+from . import coldmsg, gcal, jobs, lang as L, templates as T
 from .config import get_settings
 from .crypto import encrypt
 from .db import utcnow
@@ -131,7 +131,93 @@ def submit_templates(s, account: Account, wa: WhatsAppClient) -> list[dict]:
             # "already exists" is fine when re-running
             results.append({"name": tpl.name, "language": lang, "ok": False, "error": str(e)})
     log_event(s, "templates_submitted", account.id, results=results)
+    cold = submit_cold_template(s, account, wa, schedule_check=False)  # the caller schedules the check; go-live never waits for it
+    if cold:
+        results.append(cold)
     return results
+
+
+def submit_cold_template(s, account: Account, wa: WhatsAppClient | None = None, *, schedule_check: bool = True) -> dict | None:
+    """Submit the agent's cold first message (settings["prospecting"]["cold_body"] + Sparrow's footer) to Meta as a
+    MARKETING template in the lead language. Call it at connect (submit_templates does), when the agent saves a new
+    cold_body, and when the lead language changes. A changed text gets a new version (a new template name); the
+    same text in a new language keeps its name. Sets cold_template_status to "pending" until check_templates sees
+    Meta's verdict. Returns the result row, or None when there is no text or WhatsApp isn't connected yet."""
+    from .engine import agent_wa, cold_privacy_url, prospecting_cfg, set_prospecting
+
+    cfg = prospecting_cfg(account)
+    body = (cfg.get("cold_body") or "").strip()
+    if not body:
+        return None
+    lang = L.lead_lang(account)
+    problems, _ = coldmsg.validate(body)
+    if problems:
+        log_event(s, "cold_template_invalid", account.id, problems=problems)
+        return {"name": "cold", "language": lang, "ok": False, "error": "invalid:" + ",".join(problems)}
+    if wa is None:
+        integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+        if not (integ and integ.status == "active"):
+            return None  # submitted at connect
+        try:
+            wa = agent_wa(s, account)
+        except WhatsAppError:
+            return None
+        wa.waba_id = wa.waba_id or (integ.external or {}).get("waba_id", "")
+    sub = cfg.get("cold_submitted") or {}
+    version, last = int(cfg.get("cold_version") or 0), int(sub.get("version") or 0)
+    if body != sub.get("body") or not last:
+        version = version if version > last else last + 1  # web may already have bumped it when the text was saved
+    elif sub.get("lang") == lang and cfg.get("cold_template_status") in ("pending", "approved"):
+        return {"name": T.cold_name(last), "language": lang, "ok": True, "status": "unchanged"}
+    else:
+        version = last
+    privacy = cold_privacy_url()
+    tpl = T.cold_first_contact(version, lang, body, privacy)
+    try:
+        r = wa.create_template(tpl, language=lang)
+        row = {"name": tpl.name, "language": lang, "ok": True, "status": r.get("status", "")}
+    except WhatsAppError as e:
+        row = {"name": tpl.name, "language": lang, "ok": False, "error": str(e)}
+    set_prospecting(account, cold_version=version, cold_template_status="pending", cold_template_reason="",
+                    cold_submitted={"version": version, "lang": lang, "body": body, "privacy_url": privacy})
+    log_event(s, "cold_template_submitted", account.id, result=row)
+    if schedule_check:
+        jobs.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=account.id,
+                      dedupe_key=f"check_templates:{account.id}", reuse=True, payload={"since": utcnow().isoformat()})
+    return row
+
+
+_COLD_STATUS = {"APPROVED": "approved", "REJECTED": "rejected", "DISABLED": "rejected"}  # PENDING, IN_APPEAL, PAUSED... → pending
+
+
+def refresh_cold_status(s, account: Account, status: dict, reasons: dict) -> str | None:
+    """check_templates saw Meta's list: store the cold template's state. Approved → the waiting cold leads go out;
+    rejected → the agent and the operator are told (with Meta's reason when it gives one). Returns the status."""
+    from .engine import prospecting_cfg, release_cold_queue, set_prospecting
+
+    cfg = prospecting_cfg(account)
+    sub = cfg.get("cold_submitted") or {}
+    if not sub.get("version"):
+        return None
+    key = (T.cold_name(sub["version"]), sub.get("lang") or "es")
+    if key not in status:
+        return cfg.get("cold_template_status")
+    new = _COLD_STATUS.get(str(status[key] or "").upper(), "pending")
+    old = cfg.get("cold_template_status")
+    if new == old:
+        return new
+    reason = str(reasons.get(key) or "")
+    set_prospecting(account, cold_template_status=new, cold_template_reason=reason if new == "rejected" else "")
+    log_event(s, f"cold_template_{new}", account.id, template=key[0], reason=reason)
+    if new == "approved":
+        release_cold_queue(s, account)
+    elif new == "rejected":
+        lang = L.lead_lang(account)
+        why = reason or str(status[key] or "").lower() or "?"
+        alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), L.text("alert_cold_template_rejected", lang, reason=why)])
+        alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or "Un agente", "cold_template", account.email or "-",
+                                                 f"Meta rechazó {key[0]} ({key[1]}): {why}"])
+    return new
 
 
 def change_lead_lang(s, account: Account, lang: str) -> None:
@@ -149,7 +235,8 @@ def change_lead_lang(s, account: Account, lang: str) -> None:
         wa = agent_wa(s, account)
         wa.waba_id = wa.waba_id or (integ.external or {}).get("waba_id", "")
         submit_templates(s, account, wa)
-        jobs.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=account.id, dedupe_key=f"check_templates:{account.id}", reuse=True)
+        jobs.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=account.id, dedupe_key=f"check_templates:{account.id}",
+                      reuse=True, payload={"since": utcnow().isoformat()})
 
 
 def _pick_phone_number(numbers: list[dict], account: Account) -> str:
@@ -209,7 +296,8 @@ def link_test_number(s, account: Account) -> None:
 
 @jobs.handler("check_templates")
 def job_check_templates(s, job):
-    """Activate the account automatically once the first-contact template is approved."""
+    """Activate the account automatically once the first-contact template is approved. Also tracks the agent's cold
+    template (prospecting), which never holds the account back."""
     from .engine import agent_wa
 
     account = s.get(Account, job.account_id)
@@ -220,10 +308,19 @@ def job_check_templates(s, job):
         if not wa.waba_id:
             integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
             wa.waba_id = (integ.external or {}).get("waba_id", "") if integ else ""
-        status = {(t["name"], t.get("language", "es")[:2]): t.get("status") for t in wa.list_templates()}
+        listed = wa.list_templates()
+        status = {(t["name"], t.get("language", "es")[:2]): t.get("status") for t in listed}
+        reasons = {(t["name"], t.get("language", "es")[:2]): t.get("rejected_reason") for t in listed if t.get("rejected_reason") not in (None, "", "NONE")}
     except WhatsAppError as e:
-        status, err = {}, str(e)
+        status, reasons, err = {}, {}, str(e)
         log.warning("template check failed: %s", err)
+    cold = refresh_cold_status(s, account, status, reasons)
+    since = job.created_at
+    try:
+        since = max(since, datetime.fromisoformat((job.payload or {}).get("since", "")))
+    except ValueError:
+        pass
+    keep_checking = utcnow() - since < timedelta(days=3)
     first = status.get((T.LEAD_FIRST_CONTACT.name, L.lead_lang(account)))
     if first == "APPROVED":
         if account.status == "onboarding":
@@ -231,11 +328,13 @@ def job_check_templates(s, job):
             advance(account, "done")
             log_event(s, "account_live", account.id)
             alert_agent(s, account, T.AGENT_LIVE, [L.agent_hi(account)])
-        return
-    if first == "REJECTED":
+        again = cold == "pending"  # only the agent's cold template is still waiting for Meta
+    elif first == "REJECTED":
         log_event(s, "template_rejected", account.id, template=T.LEAD_FIRST_CONTACT.name)
         alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), L.text("alert_template_rejected", L.lead_lang(account))])
-        return
-    if utcnow() - job.created_at < timedelta(days=3):
+        again = False  # the operator fixes it; checking again would repeat the alert
+    else:
+        again = True
+    if again and keep_checking:
         job.status = "pending"
         job.run_at = utcnow() + timedelta(minutes=10)

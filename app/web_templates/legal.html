@@ -8,15 +8,19 @@
 {% if page == "privacidad" %}
 <section id="es">
 <h1>Política de privacidad</h1>
-<p class="muted">Última actualización: octubre de 2026. Borrador pendiente de revisión legal. <a href="#en">English version below</a>.</p>
+<p class="muted">Última actualización: noviembre de 2026. Borrador pendiente de revisión legal. <a href="#en">English version below</a>.</p>
+<p><b>¿Te ha escrito por WhatsApp el asistente virtual de un agente inmobiliario?</b> Lo que necesitas saber está en la <a href="#propietarios">sección 10</a>.</p>
 
 <h2>1. Quiénes somos</h2>
-<p>Sparrow AI ofrece a agentes inmobiliarios independientes un asistente virtual que escribe por WhatsApp a propietarios que han pedido una valoración y agenda la cita en el Google Calendar del agente. Servicio operado por {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (NIF {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+<p>Sparrow AI ofrece a agentes inmobiliarios independientes un asistente virtual que escribe por WhatsApp, desde el número del propio agente, a propietarios que han pedido una valoración y, si el agente activa la función de prospección, a propietarios que anuncian su inmueble como particulares en un portal inmobiliario; y agenda la cita en el Google Calendar del agente. Servicio operado por {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (NIF {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contacto: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
 
 <h2>2. Qué datos tratamos</h2>
 <ul>
-<li><b>Del agente (nuestro cliente):</b> nombre y email (los toma de su cuenta de Google), inmobiliaria, zonas de trabajo, teléfono, preferencias que nos indica, y los permisos que concede sobre su WhatsApp Business (Meta) y su Google Calendar. Los tokens de acceso se guardan cifrados.</li>
+<li><b>Del agente (nuestro cliente):</b> nombre y email (los toma de su cuenta de Google), inmobiliaria, zonas de trabajo, teléfono, preferencias que nos indica, y los permisos que concede sobre su WhatsApp Business (Meta) y su Google Calendar. Los tokens de acceso se guardan cifrados. Si paga a través de Stripe, Stripe trata los datos de pago; nosotros no guardamos los datos de la tarjeta.</li>
 <li><b>De los contactos del agente (propietarios):</b> nombre, teléfono, datos del inmueble, mensajes de WhatsApp intercambiados y la cita agendada.</li>
+<li><b>De propietarios localizados mediante la prospección</b> (solo si el agente la activa): nombre si figura en el anuncio, teléfono del anuncio y datos del anuncio (tipo de inmueble, zona, precio, superficie, portal, enlace e identificador del anuncio, y fecha en que se vio publicado). Proceden de anuncios públicos en portales inmobiliarios, que nos facilita un proveedor de datos inmobiliarios (CASAFARI). No guardamos la respuesta completa del proveedor, solo estos campos.</li>
+<li><b>Lista de bajas:</b> cuando se borran los datos de un número que pidió no recibir más mensajes, guardamos solo un código irreversible (hash) de ese número, sin nombre ni mensajes, para no volver a escribirle.</li>
+<li><b>Registros de uso:</b> registro de cada mensaje enviado y recibido y de cada intervención del asistente de IA, errores y métricas de entrega, respuesta y baja, para operar, proteger y mejorar el servicio.</li>
 <li><b>Datos de usuario de Google:</b> se detallan en la sección 3.</li>
 </ul>
 
@@ -63,37 +67,73 @@
 <p>El uso y la transferencia a cualquier otra aplicación de la información recibida de las API de Google se ajustará a la <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos de usuario de los servicios de API de Google</a>, incluidos los requisitos de uso limitado (Limited Use).</p>
 
 <h2>4. Datos de WhatsApp y Meta</h2>
-<p>Recibimos de Meta (WhatsApp Business Platform) los mensajes y teléfonos de las personas que escriben al número de WhatsApp del agente, y los identificadores y tokens de la cuenta de WhatsApp Business del agente. Los usamos solo para prestar el servicio al agente: responder a los propietarios, agendar citas y avisar al agente. No los vendemos ni los usamos para publicidad. Los comparten con nosotros los proveedores de la sección 6. Quien reciba un mensaje puede responder <b>BAJA</b> / <b>STOP</b> y no volverá a recibir ninguno.</p>
+<p>Recibimos de Meta (WhatsApp Business Platform) los mensajes y teléfonos de las personas que escriben al número de WhatsApp del agente, y los identificadores y tokens de la cuenta de WhatsApp Business del agente. Los usamos solo para prestar el servicio al agente: responder a los propietarios, agendar citas y avisar al agente. No los vendemos ni los usamos para publicidad. Los comparten con nosotros los proveedores de la sección 6. Quien reciba un mensaje puede responder <b>BAJA</b> / <b>STOP</b> / <b>ARRÊT</b> y no volverá a recibir ninguno.</p>
 
-<h2>5. Para qué y papel de cada parte</h2>
-<p>Tratamos los datos para ejecutar el contrato con el agente (prestar el servicio) y por interés legítimo en la seguridad del servicio. El agente es el responsable del tratamiento de los datos de sus contactos y decide a quién se escribe; Sparrow actúa como encargado del tratamiento siguiendo sus instrucciones. Sparrow es responsable de los datos de la cuenta del agente.</p>
+<h2>5. Para qué usamos los datos y papel de cada parte</h2>
+<p>Hay dos papeles distintos, según de qué datos se trate:</p>
+<ul>
+<li><b>El agente es el responsable del tratamiento; Sparrow es su encargado (art. 28 RGPD).</b> Así ocurre con los datos de los contactos del agente y de todo propietario al que el agente decide escribir, incluidos los localizados mediante la prospección: nombre, teléfono, datos del inmueble o del anuncio, mensajes y citas. El agente decide a quién se escribe, qué se dice (escribe o aprueba el primer mensaje) y con qué base jurídica. Sparrow usa estos datos solo para prestar el servicio al agente (escribir, responder, proponer horarios, agendar la cita y avisar al agente), siguiendo sus instrucciones y el encargo de tratamiento incluido en los <a href="/terminos">Términos del servicio</a>.</li>
+<li><b>Sparrow es el responsable del tratamiento</b> en estos casos:
+<ul>
+<li><b>Datos de la cuenta del agente</b>: para darle de alta, prestarle el servicio, cobrarle y atenderle. Base jurídica: ejecución del contrato (art. 6.1.b RGPD) y cumplimiento de obligaciones legales, como las contables y fiscales (art. 6.1.c).</li>
+<li><b>Seguridad y prevención de abusos</b>: proteger el servicio, detectar usos indebidos y respetar las bajas. Si un número pide no recibir más mensajes, la prospección no lo propondrá a ningún agente que use Sparrow; para ello solo se comprueba si el número está dado de baja, sin mostrar a ningún agente datos de otro. Base jurídica: interés legítimo en la seguridad del servicio y en respetar la oposición de las personas (art. 6.1.f).</li>
+<li><b>Estadísticas de calidad y mejora del servicio</b>, con datos agregados o seudonimizados: tasas de respuesta, de baja y de citas, rendimiento de los textos de los mensajes, errores y uso del producto. Base jurídica: interés legítimo en medir la calidad, evitar abusos y mejorar el servicio (art. 6.1.f). No vendemos estos datos, no los usamos para publicidad y nunca damos datos identificables de un propietario a otro agente. Puedes oponerte escribiendo a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+</ul></li>
+</ul>
+<p>Los datos de cada agente se guardan separados de los de los demás agentes: ningún agente ve los contactos ni las conversaciones de otro.</p>
 
 <h2>6. Con quién se comparten los datos (en general)</h2>
-<p>Meta (WhatsApp Business Platform), Google (Calendar), Microsoft Azure OpenAI (IA), Railway (alojamiento y base de datos) y, cuando está activado el cobro, Stripe (pagos). Son proveedores necesarios para el servicio. No vendemos datos.</p>
+<p>Proveedores que tratan datos por nuestra cuenta, necesarios para el servicio: Meta (WhatsApp Business Platform: envío y recepción de mensajes), Google (Calendar: citas), Microsoft Azure OpenAI (IA que redacta las respuestas), Railway (alojamiento y base de datos, en Estados Unidos) y, cuando está activado el cobro, Stripe (pagos). Los anuncios de la prospección nos los facilita CASAFARI, a quien no enviamos las conversaciones. También comunicaremos datos a autoridades o tribunales cuando la ley lo exija. No vendemos datos ni los cedemos a otros agentes.</p>
 
 <h2>7. Transferencias internacionales</h2>
-<p>Nuestro alojamiento está en Estados Unidos (Railway) y algunos proveedores pueden tratar datos fuera del Espacio Económico Europeo. Las transferencias se amparan en las garantías previstas por el RGPD (cláusulas contractuales tipo o decisión de adecuación).</p>
+<p>Nuestro alojamiento está en Estados Unidos (Railway) y algunos proveedores pueden tratar datos fuera del Espacio Económico Europeo. Las transferencias se amparan en las garantías previstas por el RGPD (cláusulas contractuales tipo o decisión de adecuación, como el Marco de Privacidad de Datos UE-EE. UU. para las empresas adheridas a él).</p>
 
 <h2>8. Conservación y derechos</h2>
-<p>Conservamos los datos mientras el agente use el servicio y hasta 12 meses después, salvo obligación legal; el detalle de los datos de Google está en la sección 3.5. Puedes pedir acceso, rectificación, supresión, oposición, limitación o portabilidad en <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> o en <a href="/eliminar-datos">Eliminación de datos</a>, y reclamar ante la Agencia Española de Protección de Datos (AEPD) o ante tu autoridad local (por ejemplo la CNIL en Francia).</p>
+<ul>
+<li><b>Cuenta del agente y sus contactos:</b> conservamos los datos mientras el agente use el servicio y hasta 12 meses después, salvo que el agente pida antes su eliminación (la hacemos en un máximo de 30 días) o que la ley obligue a conservar algo más tiempo (por ejemplo, las facturas). El detalle de los datos de Google está en la sección 3.5.</li>
+<li><b>Propietarios localizados mediante la prospección que no han respondido:</b> se borran automáticamente en la fecha que marcan las condiciones del proveedor de datos: normalmente a los 12 meses de obtenerlos y, si nuestro contrato con el proveedor termina antes, como máximo 30 días después de ese fin.</li>
+<li><b>Propietarios que respondieron o tienen una cita:</b> la conversación pasa a ser un contacto normal del agente y se conserva como el resto de sus contactos, pero en esa misma fecha borramos el enlace, el identificador y los demás datos del anuncio que vinieron del proveedor.</li>
+<li><b>Bajas:</b> si un número pidió no recibir más mensajes, cuando se borran sus datos solo queda el código irreversible (hash) descrito en la sección 2, para no volver a escribirle.</li>
+<li><b>Derechos:</b> puedes pedir acceso, rectificación, supresión, oposición, limitación o portabilidad en <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> o en <a href="/eliminar-datos">Eliminación de datos</a>. Si tus datos los trata un agente (sección 5), el responsable es el agente: puedes dirigirte a él o a nosotros, y le trasladaremos tu solicitud y le ayudaremos a atenderla. Puedes reclamar ante la Agencia Española de Protección de Datos (AEPD, <a href="https://www.aepd.es">www.aepd.es</a>) o ante tu autoridad local (por ejemplo la CNIL en Francia, <a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+</ul>
 
 <h2>9. Inteligencia artificial y menores</h2>
-<p>Los mensajes los redacta un asistente virtual, que se identifica como tal al inicio de cada conversación; el agente puede tomar el control del chat en cualquier momento. El servicio no está dirigido a menores de edad.</p>
+<p>Los mensajes los redacta un asistente virtual, que se identifica como tal al inicio de cada conversación; el agente puede tomar el control del chat en cualquier momento. El asistente solo conversa, responde dudas sencillas y propone horarios: no toma decisiones basadas únicamente en un tratamiento automatizado que produzcan efectos jurídicos sobre ti o te afecten de forma significativa. El servicio no está dirigido a menores de edad.</p>
+
+<h2 id="propietarios">10. Si eres propietario y te ha escrito el asistente de un agente</h2>
+<p>Esta sección, junto con el pie del primer mensaje (identificación como asistente virtual, palabra para darte de baja, origen del contacto y enlace a esta página), te da la información que exige el artículo 14 del RGPD cuando los datos no se obtienen de ti.</p>
+<ul>
+<li><b>Quién te ha escrito y quién es responsable:</b> el agente inmobiliario y la agencia que aparecen en el mensaje. El agente es el responsable de tus datos; puedes hablar con él respondiendo en el mismo chat de WhatsApp. Sparrow AI ({{ legal_entity or "Sparrow AI" }}, <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>) es el proveedor técnico que trata tus datos por cuenta del agente, y solo es responsable de lo descrito en la sección 5 (seguridad, lista de bajas y estadísticas agregadas).</li>
+<li><b>Por qué te ha escrito:</b> porque has publicado un anuncio de tu inmueble o has pedido una valoración, y el agente quiere preguntarte por él y ofrecerte sus servicios, por ejemplo una valoración.</li>
+<li><b>De dónde salen tus datos:</b> si no has contactado tú con el agente, de tu anuncio público en un portal inmobiliario, que nos facilita un proveedor de datos inmobiliarios (CASAFARI) que recopila anuncios publicados. Si pediste tú una valoración, de ti o del canal por el que la pediste.</li>
+<li><b>Qué datos:</b> nombre (si figura en el anuncio), teléfono y datos del anuncio (tipo de inmueble, zona, precio, superficie, portal, enlace e identificador, fecha de publicación); después, los mensajes que intercambies con el asistente o con el agente y, si la aceptas, la cita.</li>
+<li><b>Para qué:</b> escribirte sobre tu anuncio, contestar a tus mensajes, ofrecerte una valoración y, si quieres, agendar una cita con el agente.</li>
+<li><b>Base jurídica:</b> el agente se basa en su interés legítimo (art. 6.1.f RGPD) en ofrecer sus servicios profesionales a quien anuncia públicamente un inmueble, con identificación clara y baja inmediata. El agente ha hecho su propia valoración de ese interés y puede explicártela si se la pides.</li>
+<li><b>Destinatarios:</b> el agente y los proveedores de la sección 6 (Meta, Google, Microsoft Azure OpenAI, Railway). No vendemos tus datos ni se los damos a otros agentes. Transferencias fuera del EEE: sección 7.</li>
+<li><b>Cuánto tiempo:</b> no más de lo necesario. Si no respondes, tus datos se borran como muy tarde en la fecha que marca el proveedor de datos, normalmente dentro de los 12 meses. Si respondes, el agente conserva la conversación como cualquier otro contacto suyo, sin los datos del anuncio. Si te das de baja, solo queda un código irreversible de tu número para no volver a escribirte (sección 8).</li>
+<li><b>Tus derechos:</b> puedes <b>oponerte en cualquier momento</b>, sin dar motivos: responde <b>BAJA</b>, <b>STOP</b> o <b>ARRÊT</b> al mensaje, o escribe a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>, y no volverás a recibir mensajes. También puedes pedir acceso, rectificación, supresión, limitación y, cuando proceda, portabilidad. Puedes reclamar ante la AEPD (<a href="https://www.aepd.es">www.aepd.es</a>) o, si vives en Francia, ante la CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+<li><b>Inteligencia artificial:</b> te escribe un asistente virtual (una IA), que lo dice desde el primer mensaje y nunca dice ser una persona. El agente puede intervenir en cualquier momento. No se toman decisiones automatizadas con efectos jurídicos sobre ti.</li>
+<li>No tienes ninguna obligación de responder.</li>
+</ul>
 </section>
 
 <hr>
 
 <section id="en">
 <h1>Privacy policy</h1>
-<p class="muted">Last updated: October 2026. Draft pending legal review. <a href="#es">Versión en español arriba</a>.</p>
+<p class="muted">Last updated: November 2026. Draft pending legal review. <a href="#es">Versión en español arriba</a>.</p>
+<p><b>Did a real estate agent's virtual assistant message you on WhatsApp?</b> What you need to know is in <a href="#owners">section 10</a>.</p>
 
 <h2>1. Who we are</h2>
-<p>Sparrow AI gives independent real estate agents a virtual assistant that messages property owners on WhatsApp after they asked for a valuation, and books the appointment in the agent's Google Calendar. The service is operated by {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (tax ID {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contact: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+<p>Sparrow AI gives independent real estate agents a virtual assistant that messages property owners on WhatsApp, from the agent's own number, after they asked for a valuation and, if the agent switches on the prospecting feature, owners who advertise their property as private sellers on a property portal; it books the appointment in the agent's Google Calendar. The service is operated by {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (tax ID {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contact: <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
 
 <h2>2. What data we process</h2>
 <ul>
-<li><b>From the agent (our customer):</b> name and email (taken from their Google account), agency, work zones, phone number, preferences they give us, and the permissions they grant over their WhatsApp Business (Meta) and Google Calendar. Access tokens are stored encrypted.</li>
+<li><b>From the agent (our customer):</b> name and email (taken from their Google account), agency, work zones, phone number, preferences they give us, and the permissions they grant over their WhatsApp Business (Meta) and Google Calendar. Access tokens are stored encrypted. If they pay through Stripe, Stripe processes the payment data; we do not store card details.</li>
 <li><b>From the agent's contacts (property owners):</b> name, phone number, property details, the WhatsApp messages exchanged and the booked appointment.</li>
+<li><b>From owners found through prospecting</b> (only if the agent switches it on): name if it appears in the listing, the listing's phone number and listing details (property type, zone, price, floor area, portal, listing link and id, and the date it was seen online). They come from public listings on property portals, supplied to us by a property data provider (CASAFARI). We do not keep the provider's full response, only these fields.</li>
+<li><b>Opt-out list:</b> when we delete the data of a number that asked not to receive more messages, we keep only an irreversible code (hash) of that number, with no name or messages, so it is never messaged again.</li>
+<li><b>Usage records:</b> a record of every message sent and received and of every AI assistant turn, errors, and delivery, reply and opt-out metrics, to run, protect and improve the service.</li>
 <li><b>Google user data:</b> detailed in section 3.</li>
 </ul>
 
@@ -140,36 +180,72 @@
 <p>Sparrow AI's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
 
 <h2>4. WhatsApp and Meta data</h2>
-<p>From Meta (WhatsApp Business Platform) we receive the messages and phone numbers of people who write to the agent's WhatsApp number, and the identifiers and tokens of the agent's WhatsApp Business account. We use them only to provide the service to the agent: answer property owners, book appointments and alert the agent. We do not sell them or use them for advertising. They are shared with the providers listed in section 6. Anyone who receives a message can reply <b>BAJA</b> / <b>STOP</b> and will not receive any more.</p>
+<p>From Meta (WhatsApp Business Platform) we receive the messages and phone numbers of people who write to the agent's WhatsApp number, and the identifiers and tokens of the agent's WhatsApp Business account. We use them only to provide the service to the agent: answer property owners, book appointments and alert the agent. We do not sell them or use them for advertising. They are shared with the providers listed in section 6. Anyone who receives a message can reply <b>BAJA</b> / <b>STOP</b> / <b>ARRÊT</b> and will not receive any more.</p>
 
-<h2>5. Purposes and roles</h2>
-<p>We process data to perform our contract with the agent (to provide the service) and for our legitimate interest in the security of the service. The agent is the controller of their contacts' data and decides who is messaged; Sparrow acts as processor following the agent's instructions. Sparrow is the controller of the agent's account data.</p>
+<h2>5. What we use data for, and who is responsible</h2>
+<p>There are two different roles, depending on the data:</p>
+<ul>
+<li><b>The agent is the controller; Sparrow is its processor (art. 28 GDPR).</b> This applies to the data of the agent's contacts and of every owner the agent decides to message, including owners found through prospecting: name, phone number, property or listing details, messages and appointments. The agent decides who is messaged, what is said (the agent writes or approves the first message) and on what legal basis. Sparrow uses this data only to provide the service to the agent (write, reply, offer time slots, book the appointment and alert the agent), following the agent's instructions and the data processing agreement in the <a href="/terminos">Terms of service</a>.</li>
+<li><b>Sparrow is the controller</b> in these cases:
+<ul>
+<li><b>The agent's account data</b>: to sign the agent up, provide the service, bill and support them. Legal basis: performance of the contract (art. 6(1)(b) GDPR) and legal obligations such as accounting and tax rules (art. 6(1)(c)).</li>
+<li><b>Security and abuse prevention</b>: protecting the service, detecting misuse and honouring opt-outs. If a number asks not to receive more messages, prospecting will not offer it to any agent using Sparrow; this only checks whether the number has opted out and never shows one agent's data to another. Legal basis: legitimate interest in the security of the service and in respecting people's objections (art. 6(1)(f)).</li>
+<li><b>Quality statistics and service improvement</b>, using aggregated or pseudonymised data: reply, opt-out and booking rates, how message texts perform, errors and product usage. Legal basis: legitimate interest in measuring quality, preventing abuse and improving the service (art. 6(1)(f)). We do not sell this data, do not use it for advertising, and never give identifiable owner data to another agent. You can object by writing to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+</ul></li>
+</ul>
+<p>Each agent's data is kept separate from other agents' data: no agent sees another agent's contacts or conversations.</p>
 
 <h2>6. Who data is shared with (in general)</h2>
-<p>Meta (WhatsApp Business Platform), Google (Calendar), Microsoft Azure OpenAI (AI), Railway (hosting and database) and, when billing is enabled, Stripe (payments). These providers are necessary to deliver the service. We do not sell data.</p>
+<p>Providers that process data on our behalf and are necessary for the service: Meta (WhatsApp Business Platform: sending and receiving messages), Google (Calendar: appointments), Microsoft Azure OpenAI (the AI that writes the replies), Railway (hosting and database, in the United States) and, when billing is enabled, Stripe (payments). Prospecting listings are supplied to us by CASAFARI; we do not send conversations to it. We will also disclose data to authorities or courts where the law requires it. We do not sell data or give it to other agents.</p>
 
 <h2>7. International transfers</h2>
-<p>Our hosting is in the United States (Railway) and some providers may process data outside the European Economic Area. Transfers rely on the safeguards provided by the GDPR (standard contractual clauses or an adequacy decision).</p>
+<p>Our hosting is in the United States (Railway) and some providers may process data outside the European Economic Area. Transfers rely on the safeguards provided by the GDPR (standard contractual clauses or an adequacy decision, such as the EU-US Data Privacy Framework for companies certified under it).</p>
 
 <h2>8. Retention and rights</h2>
-<p>We keep data while the agent uses the service and up to 12 months afterwards, unless the law requires otherwise; the detail for Google data is in section 3.5. You can ask for access, rectification, erasure, objection, restriction or portability at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> or on the <a href="/eliminar-datos">Data deletion</a> page, and complain to the Spanish Data Protection Agency (AEPD) or your local authority (for example the CNIL in France).</p>
+<ul>
+<li><b>The agent's account and contacts:</b> we keep data while the agent uses the service and up to 12 months afterwards, unless the agent asks for deletion earlier (we do it within 30 days at most) or the law requires us to keep something longer (for example invoices). The detail for Google data is in section 3.5.</li>
+<li><b>Owners found through prospecting who never replied:</b> deleted automatically on the date set by the data provider's terms: normally 12 months after we obtained the data and, if our contract with the provider ends earlier, no later than 30 days after it ends.</li>
+<li><b>Owners who replied or have an appointment:</b> the conversation becomes an ordinary contact of the agent and is kept like the agent's other contacts, but on that same date we delete the listing link, listing id and other listing data that came from the provider.</li>
+<li><b>Opt-outs:</b> if a number asked not to receive more messages, once its data is deleted only the irreversible code (hash) described in section 2 remains, so it is never messaged again.</li>
+<li><b>Rights:</b> you can ask for access, rectification, erasure, objection, restriction or portability at <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> or on the <a href="/eliminar-datos">Data deletion</a> page. If your data is processed for an agent (section 5), the agent is the controller: you can contact the agent or us, and we will pass your request on and help the agent answer it. You can complain to the Spanish Data Protection Agency (AEPD, <a href="https://www.aepd.es">www.aepd.es</a>) or your local authority (for example the CNIL in France, <a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+</ul>
 
 <h2>9. Artificial intelligence and minors</h2>
-<p>Messages are written by a virtual assistant that identifies itself as such at the start of every conversation; the agent can take over the chat at any time. The service is not directed at minors.</p>
+<p>Messages are written by a virtual assistant that identifies itself as such at the start of every conversation; the agent can take over the chat at any time. The assistant only chats, answers simple questions and offers time slots: it makes no decisions based solely on automated processing that produce legal effects on you or similarly significantly affect you. The service is not directed at minors.</p>
+
+<h2 id="owners">10. If you are a property owner and an agent's assistant messaged you</h2>
+<p>This section, together with the footer of the first message (identification as a virtual assistant, the word to opt out, where your contact came from and a link to this page), gives you the information required by Article 14 GDPR when data is not obtained from you.</p>
+<ul>
+<li><b>Who messaged you and who is responsible:</b> the real estate agent and agency named in the message. The agent is the controller of your data; you can talk to them by replying in the same WhatsApp chat. Sparrow AI ({{ legal_entity or "Sparrow AI" }}, <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>) is the technical provider that processes your data on the agent's behalf, and is only responsible for what section 5 describes (security, the opt-out list and aggregated statistics).</li>
+<li><b>Why they messaged you:</b> because you published a listing for your property or asked for a valuation, and the agent wants to ask you about it and offer their services, for example a valuation.</li>
+<li><b>Where your data comes from:</b> if you did not contact the agent yourself, from your public listing on a property portal, supplied to us by a property data provider (CASAFARI) that collects published listings. If you asked for a valuation yourself, from you or the channel you used.</li>
+<li><b>What data:</b> name (if it appears in the listing), phone number and listing details (property type, zone, price, floor area, portal, link and id, publication date); then the messages you exchange with the assistant or the agent and, if you accept one, the appointment.</li>
+<li><b>What for:</b> to message you about your listing, answer your messages, offer you a valuation and, if you wish, book an appointment with the agent.</li>
+<li><b>Legal basis:</b> the agent relies on its legitimate interest (art. 6(1)(f) GDPR) in offering its professional services to someone who publicly advertises a property, with clear identification and immediate opt-out. The agent has made its own assessment of that interest and can explain it to you if you ask.</li>
+<li><b>Recipients:</b> the agent and the providers in section 6 (Meta, Google, Microsoft Azure OpenAI, Railway). We do not sell your data or give it to other agents. Transfers outside the EEA: section 7.</li>
+<li><b>How long:</b> no longer than needed. If you do not reply, your data is deleted at the latest on the date set by the data provider, normally within 12 months. If you reply, the agent keeps the conversation like any other contact, without the listing data. If you opt out, only an irreversible code of your number remains so you are never messaged again (section 8).</li>
+<li><b>Your rights:</b> you can <b>object at any time</b>, without giving reasons: reply <b>BAJA</b>, <b>STOP</b> or <b>ARRÊT</b> to the message, or write to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>, and you will not receive more messages. You can also ask for access, rectification, erasure, restriction and, where it applies, portability. You can complain to the AEPD (<a href="https://www.aepd.es">www.aepd.es</a>) or, if you live in France, the CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+<li><b>Artificial intelligence:</b> you are messaged by a virtual assistant (an AI), which says so from the first message and never claims to be a person. The agent can step in at any time. No automated decisions with legal effects on you are made.</li>
+<li>You are under no obligation to reply.</li>
+</ul>
 </section>
 
 <hr>
 <section id="fr">
 <h1>Politique de confidentialité</h1>
-<p class="muted">Dernière mise à jour : octobre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<p class="muted">Dernière mise à jour : novembre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<p><b>L'assistant virtuel d'un agent immobilier vous a écrit sur WhatsApp ?</b> Ce que vous devez savoir figure à la <a href="#proprietaires">section 10</a>.</p>
 
 <h2>1. Qui sommes-nous</h2>
-<p>Sparrow AI offre aux agents immobiliers indépendants un assistant virtuel qui écrit sur WhatsApp aux propriétaires ayant demandé une estimation, et planifie le rendez-vous dans le Google Agenda de l'agent. Service exploité par {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (numéro fiscal {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contact : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
+<p>Sparrow AI offre aux agents immobiliers indépendants un assistant virtuel qui écrit sur WhatsApp, depuis le numéro de l'agent lui-même, aux propriétaires ayant demandé une estimation et, si l'agent active la fonction de prospection, aux propriétaires qui publient une annonce de particulier sur un portail immobilier ; il planifie le rendez-vous dans le Google Agenda de l'agent. Service exploité par {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (numéro fiscal {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}. Contact : <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</p>
 
 <h2>2. Quelles données nous traitons</h2>
 <ul>
-<li><b>De l'agent (notre client) :</b> nom et e-mail (repris de son compte Google), agence, secteurs de travail, numéro de téléphone, préférences qu'il nous indique, et les autorisations qu'il accorde sur son WhatsApp Business (Meta) et son Google Agenda. Les jetons d'accès sont stockés chiffrés.</li>
+<li><b>De l'agent (notre client) :</b> nom et e-mail (repris de son compte Google), agence, secteurs de travail, numéro de téléphone, préférences qu'il nous indique, et les autorisations qu'il accorde sur son WhatsApp Business (Meta) et son Google Agenda. Les jetons d'accès sont stockés chiffrés. S'il paie via Stripe, Stripe traite les données de paiement ; nous ne conservons pas les données de carte.</li>
 <li><b>Des contacts de l'agent (propriétaires) :</b> nom, numéro de téléphone, informations sur le bien, messages WhatsApp échangés et rendez-vous planifié.</li>
+<li><b>Des propriétaires trouvés grâce à la prospection</b> (uniquement si l'agent l'active) : nom s'il figure dans l'annonce, numéro de téléphone de l'annonce et informations de l'annonce (type de bien, secteur, prix, surface, portail, lien et identifiant de l'annonce, date à laquelle elle a été vue en ligne). Elles proviennent d'annonces publiques sur des portails immobiliers, que nous fournit un fournisseur de données immobilières (CASAFARI). Nous ne conservons pas la réponse complète du fournisseur, seulement ces champs.</li>
+<li><b>Liste d'opposition :</b> lorsque nous supprimons les données d'un numéro qui a demandé à ne plus recevoir de messages, nous ne gardons qu'un code irréversible (hash) de ce numéro, sans nom ni messages, pour ne plus jamais lui écrire.</li>
+<li><b>Journaux d'utilisation :</b> trace de chaque message envoyé et reçu et de chaque intervention de l'assistant d'IA, erreurs, et indicateurs de remise, de réponse et de désinscription, pour faire fonctionner, protéger et améliorer le service.</li>
 <li><b>Données utilisateur Google :</b> détaillées à la section 3.</li>
 </ul>
 
@@ -216,22 +292,54 @@
 <p>L'utilisation et le transfert par Sparrow AI, vers toute autre application, des informations reçues des API Google respecteront la <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, y compris les exigences d'utilisation limitée (Limited Use).</p>
 
 <h2>4. Données WhatsApp et Meta</h2>
-<p>De Meta (WhatsApp Business Platform), nous recevons les messages et les numéros de téléphone des personnes qui écrivent au numéro WhatsApp de l'agent, ainsi que les identifiants et jetons de son compte WhatsApp Business. Nous les utilisons uniquement pour fournir le service à l'agent : répondre aux propriétaires, planifier des rendez-vous et prévenir l'agent. Nous ne les vendons pas et ne les utilisons pas pour la publicité. Ils sont partagés avec les prestataires énumérés à la section 6. Toute personne qui reçoit un message peut répondre <b>BAJA</b> / <b>STOP</b> et n'en recevra plus.</p>
+<p>De Meta (WhatsApp Business Platform), nous recevons les messages et les numéros de téléphone des personnes qui écrivent au numéro WhatsApp de l'agent, ainsi que les identifiants et jetons de son compte WhatsApp Business. Nous les utilisons uniquement pour fournir le service à l'agent : répondre aux propriétaires, planifier des rendez-vous et prévenir l'agent. Nous ne les vendons pas et ne les utilisons pas pour la publicité. Ils sont partagés avec les prestataires énumérés à la section 6. Toute personne qui reçoit un message peut répondre <b>BAJA</b> / <b>STOP</b> / <b>ARRÊT</b> et n'en recevra plus.</p>
 
-<h2>5. Finalités et rôles</h2>
-<p>Nous traitons les données pour exécuter notre contrat avec l'agent (fournir le service) et pour notre intérêt légitime à assurer la sécurité du service. L'agent est responsable du traitement des données de ses contacts et décide à qui écrire ; Sparrow agit en tant que sous-traitant selon les instructions de l'agent. Sparrow est responsable du traitement des données du compte de l'agent.</p>
+<h2>5. Finalités et rôle de chaque partie</h2>
+<p>Il y a deux rôles différents, selon les données concernées :</p>
+<ul>
+<li><b>L'agent est responsable du traitement ; Sparrow est son sous-traitant (art. 28 RGPD).</b> C'est le cas pour les données des contacts de l'agent et de tout propriétaire auquel l'agent décide d'écrire, y compris ceux trouvés grâce à la prospection : nom, numéro de téléphone, informations sur le bien ou l'annonce, messages et rendez-vous. L'agent décide à qui écrire, ce qui est dit (il rédige ou approuve le premier message) et sur quelle base légale. Sparrow n'utilise ces données que pour fournir le service à l'agent (écrire, répondre, proposer des créneaux, planifier le rendez-vous et prévenir l'agent), selon ses instructions et l'accord de sous-traitance inclus dans les <a href="/terminos">Conditions d'utilisation</a>.</li>
+<li><b>Sparrow est responsable du traitement</b> dans les cas suivants :
+<ul>
+<li><b>Données du compte de l'agent</b> : pour l'inscrire, lui fournir le service, le facturer et l'assister. Base légale : exécution du contrat (art. 6.1.b RGPD) et obligations légales, notamment comptables et fiscales (art. 6.1.c).</li>
+<li><b>Sécurité et prévention des abus</b> : protéger le service, détecter les usages abusifs et respecter les oppositions. Si un numéro demande à ne plus recevoir de messages, la prospection ne le proposera à aucun agent utilisant Sparrow ; on vérifie seulement si le numéro s'est opposé, sans jamais montrer à un agent les données d'un autre. Base légale : intérêt légitime à assurer la sécurité du service et à respecter l'opposition des personnes (art. 6.1.f).</li>
+<li><b>Statistiques de qualité et amélioration du service</b>, à partir de données agrégées ou pseudonymisées : taux de réponse, de désinscription et de rendez-vous, performance des textes des messages, erreurs et usage du produit. Base légale : intérêt légitime à mesurer la qualité, prévenir les abus et améliorer le service (art. 6.1.f). Nous ne vendons pas ces données, ne les utilisons pas pour la publicité et ne transmettons jamais de données identifiables d'un propriétaire à un autre agent. Vous pouvez vous y opposer en écrivant à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+</ul></li>
+</ul>
+<p>Les données de chaque agent sont séparées de celles des autres agents : aucun agent ne voit les contacts ni les conversations d'un autre.</p>
 
 <h2>6. Avec qui les données sont partagées (en général)</h2>
-<p>Meta (WhatsApp Business Platform), Google (Agenda), Microsoft Azure OpenAI (IA), Railway (hébergement et base de données) et, lorsque la facturation est activée, Stripe (paiements). Ces prestataires sont nécessaires pour fournir le service. Nous ne vendons pas de données.</p>
+<p>Prestataires qui traitent des données pour notre compte, nécessaires au service : Meta (WhatsApp Business Platform : envoi et réception des messages), Google (Agenda : rendez-vous), Microsoft Azure OpenAI (l'IA qui rédige les réponses), Railway (hébergement et base de données, aux États-Unis) et, lorsque la facturation est activée, Stripe (paiements). Les annonces de la prospection nous sont fournies par CASAFARI, à qui nous n'envoyons pas les conversations. Nous communiquerons aussi des données aux autorités ou aux tribunaux lorsque la loi l'exige. Nous ne vendons pas de données et ne les transmettons pas à d'autres agents.</p>
 
 <h2>7. Transferts internationaux</h2>
-<p>Notre hébergement se trouve aux États-Unis (Railway) et certains prestataires peuvent traiter des données en dehors de l'Espace économique européen. Les transferts reposent sur les garanties prévues par le RGPD (clauses contractuelles types ou décision d'adéquation).</p>
+<p>Notre hébergement se trouve aux États-Unis (Railway) et certains prestataires peuvent traiter des données en dehors de l'Espace économique européen. Les transferts reposent sur les garanties prévues par le RGPD (clauses contractuelles types ou décision d'adéquation, comme le cadre de protection des données UE-États-Unis pour les entreprises certifiées).</p>
 
 <h2>8. Conservation et droits</h2>
-<p>Nous conservons les données tant que l'agent utilise le service et jusqu'à 12 mois après, sauf obligation légale contraire ; le détail pour les données Google figure à la section 3.5. Vous pouvez demander l'accès, la rectification, l'effacement, l'opposition, la limitation ou la portabilité à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> ou sur la page <a href="/eliminar-datos">Suppression des données</a>, et introduire une réclamation auprès de l'Agence espagnole de protection des données (AEPD) ou de votre autorité locale (par exemple la CNIL en France).</p>
+<ul>
+<li><b>Compte de l'agent et ses contacts :</b> nous conservons les données tant que l'agent utilise le service et jusqu'à 12 mois après, sauf si l'agent demande leur suppression plus tôt (nous la faisons sous 30 jours au plus) ou si la loi impose de conserver certaines données plus longtemps (par exemple les factures). Le détail pour les données Google figure à la section 3.5.</li>
+<li><b>Propriétaires trouvés grâce à la prospection qui n'ont jamais répondu :</b> supprimés automatiquement à la date fixée par les conditions du fournisseur de données : normalement 12 mois après leur obtention et, si notre contrat avec le fournisseur prend fin plus tôt, au plus tard 30 jours après cette fin.</li>
+<li><b>Propriétaires qui ont répondu ou ont un rendez-vous :</b> la conversation devient un contact ordinaire de l'agent et elle est conservée comme ses autres contacts, mais à cette même date nous supprimons le lien, l'identifiant et les autres données de l'annonce venant du fournisseur.</li>
+<li><b>Oppositions :</b> si un numéro a demandé à ne plus recevoir de messages, une fois ses données supprimées il ne reste que le code irréversible (hash) décrit à la section 2, pour ne plus jamais lui écrire.</li>
+<li><b>Droits :</b> vous pouvez demander l'accès, la rectification, l'effacement, l'opposition, la limitation ou la portabilité à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> ou sur la page <a href="/eliminar-datos">Suppression des données</a>. Si vos données sont traitées pour un agent (section 5), l'agent est le responsable du traitement : vous pouvez vous adresser à lui ou à nous ; nous lui transmettrons votre demande et l'aiderons à y répondre. Vous pouvez introduire une réclamation auprès de l'Agence espagnole de protection des données (AEPD, <a href="https://www.aepd.es">www.aepd.es</a>) ou de votre autorité locale (par exemple la CNIL en France, <a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+</ul>
 
 <h2>9. Intelligence artificielle et mineurs</h2>
-<p>Les messages sont rédigés par un assistant virtuel qui se présente comme tel au début de chaque conversation ; l'agent peut reprendre la main sur la conversation à tout moment. Le service ne s'adresse pas aux mineurs.</p>
+<p>Les messages sont rédigés par un assistant virtuel qui se présente comme tel au début de chaque conversation ; l'agent peut reprendre la main sur la conversation à tout moment. L'assistant se limite à converser, répondre à des questions simples et proposer des créneaux : il ne prend aucune décision fondée exclusivement sur un traitement automatisé produisant des effets juridiques vous concernant ou vous affectant de manière significative. Le service ne s'adresse pas aux mineurs.</p>
+
+<h2 id="proprietaires">10. Si vous êtes propriétaire et que l'assistant d'un agent vous a écrit</h2>
+<p>Cette section, avec le pied du premier message (identification comme assistant virtuel, mot pour vous désinscrire, origine du contact et lien vers cette page), vous donne les informations exigées par l'article 14 du RGPD lorsque les données ne sont pas collectées auprès de vous.</p>
+<ul>
+<li><b>Qui vous a écrit et qui est responsable :</b> l'agent immobilier et l'agence indiqués dans le message. L'agent est le responsable du traitement de vos données ; vous pouvez lui parler en répondant dans la même conversation WhatsApp. Sparrow AI ({{ legal_entity or "Sparrow AI" }}, <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>) est le prestataire technique qui traite vos données pour le compte de l'agent, et n'est responsable que de ce que décrit la section 5 (sécurité, liste d'opposition et statistiques agrégées).</li>
+<li><b>Pourquoi il vous a écrit :</b> parce que vous avez publié une annonce pour votre bien ou demandé une estimation, et l'agent souhaite vous interroger à ce sujet et vous proposer ses services, par exemple une estimation.</li>
+<li><b>D'où viennent vos données :</b> si vous n'avez pas contacté l'agent vous-même, de votre annonce publique sur un portail immobilier, que nous fournit un fournisseur de données immobilières (CASAFARI) qui collecte les annonces publiées. Si vous avez demandé une estimation, de vous ou du canal que vous avez utilisé.</li>
+<li><b>Quelles données :</b> nom (s'il figure dans l'annonce), numéro de téléphone et informations de l'annonce (type de bien, secteur, prix, surface, portail, lien et identifiant, date de publication) ; ensuite, les messages échangés avec l'assistant ou l'agent et, si vous l'acceptez, le rendez-vous.</li>
+<li><b>Pour quoi faire :</b> vous écrire au sujet de votre annonce, répondre à vos messages, vous proposer une estimation et, si vous le souhaitez, planifier un rendez-vous avec l'agent.</li>
+<li><b>Base légale :</b> l'agent invoque son intérêt légitime (art. 6.1.f RGPD) à proposer ses services professionnels à une personne qui annonce publiquement un bien, avec une identification claire et une désinscription immédiate. L'agent a fait sa propre évaluation de cet intérêt et peut vous l'expliquer si vous le lui demandez.</li>
+<li><b>Destinataires :</b> l'agent et les prestataires de la section 6 (Meta, Google, Microsoft Azure OpenAI, Railway). Nous ne vendons pas vos données et ne les transmettons pas à d'autres agents. Transferts hors de l'EEE : section 7.</li>
+<li><b>Combien de temps :</b> pas plus que nécessaire. Si vous ne répondez pas, vos données sont supprimées au plus tard à la date fixée par le fournisseur de données, normalement dans les 12 mois. Si vous répondez, l'agent conserve la conversation comme celle de tout autre contact, sans les données de l'annonce. Si vous vous désinscrivez, il ne reste qu'un code irréversible de votre numéro pour ne plus jamais vous écrire (section 8).</li>
+<li><b>Vos droits :</b> vous pouvez <b>vous opposer à tout moment</b>, sans donner de motif : répondez <b>STOP</b>, <b>ARRÊT</b> ou <b>BAJA</b> au message, ou écrivez à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>, et vous ne recevrez plus de messages. Vous pouvez aussi demander l'accès, la rectification, l'effacement, la limitation et, le cas échéant, la portabilité. Vous pouvez introduire une réclamation auprès de l'AEPD (<a href="https://www.aepd.es">www.aepd.es</a>) ou, si vous résidez en France, de la CNIL (<a href="https://www.cnil.fr">www.cnil.fr</a>).</li>
+<li><b>Intelligence artificielle :</b> c'est un assistant virtuel (une IA) qui vous écrit ; il le dit dès le premier message et ne prétend jamais être une personne. L'agent peut intervenir à tout moment. Aucune décision automatisée produisant des effets juridiques à votre égard n'est prise.</li>
+<li>Vous n'êtes pas obligé de répondre.</li>
+</ul>
 </section>
 
 {# ============================================================ TÉRMINOS / TERMS #}
