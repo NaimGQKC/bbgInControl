@@ -270,8 +270,10 @@ def why_not(account: Account, cfg: dict) -> str | None:
         return "account_not_live"
     if L.lead_lang(account) != "es":
         return "not_spain"
-    if cfg.get("cold_body") and cfg.get("cold_template_status") != "approved":
-        return "template_pending"  # the agent's own first message waits for Meta's approval; accounts set by hand (no cold_body) use the standard template
+    if not cfg.get("cold_body"):
+        return "no_message"  # the agent writes the first message; nothing is pulled until there is one
+    if cfg.get("cold_template_status") != "approved":
+        return "template_pending"  # the agent's own first message waits for Meta's approval
     return None
 
 

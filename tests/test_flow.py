@@ -942,7 +942,7 @@ def test_terms_show_the_real_prices_and_deletion_page_has_both_languages(clock, 
     get_settings.cache_clear()
     with TestClient(app) as c:
         terms = c.get("/terminos").text
-        assert "90 €" in terms and "30 €" in terms and "EUR 90" in terms and "EUR 30" in terms
+        assert "30 €" in terms and "EUR 30" in terms and "90 €" not in terms and "EUR 90" not in terms  # no setup fee any more
         deletion = c.get("/eliminar-datos").text
         assert "Eliminación de datos" in deletion and "Data deletion" in deletion and "30 días" in deletion and "30 days" in deletion
 

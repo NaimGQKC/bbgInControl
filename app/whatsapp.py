@@ -103,7 +103,7 @@ class WhatsAppClient:
         data = _check(
             httpx.get(
                 _graph(f"{self.waba_id}/message_templates"),
-                params={"fields": "name,status,category,language", "limit": 200},
+                params={"fields": "name,status,category,language,rejected_reason", "limit": 200},
                 headers=self._headers,
                 timeout=20,
             )

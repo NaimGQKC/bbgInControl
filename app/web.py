@@ -359,6 +359,9 @@ async def api_prospecting(token: str, request: Request):
             new.update({"confirmed_at": now_iso, "ack_at": now_iso, "ack_text_version": ACK_TEXT_VERSION})
         new["enabled"] = want_on
         acc.settings = {**(acc.settings or {}), "prospecting": new}
+        if new.get("cold_template_status") == "pending":
+            s.flush()
+            onboarding.submit_cold_template(s, acc)  # no-op until WhatsApp is connected; connect submits it then
         log_event(s, "prospecting_saved", acc.id, enabled=want_on, reason=reason or "", cold_version=new.get("cold_version"))
         out = {"saved": True, "enabled": want_on}
         if reason:

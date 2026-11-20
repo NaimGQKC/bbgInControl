@@ -49,7 +49,8 @@ def pros(account_id) -> dict:
 def configure(account_id, **kw):
     with db.session_scope() as s:
         a = s.get(Account, account_id)
-        a.settings = {**(a.settings or {}), "prospecting": {"enabled": True, "location_id": ZGZ, "zone_name": "Zaragoza", "daily_cap": 10, **kw}}
+        a.settings = {**(a.settings or {}), "prospecting": {"enabled": True, "location_id": ZGZ, "zone_name": "Zaragoza", "daily_cap": 10,
+                                                              "cold_body": GOOD_BODY, "cold_template_status": "approved", **kw}}
 
 
 def run(account_id):
@@ -218,7 +219,7 @@ def test_preview_renders_with_sample_values_and_the_footer(account, client):
     r = client.post(f"/api/o/{token(account)}/prospecting/preview", json={"cold_body": GOOD_BODY}).json()
     assert set(r) == {"text", "problems", "warnings"} and r["problems"] == [] and r["warnings"] == []
     assert "Hola Marta, soy el asistente virtual de Laura (Inmobiliaria Sur)" in r["text"]
-    assert "BAJA" in r["text"] and r["text"].endswith("/privacidad") and "{" not in r["text"]
+    assert "BAJA" in r["text"] and r["text"].endswith("/privacidad#propietarios") and "{" not in r["text"]
 
 
 def test_preview_reports_problems_and_warnings(account, client):

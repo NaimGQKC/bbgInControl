@@ -346,44 +346,350 @@
 {% elif page == "terminos" %}
 <section id="es">
 <h1>Términos del servicio</h1>
-<p class="muted">Última actualización: octubre de 2026. Borrador pendiente de revisión legal. <a href="#en">English version below</a>.</p>
+<p class="muted">Última actualización: noviembre de 2026. Borrador pendiente de revisión legal. <a href="#en">English version below</a>.</p>
+<p>Estos términos son el contrato entre el operador de Sparrow AI y el agente inmobiliario que usa el servicio, e incluyen el encargo de tratamiento de datos (sección 9). El agente los acepta al completar el alta o al usar el servicio.</p>
+
+<h2>1. Las partes</h2>
+<p>El servicio lo presta {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (NIF {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}, contacto <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> ("Sparrow"). El cliente es el agente inmobiliario o la agencia que completa el alta ("el agente"). El agente declara que actúa como profesional, con fines empresariales, y no como consumidor, por lo que no se aplican las normas de protección de consumidores y usuarios. Quien acepta en nombre de una agencia declara que tiene poder para obligarla.</p>
+
+<h2>2. El servicio</h2>
+<p>Sparrow configura y opera un asistente virtual de WhatsApp conectado al número de WhatsApp Business del agente (a través de Meta) y a su Google Calendar. El asistente escribe a los contactos del agente, responde, propone horarios, agenda citas de valoración y avisa al agente cuando una conversación le necesita. Si el agente la activa, la función de prospección (sección 5) le propone propietarios que anuncian su inmueble como particulares. El servicio está en fase piloto y puede evolucionar; Sparrow avisará al agente de los cambios relevantes.</p>
+
+<h2>3. El asistente de inteligencia artificial</h2>
 <ul>
-<li><b>El servicio.</b> Sparrow configura y opera un asistente virtual de WhatsApp para el agente, conectado a su WhatsApp Business y a su Google Calendar. El asistente se identifica como asistente virtual y el agente puede tomar el control de cualquier chat.</li>
-<li><b>Responsabilidad del agente.</b> El agente decide qué contactos incluye y es responsable de tener base legal para escribirles. Sparrow no escribe a quien pida no recibir más mensajes (BAJA).</li>
-<li><b>Precio.</b> Cuota de alta única de {{ integration_fee_eur }} € por agente y {{ meeting_fee_eur }} € por cita agendada (cita aceptada por el contacto y creada en el calendario; no cuenta si el contacto la cancela con más de 24 h de antelación). Durante el piloto Sparrow puede aplicar condiciones distintas, acordadas por escrito con el agente. Las tarifas de mensajes de Meta las paga el agente directamente a Meta. Los precios no incluyen impuestos aplicables.</li>
-<li><b>Baja.</b> El agente puede desconectar el servicio en cualquier momento desde Meta, desde Google o escribiéndonos a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
-<li><b>Límites.</b> Sparrow no garantiza un número de citas ni de respuestas, y no responde de las decisiones comerciales del agente ni de interrupciones de Meta, Google u otros proveedores.</li>
-<li><b>Datos.</b> El tratamiento de datos se rige por la <a href="/privacidad">Política de privacidad</a>.</li>
-<li><b>Ley aplicable.</b> Derecho español.</li>
+<li>El asistente se presenta siempre como "el asistente virtual de" el agente y nunca dice ser una persona.</li>
+<li>Es una IA y puede equivocarse. El agente puede tomar el control de cualquier chat en cualquier momento; cuando el agente escribe en un chat después de que el contacto haya respondido, el asistente deja de intervenir en ese chat hasta que el agente lo reactive. Si el asistente falla o alcanza su límite de uso, pasa la conversación al agente.</li>
+<li>Las valoraciones, precios y compromisos los da el agente, no el asistente. El agente debe revisar las citas agendadas y atender los avisos que recibe.</li>
+</ul>
+
+<h2>4. Papel de cada parte y responsabilidad sobre los contactos</h2>
+<ul>
+<li><b>El agente es el responsable del tratamiento</b> (art. 4.7 RGPD) de los datos de sus contactos y de todo propietario al que decida escribir, incluidos los localizados mediante la prospección. <b>Sparrow es encargado del tratamiento</b> y proveedor técnico, y actúa siguiendo las instrucciones del agente (sección 9).</li>
+<li>El agente decide en exclusiva: <b>a quién se escribe</b>; <b>el contenido de los mensajes</b> (escribe o aprueba el primer mensaje, y las respuestas del asistente siguen el guion del servicio y las preferencias que el agente indica); <b>la base jurídica</b> de cada tratamiento y, si se basa en el interés legítimo, su propia evaluación (ponderación) documentada; y el cumplimiento de las normas sobre comunicaciones comerciales.</li>
+<li>El agente debe respetar las bajas, oposiciones y demás derechos de los interesados. Sparrow bloquea automáticamente los números que responden la palabra de baja; si el agente recibe una oposición por otro canal, debe comunicarla a Sparrow (o marcar el contacto) sin demora.</li>
+<li>El agente garantiza que tiene derecho a usar los datos que aporta o pide obtener, y que informa a los interesados como exige la ley. Sparrow le ayuda con el pie de los mensajes y con la sección 10 de la <a href="/privacidad">Política de privacidad</a>, pero eso no sustituye la responsabilidad del agente.</li>
+<li><b>Aviso sobre comunicaciones comerciales.</b> En España, el art. 21 de la Ley 34/2002 (LSSI-CE) prohíbe enviar comunicaciones comerciales por correo electrónico u otro medio de comunicación electrónica equivalente (lo que puede incluir WhatsApp) que no hayan sido solicitadas o autorizadas expresamente por el destinatario, salvo a clientes con una relación contractual previa. Una ponderación de interés legítimo del RGPD no basta por sí sola para cumplir esa norma. En Francia, el art. L.34-5 del Código de correos y comunicaciones electrónicas (CPCE) y la doctrina de la CNIL exigen, por regla general, el consentimiento previo de los particulares para la prospección comercial por mensajes electrónicos. El agente debe valorar, con su propio asesor si lo necesita, si sus mensajes cumplen estas normas antes de enviarlos. Sparrow no presta asesoramiento jurídico.</li>
+</ul>
+
+<h2>5. Función de prospección</h2>
+<ul>
+<li><b>Opcional y desactivada por defecto.</b> Solo está disponible para cuentas activas en España. El agente la activa expresamente después de que Sparrow le muestre sus riesgos y los acepte: Meta puede rechazar el texto, bajar la calidad de su número o limitarlo o suspenderlo; escribir a propietarios que no le conocen exige una base jurídica y respetar la baja inmediata; debe informar a los propietarios (art. 14 RGPD); los portales tienen sus propias condiciones; y no debe hacer promesas falsas, crear urgencias falsas ni dar cifras que no pueda demostrar.</li>
+<li><b>Origen de los datos.</b> Los propietarios proceden de anuncios públicos de particulares en portales inmobiliarios, que facilita un proveedor de datos externo (actualmente CASAFARI). Sparrow entrega esos datos <b>"tal cual"</b>, sin garantía de que sean exactos, completos, actuales o estén disponibles, de que el anunciante sea el propietario, ni de que ese número pueda contactarse legalmente. Sparrow aplica los filtros del agente (zona, tipo, precio), elimina duplicados y números dados de baja, y limita el número de propietarios por día; nada de ello sustituye la decisión ni la responsabilidad del agente.</li>
+<li><b>Portales y proveedores.</b> El agente es responsable de sus propios acuerdos con portales y proveedores de datos, y de cumplir las condiciones de uso que le apliquen.</li>
+<li><b>Usos prohibidos.</b> El agente garantiza que no usará la función para escribir a personas que se hayan dado de baja o se hayan opuesto, a menores, ni a contactos que no correspondan a un anuncio de un inmueble (por ejemplo, números de terceros o de otras profesiones), ni para fines distintos de ofrecer sus servicios sobre ese inmueble. No extraerá, copiará en bloque, cederá ni revenderá los datos de la prospección fuera del servicio.</li>
+<li><b>Conservación.</b> Los datos de la prospección se conservan y borran como indica la <a href="/privacidad">Política de privacidad</a> (sección 8), según las condiciones del proveedor; el agente no puede pedir que se conserven más tiempo. Si el propietario responde, la conversación pasa a ser un contacto normal del agente, sin los datos del anuncio.</li>
+<li>Sparrow puede limitar, cambiar o retirar la función, por ejemplo si el proveedor de datos deja de prestar su servicio o cambia sus condiciones.</li>
+</ul>
+
+<h2>6. Elementos obligatorios y suspensión</h2>
+<ul>
+<li>Todo primer mensaje a un propietario que no ha contactado antes con el agente lleva elementos que Sparrow añade y que el agente <b>no puede quitar ni modificar</b>: la identificación como asistente virtual del agente, la palabra para darse de baja (BAJA / STOP / ARRÊT), el origen del contacto (un anuncio en un portal inmobiliario) y el enlace a la Política de privacidad. Sparrow puede rechazar textos con enlaces, promesas o contenidos que no cumplan estas reglas o las de Meta.</li>
+<li>Sparrow puede <b>suspender o pausar de inmediato</b>, sin previo aviso y sin responsabilidad, la prospección, cualquier flujo de mensajes o el servicio si detecta una bajada de calidad del número o avisos de Meta, quejas o denuncias, tasas altas de baja o de bloqueo, restricciones del proveedor de datos o de un portal, un requerimiento de una autoridad, o un riesgo legal. Sparrow avisará al agente lo antes posible y le explicará el motivo cuando pueda.</li>
+</ul>
+
+<h2>7. Precio</h2>
+<ul>
+<li>{{ meeting_fee_eur }} € por cita agendada (cita aceptada por el contacto y creada en el calendario; no cuenta si el contacto la cancela con más de 24 h de antelación), más cualquier otra tarifa o condición acordada por escrito con el agente (por ejemplo, durante el piloto).</li>
+<li>Las tarifas de mensajes de Meta las paga el agente directamente a Meta, según las condiciones de Meta.</li>
+<li>Los precios no incluyen los impuestos aplicables (IVA). El cobro se hace a través de Stripe. Si un importe no se paga tras un aviso, Sparrow puede suspender el servicio.</li>
+</ul>
+
+<h2>8. Uso de datos por Sparrow para calidad y mejora</h2>
+<ul>
+<li>El agente acepta que Sparrow use los datos de las conversaciones y del uso del servicio, <b>de forma agregada o seudonimizada</b>, para medir la calidad (tasas de respuesta, de baja y de citas, rendimiento de los mensajes), prevenir abusos y mejorar el servicio (analítica de producto). Para esta finalidad limitada Sparrow actúa como responsable independiente, basándose en su interés legítimo, e informa a los propietarios en su Política de privacidad.</li>
+<li>Sparrow nunca vende estos datos, no los usa para publicidad y nunca da datos identificables de un propietario a otro agente.</li>
+<li>Los contactos y conversaciones de cada agente se guardan separados de los de los demás agentes. La única comprobación común es la de bajas: si un número pidió no recibir más mensajes, la prospección no lo propondrá a ningún agente, sin revelar otros datos.</li>
+</ul>
+
+<h2>9. Encargo de tratamiento (art. 28 RGPD)</h2>
+<p>Esta sección es el contrato de encargo de tratamiento entre el agente (responsable) y Sparrow (encargado) para los datos de la sección 4. Forma parte de estos términos y, en materia de datos personales, prevalece sobre el resto.</p>
+<ol>
+<li><b>Objeto y duración:</b> los tratamientos necesarios para prestar el servicio, mientras dure el contrato y hasta la devolución o supresión de los datos (punto 11).</li>
+<li><b>Naturaleza y finalidad:</b> obtención de anuncios del proveedor de datos (si la prospección está activa), registro, conservación, consulta, envío y recepción de mensajes de WhatsApp, redacción de respuestas con IA, agenda de citas, avisos al agente y supresión, con la única finalidad de prestar el servicio al agente.</li>
+<li><b>Interesados y tipos de datos:</b> contactos del agente y propietarios a los que el agente escribe (incluidos los de la prospección). Datos identificativos y de contacto (nombre, teléfono), datos del inmueble y del anuncio, contenido de los mensajes y citas. No se tratan categorías especiales de datos; el agente no debe pedirlas.</li>
+<li><b>Instrucciones:</b> Sparrow trata los datos solo según estos términos, la configuración del servicio y las instrucciones escritas del agente. Si una instrucción le parece contraria a la normativa, Sparrow lo dirá al agente y podrá no ejecutarla. Si la ley obliga a Sparrow a otro tratamiento, se lo comunicará al agente salvo que la ley lo prohíba.</li>
+<li><b>Confidencialidad:</b> las personas autorizadas a tratar los datos están obligadas a guardar confidencialidad.</li>
+<li><b>Seguridad (art. 32 RGPD):</b> conexiones cifradas (HTTPS); tokens de acceso cifrados, con la clave guardada aparte; acceso a producción limitado a los fundadores y protegido con contraseña; verificación de la firma de los avisos de Meta; separación de los datos por agente; registro de mensajes y de cada intervención de la IA; y límites de uso de la IA.</li>
+<li><b>Subencargados:</b> el agente autoriza de forma general a Sparrow a recurrir a subencargados. Los actuales son Meta (WhatsApp Business Platform), Google (Calendar), Microsoft (Azure OpenAI), Railway (alojamiento y base de datos) y Stripe (pagos). Sparrow les impone por contrato obligaciones de protección de datos equivalentes (en muchos casos, las condiciones estándar de cada proveedor) y responde de ellos ante el agente. Sparrow avisará por email de cualquier alta o cambio de subencargado con al menos 15 días de antelación; el agente puede oponerse por motivos razonables y, si no se encuentra solución, dar por terminado el contrato. El proveedor de datos de la prospección (CASAFARI) es una fuente de los datos, no recibe las conversaciones.</li>
+<li><b>Transferencias internacionales:</b> el alojamiento está en Estados Unidos (Railway) y otros subencargados pueden tratar datos fuera del EEE. Se hacen solo con las garantías del capítulo V del RGPD (decisión de adecuación, como el Marco de Privacidad de Datos UE-EE. UU. para las empresas adheridas, o cláusulas contractuales tipo).</li>
+<li><b>Asistencia:</b> Sparrow trasladará al agente sin demora las solicitudes de ejercicio de derechos que reciba y le ayudará a responderlas; la baja por WhatsApp se aplica automáticamente. También le ayudará, según la información de que disponga, con evaluaciones de impacto y consultas a la autoridad.</li>
+<li><b>Violaciones de seguridad:</b> Sparrow notificará al agente sin dilación indebida, y cuando sea posible en las 48 horas siguientes a tener conocimiento, cualquier violación de seguridad que afecte a sus datos, con la información disponible, y le ayudará a cumplir sus obligaciones de notificación.</li>
+<li><b>Fin del encargo:</b> a elección del agente, Sparrow devolverá los datos en un formato de uso común o los suprimirá. Si el agente lo pide, la supresión se hace en un máximo de 30 días; si no da instrucciones, Sparrow suprime los datos como máximo 12 meses después del fin del servicio, salvo lo que la ley obligue a conservar. Los datos de la prospección se borran en la fecha que marca el proveedor. Se mantiene solo el código irreversible (hash) de los números dados de baja, para respetar su oposición.</li>
+<li><b>Información y auditorías:</b> Sparrow pondrá a disposición del agente la información necesaria para demostrar el cumplimiento de este encargo y permitirá auditorías por el agente o un auditor obligado a confidencialidad, con 30 días de preaviso, como máximo una vez al año (salvo violación de seguridad o requerimiento de una autoridad), a cargo del agente y sin acceso a datos de otros agentes.</li>
+</ol>
+
+<h2>10. Lo que Sparrow no garantiza</h2>
+<ul>
+<li>Sparrow no garantiza un número de citas, respuestas, conversiones ni ventas.</li>
+<li>El servicio depende de Meta, Google, Microsoft, Railway, Stripe y del proveedor de datos. Sparrow no garantiza que sigan funcionando ni que mantengan sus condiciones. <b>Meta puede limitar, bajar la calidad o suspender el número o la cuenta del agente por decisión propia</b>, con independencia de Sparrow.</li>
+<li>Sparrow presta el servicio con diligencia razonable, pero sin garantía de funcionamiento ininterrumpido o sin errores.</li>
+</ul>
+
+<h2>11. Indemnidad</h2>
+<p>En la medida permitida por la ley, el agente mantendrá indemne a Sparrow frente a toda reclamación, multa, sanción, daño y coste razonable (incluidos abogados) de terceros (incluidos los propietarios), autoridades (como la AEPD o la CNIL), Meta o proveedores de datos, que se deriven de las instrucciones del agente, del contenido de los mensajes que el agente escribe o aprueba, de su elección de destinatarios o de base jurídica, o de su incumplimiento de estos términos o de la ley. No se aplica en la medida en que el daño se deba a un incumplimiento de Sparrow. Sparrow avisará al agente sin demora de cualquier reclamación y le permitirá participar en su defensa.</p>
+
+<h2>12. Limitación de responsabilidad</h2>
+<ul>
+<li>La responsabilidad total de Sparrow frente al agente por todas las reclamaciones relacionadas con el servicio se limita a las cantidades pagadas por el agente a Sparrow en los 12 meses anteriores al hecho que la origina.</li>
+<li>Sparrow no responde de daños indirectos, lucro cesante, pérdida de negocio u oportunidades, ni de la inexactitud de los datos del proveedor.</li>
+<li>Estos límites no se aplican al dolo, a la culpa grave ni a lo que la ley no permita limitar, y no afectan a los derechos de los interesados frente al responsable o al encargado (art. 82 RGPD).</li>
+</ul>
+
+<h2>13. Duración, baja y suspensión</h2>
+<ul>
+<li>El contrato es indefinido desde su aceptación.</li>
+<li>El agente puede darse de baja en cualquier momento desconectando el servicio desde Meta o desde Google, o escribiendo a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li>Sparrow puede terminar el contrato con 15 días de preaviso por email, o de inmediato si el agente incumple gravemente estos términos, hace un uso abusivo, no paga tras un aviso, o lo exige la ley o una autoridad. Sparrow puede además suspender el servicio en los casos de la sección 6.</li>
+<li>Al terminar, siguen debiéndose las citas ya agendadas, y los datos se tratan según la sección 9.11. Las secciones 9.11, 11, 12 y 15 siguen vigentes tras la terminación.</li>
+</ul>
+
+<h2>14. Cambios en estos términos</h2>
+<p>Sparrow puede modificar estos términos. Avisará por email de los cambios relevantes con al menos 30 días de antelación; si el agente no está de acuerdo, puede darse de baja antes de que entren en vigor, y si sigue usando el servicio después se entienden aceptados. Los cambios exigidos por la ley o por razones urgentes de seguridad pueden aplicarse antes.</p>
+
+<h2>15. Ley aplicable y tribunales</h2>
+<p>Estos términos se rigen por el derecho español. Al tratarse de un contrato entre profesionales, las partes se someten a los juzgados y tribunales {% if legal_address %}de la ciudad del domicilio del operador ({{ legal_address }}){% else %}del domicilio del operador{% endif %}, con renuncia a cualquier otro fuero, en la medida en que la ley lo permita. Para agentes establecidos en otro Estado de la UE (por ejemplo, Francia), esta elección de tribunal se hace conforme al art. 25 del Reglamento (UE) 1215/2012, y siguen aplicándose las normas imperativas de su país que no puedan excluirse por contrato.</p>
+
+<h2>16. Otras cláusulas</h2>
+<ul>
+<li><b>Nulidad parcial:</b> si una cláusula es nula o inaplicable, el resto sigue vigente, y esa cláusula se sustituye por otra válida lo más parecida posible.</li>
+<li><b>Acuerdo completo:</b> estos términos, la <a href="/privacidad">Política de privacidad</a> y las condiciones acordadas por escrito con el agente (que prevalecen cuando así lo dicen) forman el acuerdo completo entre las partes y sustituyen a cualquier acuerdo anterior sobre el mismo objeto.</li>
+<li><b>No renuncia:</b> no ejercer un derecho no supone renunciar a él.</li>
+<li><b>Cesión:</b> el agente no puede ceder el contrato sin el consentimiento de Sparrow. Sparrow puede cederlo en una fusión, venta o reorganización, avisando al agente.</li>
+<li><b>Comunicaciones:</b> por email, a la dirección con la que el agente se dio de alta y a <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li><b>Idioma:</b> si hay diferencias entre versiones, prevalece la versión en español.</li>
 </ul>
 </section>
 <hr>
 <section id="en">
 <h1>Terms of service</h1>
-<p class="muted">Last updated: October 2026. Draft pending legal review. <a href="#es">Versión en español arriba</a>.</p>
+<p class="muted">Last updated: November 2026. Draft pending legal review. <a href="#es">Versión en español arriba</a>.</p>
+<p>These terms are the contract between the operator of Sparrow AI and the real estate agent who uses the service, and they include the data processing agreement (section 9). The agent accepts them by completing sign-up or using the service.</p>
+
+<h2>1. The parties</h2>
+<p>The service is provided by {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (tax ID {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}, contact <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> ("Sparrow"). The customer is the real estate agent or agency that completes sign-up ("the agent"). The agent declares that it acts as a professional, for business purposes, and not as a consumer, so consumer protection rules do not apply. Anyone accepting on behalf of an agency declares that they are authorised to bind it.</p>
+
+<h2>2. The service</h2>
+<p>Sparrow sets up and runs a virtual WhatsApp assistant connected to the agent's WhatsApp Business number (through Meta) and Google Calendar. The assistant messages the agent's contacts, replies, offers time slots, books valuation appointments and alerts the agent when a conversation needs them. If the agent switches it on, the prospecting feature (section 5) suggests owners who advertise their property as private sellers. The service is in a pilot phase and may change; Sparrow will tell the agent about relevant changes.</p>
+
+<h2>3. The artificial intelligence assistant</h2>
 <ul>
-<li><b>The service.</b> Sparrow sets up and runs a virtual WhatsApp assistant for the agent, connected to their WhatsApp Business account and Google Calendar. The assistant identifies itself as a virtual assistant and the agent can take over any chat.</li>
-<li><b>Agent's responsibility.</b> The agent decides which contacts are included and is responsible for having a legal basis to message them. Sparrow does not message anyone who asks not to receive more messages (BAJA).</li>
-<li><b>Pricing.</b> A one-time setup fee of EUR {{ integration_fee_eur }} per agent and EUR {{ meeting_fee_eur }} per booked meeting (a meeting accepted by the contact and created in the calendar; it does not count if the contact cancels more than 24 hours in advance). During the pilot Sparrow may apply different terms agreed in writing with the agent. Meta's messaging fees are paid by the agent directly to Meta. Prices exclude applicable taxes.</li>
-<li><b>Termination.</b> The agent can disconnect the service at any time from Meta, from Google, or by writing to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
-<li><b>Limits.</b> Sparrow does not guarantee a number of meetings or replies, and is not responsible for the agent's business decisions or for outages at Meta, Google or other providers.</li>
-<li><b>Data.</b> Data processing is governed by the <a href="/privacidad">Privacy policy</a>.</li>
-<li><b>Governing law.</b> Spanish law.</li>
+<li>The assistant always introduces itself as the agent's "virtual assistant" and never claims to be a person.</li>
+<li>It is an AI and can make mistakes. The agent can take over any chat at any time; when the agent writes in a chat after the contact has replied, the assistant stops acting in that chat until the agent turns it back on. If the assistant fails or reaches its usage limit, it hands the conversation to the agent.</li>
+<li>Valuations, prices and commitments are given by the agent, not the assistant. The agent must check booked appointments and deal with the alerts it receives.</li>
+</ul>
+
+<h2>4. Roles and responsibility for contacts</h2>
+<ul>
+<li><b>The agent is the controller</b> (art. 4(7) GDPR) of the data of its contacts and of every owner it decides to message, including owners found through prospecting. <b>Sparrow is the processor</b> and technical provider, and acts on the agent's instructions (section 9).</li>
+<li>The agent alone decides: <b>who is messaged</b>; <b>the content of the messages</b> (it writes or approves the first message, and the assistant's replies follow the service's script and the preferences the agent gives); <b>the legal basis</b> for each processing and, if it relies on legitimate interest, its own documented assessment (balancing test); and compliance with the rules on commercial communications.</li>
+<li>The agent must respect opt-outs, objections and other data subject rights. Sparrow automatically blocks numbers that reply with the opt-out word; if the agent receives an objection through another channel, it must tell Sparrow (or mark the contact) without delay.</li>
+<li>The agent warrants that it is entitled to use the data it provides or asks to obtain, and that it informs data subjects as the law requires. Sparrow helps with the message footer and with section 10 of the <a href="/privacidad">Privacy policy</a>, but that does not replace the agent's responsibility.</li>
+<li><b>Notice on commercial communications.</b> In Spain, art. 21 of Law 34/2002 (LSSI-CE) prohibits sending commercial communications by email or an equivalent electronic means (which may include WhatsApp) that the recipient did not previously request or expressly authorise, except to customers with a prior contractual relationship. A GDPR legitimate-interest assessment is not enough on its own to meet that rule. In France, art. L.34-5 of the Post and Electronic Communications Code (CPCE) and the CNIL's guidance generally require private individuals' prior consent for commercial prospecting by electronic message. The agent must assess, with its own adviser if needed, whether its messages comply with these rules before sending them. Sparrow does not give legal advice.</li>
+</ul>
+
+<h2>5. Prospecting feature</h2>
+<ul>
+<li><b>Optional and off by default.</b> It is only available to live accounts in Spain. The agent switches it on expressly after Sparrow shows it the risks and the agent accepts them: Meta may reject the text, lower the quality of its number, or limit or suspend it; messaging owners who do not know the agent needs a legal basis and an immediate opt-out; the agent must inform owners (art. 14 GDPR); portals have their own terms; and the agent must not make false promises, create false urgency or give figures it cannot prove.</li>
+<li><b>Where the data comes from.</b> Owners come from private sellers' public listings on property portals, supplied by an external data provider (currently CASAFARI). Sparrow supplies that data <b>"as is"</b>, with no warranty that it is accurate, complete, up to date or available, that the advertiser is the owner, or that the number may lawfully be contacted. Sparrow applies the agent's filters (zone, type, price), removes duplicates and opted-out numbers, and caps the number of owners per day; none of this replaces the agent's decision or responsibility.</li>
+<li><b>Portals and providers.</b> The agent is responsible for its own agreements with portals and data providers, and for complying with the terms of use that apply to it.</li>
+<li><b>Prohibited uses.</b> The agent warrants that it will not use the feature to message people who opted out or objected, minors, or contacts that do not belong to a property listing (for example third parties' or other professionals' numbers), nor for any purpose other than offering its services about that property. It will not extract, bulk-copy, transfer or resell prospecting data outside the service.</li>
+<li><b>Retention.</b> Prospecting data is kept and deleted as the <a href="/privacidad">Privacy policy</a> says (section 8), under the provider's terms; the agent cannot ask for it to be kept longer. If the owner replies, the conversation becomes an ordinary contact of the agent, without the listing data.</li>
+<li>Sparrow may limit, change or withdraw the feature, for example if the data provider stops its service or changes its terms.</li>
+</ul>
+
+<h2>6. Mandatory elements and suspension</h2>
+<ul>
+<li>Every first message to an owner who has not contacted the agent before carries elements that Sparrow adds and that the agent <b>cannot remove or change</b>: identification as the agent's virtual assistant, the opt-out word (BAJA / STOP / ARRÊT), where the contact came from (a listing on a property portal) and the link to the Privacy policy. Sparrow may reject texts with links, promises or content that break these rules or Meta's.</li>
+<li>Sparrow may <b>suspend or pause immediately</b>, without notice and without liability, prospecting, any message flow or the service if it detects a drop in the number's quality or warnings from Meta, complaints or reports, high opt-out or block rates, restrictions from the data provider or a portal, a request from an authority, or a legal risk. Sparrow will tell the agent as soon as possible and explain why when it can.</li>
+</ul>
+
+<h2>7. Pricing</h2>
+<ul>
+<li>EUR {{ meeting_fee_eur }} per booked meeting (a meeting accepted by the contact and created in the calendar; it does not count if the contact cancels more than 24 hours in advance), plus any other fee or condition agreed in writing with the agent (for example during the pilot).</li>
+<li>Meta's messaging fees are paid by the agent directly to Meta, under Meta's terms.</li>
+<li>Prices exclude applicable taxes (VAT). Payment is collected through Stripe. If an amount is not paid after a reminder, Sparrow may suspend the service.</li>
+</ul>
+
+<h2>8. Sparrow's use of data for quality and improvement</h2>
+<ul>
+<li>The agent agrees that Sparrow may use conversation and service-usage data, <b>in aggregated or pseudonymised form</b>, to measure quality (reply, opt-out and booking rates, message performance), prevent abuse and improve the service (product analytics). For this limited purpose Sparrow acts as an independent controller, relying on its legitimate interest, and informs owners in its Privacy policy.</li>
+<li>Sparrow never sells this data, does not use it for advertising, and never gives identifiable owner data to another agent.</li>
+<li>Each agent's contacts and conversations are kept separate from other agents'. The only shared check is the opt-out check: if a number asked not to receive more messages, prospecting will not offer it to any agent, without revealing any other data.</li>
+</ul>
+
+<h2>9. Data processing agreement (art. 28 GDPR)</h2>
+<p>This section is the data processing agreement between the agent (controller) and Sparrow (processor) for the data in section 4. It is part of these terms and, on personal data matters, prevails over the rest.</p>
+<ol>
+<li><b>Subject-matter and duration:</b> the processing needed to provide the service, for the term of the contract and until the data is returned or deleted (point 11).</li>
+<li><b>Nature and purpose:</b> obtaining listings from the data provider (if prospecting is on), recording, storage, consultation, sending and receiving WhatsApp messages, drafting replies with AI, booking appointments, alerting the agent and deletion, for the sole purpose of providing the service to the agent.</li>
+<li><b>Data subjects and types of data:</b> the agent's contacts and the owners the agent messages (including prospecting). Identification and contact data (name, phone number), property and listing details, message content and appointments. No special categories of data are processed; the agent must not ask for them.</li>
+<li><b>Instructions:</b> Sparrow processes the data only under these terms, the service settings and the agent's written instructions. If an instruction seems to Sparrow to infringe data protection law, Sparrow will tell the agent and may decline to follow it. If the law requires Sparrow to process the data otherwise, it will tell the agent unless the law forbids it.</li>
+<li><b>Confidentiality:</b> people authorised to process the data are bound by confidentiality.</li>
+<li><b>Security (art. 32 GDPR):</b> encrypted connections (HTTPS); access tokens stored encrypted, with the key kept separately; production access limited to the founders and password-protected; signature checks on Meta's webhooks; data separated per agent; a record of every message and AI turn; and AI usage caps.</li>
+<li><b>Sub-processors:</b> the agent gives Sparrow general authorisation to use sub-processors. The current ones are Meta (WhatsApp Business Platform), Google (Calendar), Microsoft (Azure OpenAI), Railway (hosting and database) and Stripe (payments). Sparrow binds them by contract to equivalent data protection obligations (in many cases each provider's standard terms) and remains liable to the agent for them. Sparrow will notify any new or replaced sub-processor by email at least 15 days in advance; the agent may object on reasonable grounds and, if no solution is found, terminate the contract. The prospecting data provider (CASAFARI) is a source of data and does not receive the conversations.</li>
+<li><b>International transfers:</b> hosting is in the United States (Railway) and other sub-processors may process data outside the EEA. Transfers are made only with the safeguards of Chapter V GDPR (an adequacy decision, such as the EU-US Data Privacy Framework for certified companies, or standard contractual clauses).</li>
+<li><b>Assistance:</b> Sparrow will pass on to the agent without delay any data subject request it receives and help the agent answer it; WhatsApp opt-outs are applied automatically. It will also help, based on the information available to it, with impact assessments and prior consultations.</li>
+<li><b>Personal data breaches:</b> Sparrow will notify the agent without undue delay, and where possible within 48 hours of becoming aware, of any breach affecting its data, with the information available, and help the agent meet its notification duties.</li>
+<li><b>End of processing:</b> at the agent's choice, Sparrow will return the data in a commonly used format or delete it. If the agent asks, deletion is done within 30 days at most; without instructions, Sparrow deletes the data no later than 12 months after the service ends, except what the law requires to be kept. Prospecting data is deleted on the date set by the provider. Only the irreversible code (hash) of opted-out numbers is kept, to honour their objection.</li>
+<li><b>Information and audits:</b> Sparrow will make available to the agent the information needed to demonstrate compliance with this agreement and allow audits by the agent or an auditor bound by confidentiality, with 30 days' notice, at most once a year (unless there is a breach or a request from an authority), at the agent's cost and without access to other agents' data.</li>
+</ol>
+
+<h2>10. What Sparrow does not guarantee</h2>
+<ul>
+<li>Sparrow does not guarantee any number of meetings, replies, conversions or sales.</li>
+<li>The service depends on Meta, Google, Microsoft, Railway, Stripe and the data provider. Sparrow does not guarantee that they will keep working or keep their terms. <b>Meta may limit, downgrade or suspend the agent's number or account on its own decision</b>, independently of Sparrow.</li>
+<li>Sparrow provides the service with reasonable care, but without a guarantee of uninterrupted or error-free operation.</li>
+</ul>
+
+<h2>11. Indemnity</h2>
+<p>To the extent permitted by law, the agent will indemnify and hold Sparrow harmless against any claim, fine, sanction, damage and reasonable cost (including legal fees) from third parties (including owners), authorities (such as the AEPD or the CNIL), Meta or data providers, arising from the agent's instructions, the content of messages the agent writes or approves, its choice of recipients or legal basis, or its breach of these terms or of the law. This does not apply to the extent the damage is caused by Sparrow's own breach. Sparrow will tell the agent about any claim without delay and let it take part in the defence.</p>
+
+<h2>12. Limitation of liability</h2>
+<ul>
+<li>Sparrow's total liability to the agent for all claims related to the service is limited to the amounts the agent paid Sparrow in the 12 months before the event giving rise to the claim.</li>
+<li>Sparrow is not liable for indirect damage, loss of profit, loss of business or opportunities, or for inaccuracies in the provider's data.</li>
+<li>These limits do not apply to wilful misconduct, gross negligence or anything the law does not allow to be limited, and do not affect data subjects' rights against the controller or processor (art. 82 GDPR).</li>
+</ul>
+
+<h2>13. Term, termination and suspension</h2>
+<ul>
+<li>The contract runs for an indefinite term from acceptance.</li>
+<li>The agent can terminate at any time by disconnecting the service from Meta or from Google, or by writing to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li>Sparrow can terminate with 15 days' notice by email, or immediately if the agent seriously breaches these terms, abuses the service, does not pay after a reminder, or if the law or an authority requires it. Sparrow can also suspend the service in the cases in section 6.</li>
+<li>On termination, meetings already booked remain payable, and data is handled under section 9.11. Sections 9.11, 11, 12 and 15 survive termination.</li>
+</ul>
+
+<h2>14. Changes to these terms</h2>
+<p>Sparrow may change these terms. It will give at least 30 days' notice of relevant changes by email; if the agent disagrees, it can terminate before they take effect, and continued use afterwards means acceptance. Changes required by law or by urgent security reasons may apply sooner.</p>
+
+<h2>15. Governing law and courts</h2>
+<p>These terms are governed by Spanish law. As this is a contract between professionals, the parties submit to the courts {% if legal_address %}of the city of the operator's registered address ({{ legal_address }}){% else %}of the operator's registered address{% endif %}, waiving any other jurisdiction, to the extent permitted by law. For agents established in another EU Member State (for example France), this choice of court is made under art. 25 of Regulation (EU) 1215/2012, and the mandatory rules of the agent's country that cannot be excluded by contract still apply.</p>
+
+<h2>16. Other clauses</h2>
+<ul>
+<li><b>Severability:</b> if a clause is void or unenforceable, the rest stays in force and that clause is replaced by a valid one as close as possible to it.</li>
+<li><b>Entire agreement:</b> these terms, the <a href="/privacidad">Privacy policy</a> and any conditions agreed in writing with the agent (which prevail where they say so) are the entire agreement between the parties and replace any earlier agreement on the same subject.</li>
+<li><b>No waiver:</b> not exercising a right does not mean waiving it.</li>
+<li><b>Assignment:</b> the agent may not assign the contract without Sparrow's consent. Sparrow may assign it in a merger, sale or reorganisation, with notice to the agent.</li>
+<li><b>Notices:</b> by email, to the address the agent signed up with and to <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li><b>Language:</b> if versions differ, the Spanish version prevails.</li>
 </ul>
 </section>
 
 <hr>
 <section id="fr">
 <h1>Conditions d'utilisation</h1>
-<p class="muted">Dernière mise à jour : octobre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<p class="muted">Dernière mise à jour : novembre 2026. Projet en attente de relecture juridique. <a href="#es">Versión en español</a> · <a href="#en">English version</a>.</p>
+<p>Ces conditions constituent le contrat entre l'exploitant de Sparrow AI et l'agent immobilier qui utilise le service, et comprennent l'accord de sous-traitance des données (section 9). L'agent les accepte en terminant son inscription ou en utilisant le service.</p>
+
+<h2>1. Les parties</h2>
+<p>Le service est fourni par {{ legal_entity or "Sparrow AI" }}{% if legal_nif %} (numéro fiscal {{ legal_nif }}){% endif %}{% if legal_address %}, {{ legal_address }}{% endif %}, contact <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> (« Sparrow »). Le client est l'agent immobilier ou l'agence qui termine l'inscription (« l'agent »). L'agent déclare agir en tant que professionnel, à des fins professionnelles, et non en tant que consommateur ; les règles de protection des consommateurs ne s'appliquent donc pas. La personne qui accepte au nom d'une agence déclare avoir le pouvoir de l'engager.</p>
+
+<h2>2. Le service</h2>
+<p>Sparrow configure et exploite un assistant virtuel WhatsApp connecté au numéro WhatsApp Business de l'agent (via Meta) et à son Google Agenda. L'assistant écrit aux contacts de l'agent, répond, propose des créneaux, planifie des rendez-vous d'estimation et prévient l'agent lorsqu'une conversation a besoin de lui. Si l'agent l'active, la fonction de prospection (section 5) lui propose des propriétaires qui publient une annonce de particulier. Le service est en phase pilote et peut évoluer ; Sparrow informera l'agent des changements importants.</p>
+
+<h2>3. L'assistant d'intelligence artificielle</h2>
 <ul>
-<li><b>Le service.</b> Sparrow configure et exploite un assistant virtuel WhatsApp pour l'agent, connecté à son WhatsApp Business et à son Google Agenda. L'assistant se présente comme un assistant virtuel et l'agent peut reprendre la main sur n'importe quelle conversation.</li>
-<li><b>Responsabilité de l'agent.</b> L'agent décide quels contacts sont inclus et doit disposer d'une base légale pour leur écrire. Sparrow n'écrit pas à toute personne qui demande à ne plus recevoir de messages (BAJA).</li>
-<li><b>Prix.</b> Des frais de mise en service uniques de {{ integration_fee_eur }} € par agent et {{ meeting_fee_eur }} € par rendez-vous planifié (rendez-vous accepté par le contact et créé dans l'agenda ; il n'est pas compté si le contact l'annule plus de 24 heures à l'avance). Pendant la phase pilote, Sparrow peut appliquer des conditions différentes, convenues par écrit avec l'agent. Les frais de messagerie de Meta sont payés par l'agent directement à Meta. Les prix s'entendent hors taxes applicables.</li>
-<li><b>Résiliation.</b> L'agent peut déconnecter le service à tout moment depuis Meta, depuis Google ou en écrivant à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
-<li><b>Limites.</b> Sparrow ne garantit ni un nombre de rendez-vous ni un nombre de réponses, et n'est pas responsable des décisions commerciales de l'agent ni des interruptions de Meta, Google ou d'autres prestataires.</li>
-<li><b>Données.</b> Le traitement des données est régi par la <a href="/privacidad">Politique de confidentialité</a>.</li>
-<li><b>Droit applicable.</b> Droit espagnol.</li>
+<li>L'assistant se présente toujours comme « l'assistant virtuel » de l'agent et ne prétend jamais être une personne.</li>
+<li>C'est une IA et elle peut se tromper. L'agent peut reprendre la main sur n'importe quelle conversation à tout moment ; lorsque l'agent écrit dans une conversation après que le contact a répondu, l'assistant cesse d'intervenir dans cette conversation jusqu'à ce que l'agent le réactive. Si l'assistant rencontre une erreur ou atteint sa limite d'utilisation, il transmet la conversation à l'agent.</li>
+<li>Les estimations, les prix et les engagements sont donnés par l'agent, pas par l'assistant. L'agent doit vérifier les rendez-vous planifiés et traiter les alertes qu'il reçoit.</li>
+</ul>
+
+<h2>4. Rôle de chaque partie et responsabilité à l'égard des contacts</h2>
+<ul>
+<li><b>L'agent est responsable du traitement</b> (art. 4.7 RGPD) des données de ses contacts et de tout propriétaire auquel il décide d'écrire, y compris ceux trouvés grâce à la prospection. <b>Sparrow est sous-traitant</b> et prestataire technique, et agit sur instruction de l'agent (section 9).</li>
+<li>L'agent décide seul : <b>à qui écrire</b> ; <b>le contenu des messages</b> (il rédige ou approuve le premier message, et les réponses de l'assistant suivent le script du service et les préférences qu'il indique) ; <b>la base légale</b> de chaque traitement et, s'il invoque l'intérêt légitime, sa propre évaluation (mise en balance) documentée ; et le respect des règles sur les communications commerciales.</li>
+<li>L'agent doit respecter les désinscriptions, oppositions et autres droits des personnes concernées. Sparrow bloque automatiquement les numéros qui répondent par le mot de désinscription ; si l'agent reçoit une opposition par un autre canal, il doit en informer Sparrow (ou marquer le contact) sans délai.</li>
+<li>L'agent garantit qu'il a le droit d'utiliser les données qu'il fournit ou demande d'obtenir, et qu'il informe les personnes concernées comme la loi l'exige. Sparrow l'aide avec le pied des messages et avec la section 10 de la <a href="/privacidad">Politique de confidentialité</a>, mais cela ne remplace pas la responsabilité de l'agent.</li>
+<li><b>Avertissement sur les communications commerciales.</b> En Espagne, l'art. 21 de la loi 34/2002 (LSSI-CE) interdit l'envoi de communications commerciales par courrier électronique ou par un moyen de communication électronique équivalent (ce qui peut inclure WhatsApp) qui n'ont pas été préalablement demandées ou expressément autorisées par le destinataire, sauf aux clients ayant une relation contractuelle antérieure. Une évaluation de l'intérêt légitime au sens du RGPD ne suffit pas à elle seule à respecter cette règle. En France, l'article L.34-5 du Code des postes et des communications électroniques (CPCE) et la doctrine de la CNIL exigent, en règle générale, le consentement préalable des particuliers pour la prospection commerciale par message électronique. L'agent doit vérifier, avec son propre conseil si nécessaire, que ses messages respectent ces règles avant de les envoyer. Sparrow ne fournit pas de conseil juridique.</li>
+</ul>
+
+<h2>5. Fonction de prospection</h2>
+<ul>
+<li><b>Facultative et désactivée par défaut.</b> Elle n'est disponible que pour les comptes actifs en Espagne. L'agent l'active expressément après que Sparrow lui a présenté les risques et qu'il les a acceptés : Meta peut refuser le texte, dégrader la qualité de son numéro, le limiter ou le suspendre ; écrire à des propriétaires qui ne le connaissent pas exige une base légale et une désinscription immédiate ; il doit informer les propriétaires (art. 14 RGPD) ; les portails ont leurs propres conditions ; et il ne doit pas faire de fausses promesses, créer de fausses urgences ni donner de chiffres qu'il ne peut pas prouver.</li>
+<li><b>Origine des données.</b> Les propriétaires proviennent d'annonces publiques de particuliers sur des portails immobiliers, fournies par un fournisseur de données externe (actuellement CASAFARI). Sparrow fournit ces données <b>« en l'état »</b>, sans garantie qu'elles soient exactes, complètes, à jour ou disponibles, que l'annonceur soit le propriétaire, ni que le numéro puisse être légalement contacté. Sparrow applique les filtres de l'agent (secteur, type, prix), supprime les doublons et les numéros désinscrits, et plafonne le nombre de propriétaires par jour ; rien de cela ne remplace la décision ni la responsabilité de l'agent.</li>
+<li><b>Portails et fournisseurs.</b> L'agent est responsable de ses propres accords avec les portails et les fournisseurs de données, et du respect des conditions d'utilisation qui lui sont applicables.</li>
+<li><b>Utilisations interdites.</b> L'agent garantit qu'il n'utilisera pas la fonction pour écrire à des personnes qui se sont désinscrites ou opposées, à des mineurs, ou à des contacts qui ne correspondent pas à une annonce de bien (par exemple des numéros de tiers ou d'autres professionnels), ni à d'autres fins que de proposer ses services pour ce bien. Il n'extraira pas, ne copiera pas en masse, ne cédera pas et ne revendra pas les données de prospection en dehors du service.</li>
+<li><b>Conservation.</b> Les données de prospection sont conservées et supprimées comme l'indique la <a href="/privacidad">Politique de confidentialité</a> (section 8), selon les conditions du fournisseur ; l'agent ne peut pas demander à les conserver plus longtemps. Si le propriétaire répond, la conversation devient un contact ordinaire de l'agent, sans les données de l'annonce.</li>
+<li>Sparrow peut limiter, modifier ou retirer la fonction, par exemple si le fournisseur de données cesse son service ou modifie ses conditions.</li>
+</ul>
+
+<h2>6. Éléments obligatoires et suspension</h2>
+<ul>
+<li>Tout premier message à un propriétaire qui n'a pas contacté l'agent auparavant comporte des éléments que Sparrow ajoute et que l'agent <b>ne peut ni supprimer ni modifier</b> : l'identification comme assistant virtuel de l'agent, le mot de désinscription (BAJA / STOP / ARRÊT), l'origine du contact (une annonce sur un portail immobilier) et le lien vers la Politique de confidentialité. Sparrow peut refuser les textes contenant des liens, des promesses ou des contenus contraires à ces règles ou à celles de Meta.</li>
+<li>Sparrow peut <b>suspendre ou mettre en pause immédiatement</b>, sans préavis et sans engager sa responsabilité, la prospection, tout flux de messages ou le service s'il constate une baisse de qualité du numéro ou des avertissements de Meta, des plaintes ou signalements, des taux élevés de désinscription ou de blocage, des restrictions du fournisseur de données ou d'un portail, une demande d'une autorité, ou un risque juridique. Sparrow en informera l'agent dès que possible et lui en expliquera le motif lorsqu'il le pourra.</li>
+</ul>
+
+<h2>7. Prix</h2>
+<ul>
+<li>{{ meeting_fee_eur }} € par rendez-vous planifié (rendez-vous accepté par le contact et créé dans l'agenda ; il n'est pas compté si le contact l'annule plus de 24 heures à l'avance), plus tout autre tarif ou condition convenu par écrit avec l'agent (par exemple pendant la phase pilote).</li>
+<li>Les frais de messagerie de Meta sont payés par l'agent directement à Meta, selon les conditions de Meta.</li>
+<li>Les prix s'entendent hors taxes applicables (TVA). Le paiement est encaissé via Stripe. Si un montant n'est pas payé après relance, Sparrow peut suspendre le service.</li>
+</ul>
+
+<h2>8. Utilisation des données par Sparrow pour la qualité et l'amélioration</h2>
+<ul>
+<li>L'agent accepte que Sparrow utilise les données des conversations et de l'utilisation du service, <b>sous forme agrégée ou pseudonymisée</b>, pour mesurer la qualité (taux de réponse, de désinscription et de rendez-vous, performance des messages), prévenir les abus et améliorer le service (analyse produit). Pour cette finalité limitée, Sparrow agit en tant que responsable du traitement indépendant, sur le fondement de son intérêt légitime, et en informe les propriétaires dans sa Politique de confidentialité.</li>
+<li>Sparrow ne vend jamais ces données, ne les utilise pas pour la publicité et ne transmet jamais de données identifiables d'un propriétaire à un autre agent.</li>
+<li>Les contacts et conversations de chaque agent sont séparés de ceux des autres agents. La seule vérification commune est celle des désinscriptions : si un numéro a demandé à ne plus recevoir de messages, la prospection ne le proposera à aucun agent, sans révéler d'autres données.</li>
+</ul>
+
+<h2>9. Accord de sous-traitance (art. 28 RGPD)</h2>
+<p>Cette section constitue l'accord de sous-traitance entre l'agent (responsable du traitement) et Sparrow (sous-traitant) pour les données de la section 4. Elle fait partie de ces conditions et, en matière de données personnelles, prévaut sur le reste.</p>
+<ol>
+<li><b>Objet et durée :</b> les traitements nécessaires à la fourniture du service, pendant la durée du contrat et jusqu'à la restitution ou la suppression des données (point 11).</li>
+<li><b>Nature et finalité :</b> obtention d'annonces auprès du fournisseur de données (si la prospection est active), enregistrement, conservation, consultation, envoi et réception de messages WhatsApp, rédaction de réponses par IA, planification de rendez-vous, alertes à l'agent et suppression, dans le seul but de fournir le service à l'agent.</li>
+<li><b>Personnes concernées et types de données :</b> les contacts de l'agent et les propriétaires auxquels l'agent écrit (y compris via la prospection). Données d'identification et de contact (nom, téléphone), informations sur le bien et l'annonce, contenu des messages et rendez-vous. Aucune catégorie particulière de données n'est traitée ; l'agent ne doit pas en demander.</li>
+<li><b>Instructions :</b> Sparrow ne traite les données que selon ces conditions, les paramètres du service et les instructions écrites de l'agent. Si une instruction lui paraît contraire à la réglementation, Sparrow en informe l'agent et peut refuser de l'exécuter. Si la loi impose à Sparrow un autre traitement, il en informe l'agent sauf si la loi l'interdit.</li>
+<li><b>Confidentialité :</b> les personnes autorisées à traiter les données sont tenues à la confidentialité.</li>
+<li><b>Sécurité (art. 32 RGPD) :</b> connexions chiffrées (HTTPS) ; jetons d'accès stockés chiffrés, la clé étant conservée séparément ; accès à la production limité aux fondateurs et protégé par mot de passe ; vérification de la signature des webhooks de Meta ; séparation des données par agent ; trace de chaque message et de chaque intervention de l'IA ; et plafonds d'utilisation de l'IA.</li>
+<li><b>Sous-traitants ultérieurs :</b> l'agent autorise de manière générale Sparrow à recourir à des sous-traitants ultérieurs. Les sous-traitants actuels sont Meta (WhatsApp Business Platform), Google (Agenda), Microsoft (Azure OpenAI), Railway (hébergement et base de données) et Stripe (paiements). Sparrow leur impose par contrat des obligations de protection des données équivalentes (souvent les conditions standard de chaque prestataire) et reste responsable envers l'agent de leurs actes. Sparrow notifiera par e-mail tout ajout ou remplacement de sous-traitant au moins 15 jours à l'avance ; l'agent peut s'y opposer pour des motifs raisonnables et, à défaut de solution, résilier le contrat. Le fournisseur de données de la prospection (CASAFARI) est une source de données et ne reçoit pas les conversations.</li>
+<li><b>Transferts internationaux :</b> l'hébergement se trouve aux États-Unis (Railway) et d'autres sous-traitants peuvent traiter des données hors de l'EEE. Les transferts n'ont lieu qu'avec les garanties du chapitre V du RGPD (décision d'adéquation, comme le cadre de protection des données UE-États-Unis pour les entreprises certifiées, ou clauses contractuelles types).</li>
+<li><b>Assistance :</b> Sparrow transmettra sans délai à l'agent toute demande d'exercice de droits qu'il reçoit et l'aidera à y répondre ; les désinscriptions par WhatsApp sont appliquées automatiquement. Il l'aidera aussi, selon les informations dont il dispose, pour les analyses d'impact et les consultations préalables.</li>
+<li><b>Violations de données :</b> Sparrow notifiera à l'agent dans les meilleurs délais, et si possible dans les 48 heures après en avoir pris connaissance, toute violation affectant ses données, avec les informations disponibles, et l'aidera à remplir ses obligations de notification.</li>
+<li><b>Fin du traitement :</b> au choix de l'agent, Sparrow restituera les données dans un format couramment utilisé ou les supprimera. Si l'agent le demande, la suppression intervient sous 30 jours au plus ; à défaut d'instruction, Sparrow supprime les données au plus tard 12 mois après la fin du service, sauf ce que la loi impose de conserver. Les données de prospection sont supprimées à la date fixée par le fournisseur. Seul le code irréversible (hash) des numéros désinscrits est conservé, pour respecter leur opposition.</li>
+<li><b>Information et audits :</b> Sparrow met à la disposition de l'agent les informations nécessaires pour démontrer le respect du présent accord et permet des audits par l'agent ou un auditeur tenu à la confidentialité, avec un préavis de 30 jours, au plus une fois par an (sauf violation de données ou demande d'une autorité), aux frais de l'agent et sans accès aux données des autres agents.</li>
+</ol>
+
+<h2>10. Ce que Sparrow ne garantit pas</h2>
+<ul>
+<li>Sparrow ne garantit aucun nombre de rendez-vous, de réponses, de conversions ni de ventes.</li>
+<li>Le service dépend de Meta, Google, Microsoft, Railway, Stripe et du fournisseur de données. Sparrow ne garantit pas qu'ils continueront à fonctionner ni qu'ils maintiendront leurs conditions. <b>Meta peut limiter, dégrader ou suspendre le numéro ou le compte de l'agent de sa propre initiative</b>, indépendamment de Sparrow.</li>
+<li>Sparrow fournit le service avec une diligence raisonnable, mais sans garantie de fonctionnement ininterrompu ou sans erreur.</li>
+</ul>
+
+<h2>11. Garantie de l'agent</h2>
+<p>Dans la mesure permise par la loi, l'agent garantit Sparrow contre toute réclamation, amende, sanction, dommage et frais raisonnables (y compris d'avocat) émanant de tiers (y compris les propriétaires), d'autorités (comme l'AEPD ou la CNIL), de Meta ou de fournisseurs de données, résultant des instructions de l'agent, du contenu des messages qu'il rédige ou approuve, de son choix de destinataires ou de base légale, ou de son manquement à ces conditions ou à la loi. Cela ne s'applique pas dans la mesure où le dommage est causé par un manquement de Sparrow. Sparrow informera l'agent sans délai de toute réclamation et lui permettra de participer à la défense.</p>
+
+<h2>12. Limitation de responsabilité</h2>
+<ul>
+<li>La responsabilité totale de Sparrow envers l'agent, pour toutes les réclamations liées au service, est limitée aux montants payés par l'agent à Sparrow au cours des 12 mois précédant le fait générateur.</li>
+<li>Sparrow n'est pas responsable des dommages indirects, du manque à gagner, de la perte d'activité ou d'opportunités, ni de l'inexactitude des données du fournisseur.</li>
+<li>Ces limites ne s'appliquent pas en cas de dol, de faute lourde ou pour ce que la loi ne permet pas de limiter, et n'affectent pas les droits des personnes concernées envers le responsable du traitement ou le sous-traitant (art. 82 RGPD).</li>
+</ul>
+
+<h2>13. Durée, résiliation et suspension</h2>
+<ul>
+<li>Le contrat est conclu pour une durée indéterminée à compter de son acceptation.</li>
+<li>L'agent peut résilier à tout moment en déconnectant le service depuis Meta ou depuis Google, ou en écrivant à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li>Sparrow peut résilier avec un préavis de 15 jours par e-mail, ou immédiatement si l'agent manque gravement à ces conditions, fait un usage abusif du service, ne paie pas après relance, ou si la loi ou une autorité l'exige. Sparrow peut aussi suspendre le service dans les cas de la section 6.</li>
+<li>À la résiliation, les rendez-vous déjà planifiés restent dus et les données sont traitées selon la section 9.11. Les sections 9.11, 11, 12 et 15 survivent à la résiliation.</li>
+</ul>
+
+<h2>14. Modification des conditions</h2>
+<p>Sparrow peut modifier ces conditions. Il informera l'agent des changements importants par e-mail au moins 30 jours à l'avance ; si l'agent n'est pas d'accord, il peut résilier avant leur entrée en vigueur, et la poursuite de l'utilisation vaut acceptation. Les changements imposés par la loi ou par des raisons urgentes de sécurité peuvent s'appliquer plus tôt.</p>
+
+<h2>15. Droit applicable et tribunaux</h2>
+<p>Ces conditions sont régies par le droit espagnol. S'agissant d'un contrat entre professionnels, les parties se soumettent aux juridictions {% if legal_address %}de la ville du siège de l'exploitant ({{ legal_address }}){% else %}du siège de l'exploitant{% endif %}, en renonçant à toute autre juridiction, dans la mesure permise par la loi. Pour les agents établis dans un autre État membre de l'UE (par exemple la France), ce choix de juridiction est fait conformément à l'art. 25 du règlement (UE) 1215/2012 (Bruxelles I bis), et les règles impératives de leur pays qui ne peuvent être écartées par contrat restent applicables.</p>
+
+<h2>16. Autres clauses</h2>
+<ul>
+<li><b>Divisibilité :</b> si une clause est nulle ou inapplicable, le reste demeure en vigueur et cette clause est remplacée par une clause valide aussi proche que possible.</li>
+<li><b>Intégralité :</b> ces conditions, la <a href="/privacidad">Politique de confidentialité</a> et les conditions convenues par écrit avec l'agent (qui prévalent lorsqu'elles le prévoient) constituent l'intégralité de l'accord entre les parties et remplacent tout accord antérieur sur le même objet.</li>
+<li><b>Absence de renonciation :</b> ne pas exercer un droit ne vaut pas renonciation à ce droit.</li>
+<li><b>Cession :</b> l'agent ne peut céder le contrat sans l'accord de Sparrow. Sparrow peut le céder lors d'une fusion, d'une vente ou d'une réorganisation, en informant l'agent.</li>
+<li><b>Notifications :</b> par e-mail, à l'adresse utilisée par l'agent pour s'inscrire et à <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.</li>
+<li><b>Langue :</b> en cas de divergence entre les versions, la version espagnole prévaut.</li>
 </ul>
 </section>
 

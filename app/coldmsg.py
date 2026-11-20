@@ -18,11 +18,12 @@ DEFAULT_BODY = {
     "en": "Hi {nombre}, I'm the virtual assistant of {agente} ({agencia}). We saw your listing for a {tipo} in {zona}. Are you still selling it yourself?",
 }
 
-# Appended after the agent's text. {privacy} is the public privacy-policy URL.
+# Appended after the agent's text. {privacy} is the public privacy-policy URL. It always names the assistant and the
+# agent (G13), even if the agent's own text doesn't.
 FOOTER = {
-    "es": "Vi tu anuncio publicado en un portal inmobiliario. Si no quieres que te escriba más, responde BAJA. Más información: {privacy}",
-    "fr": "J'ai vu votre annonce publiée sur un portail immobilier. Pour ne plus recevoir de messages, répondez STOP. Plus d'informations : {privacy}",
-    "en": "I saw your listing published on a property portal. If you don't want me to write again, reply STOP. More information: {privacy}",
+    "es": "Te escribe el asistente virtual de {agente}. Vi tu anuncio publicado en un portal inmobiliario. Si no quieres que te escriba más, responde BAJA. Más información: {privacy}",
+    "fr": "C'est l'assistant virtuel de {agente} qui vous écrit. J'ai vu votre annonce publiée sur un portail immobilier. Pour ne plus recevoir de messages, répondez STOP. Plus d'informations : {privacy}",
+    "en": "This is the virtual assistant of {agente}. I saw your listing published on a property portal. If you don't want me to write again, reply STOP. More information: {privacy}",
 }
 
 SAMPLE = {
@@ -62,8 +63,13 @@ def default_body(lang: str = "es") -> str:
     return DEFAULT_BODY.get(lang, DEFAULT_BODY["es"])
 
 
+# Section of the privacy policy written for owners (GDPR art. 14 notice): the footer link lands right there.
+OWNERS_ANCHOR = {"es": "#propietarios", "fr": "#proprietaires", "en": "#owners"}
+
+
 def footer(lang: str, privacy_url: str) -> str:
-    return FOOTER.get(lang, FOOTER["es"]).format(privacy=privacy_url)
+    url = privacy_url if "#" in privacy_url else privacy_url + OWNERS_ANCHOR.get(lang, OWNERS_ANCHOR["es"])
+    return FOOTER.get(lang, FOOTER["es"]).replace("{privacy}", url)  # {agente} is filled in later, with the other fields
 
 
 def validate(body: str) -> tuple[list[str], list[str]]:
@@ -106,7 +112,8 @@ def to_template_body(body: str, lang: str, privacy_url: str) -> tuple[str, list[
 
 
 def used_fields(body: str) -> list[str]:
-    text = body
+    """Fields of the agent's text plus those of the footer ({agente}), in template order: the order of {{1}}, {{2}}..."""
+    text = body + " " + FOOTER["es"]
     return [f for f in FIELD_ORDER if "{%s}" % f in text]
 
 

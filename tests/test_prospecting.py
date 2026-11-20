@@ -12,7 +12,8 @@ from app.prompt import build_system_prompt
 from tests.conftest import run_jobs, sent
 
 ZGZ = 312416
-ON = {"enabled": True, "location_id": ZGZ, "zone_name": "Zaragoza", "daily_cap": 10}
+COLD = "Hola {nombre}, soy el asistente virtual de {agente} ({agencia}). Hemos visto tu anuncio de {tipo} en {zona}. ¿Sigues vendiéndolo por tu cuenta?"
+ON = {"enabled": True, "location_id": ZGZ, "zone_name": "Zaragoza", "daily_cap": 10, "cold_body": COLD}
 
 
 @pytest.fixture(autouse=True)
@@ -27,9 +28,15 @@ def fake_casafari(monkeypatch):
 
 
 def configure(account_id, **kw):
+    from app import onboarding
     with db.session_scope() as s:
         a = s.get(Account, account_id)
         a.settings = {**(a.settings or {}), "prospecting": {**ON, **kw}}
+    with db.session_scope() as s:
+        onboarding.submit_cold_template(s, s.get(Account, account_id))  # the agent's own first message, approved by the fake Meta
+        job = jobs.schedule(s, "check_templates", db.utcnow(), account_id=account_id, dedupe_key=f"check_templates:{account_id}", reuse=True, replace_run_at=True)
+        job.status = "pending"
+    run_jobs()
 
 
 def run(account_id):
@@ -220,8 +227,8 @@ def test_first_message_goes_through_the_normal_guards(account, clock):
     clock.advance(seconds=31)
     run_jobs()
     out = sent("+34600100001")
-    assert len(out) == 1 and out[0]["template"] == "lead_first_contact_v2"
-    assert "asistente virtual de Laura" in out[0]["text"] and "Vi tu anuncio en Zaragoza" in out[0]["text"]
+    assert len(out) == 1 and out[0]["template"] == "cold_first_contact_v1"
+    assert "asistente virtual de Laura" in out[0]["text"] and "anuncio de" in out[0]["text"] and "BAJA" in out[0]["text"]
 
 
 def test_outside_allowed_hours_nothing_is_sent(account, clock):
