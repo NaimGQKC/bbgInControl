@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from fastapi import FastAPI
 
-from . import admin, engine, jobs, onboarding, web, webhooks  # noqa: F401  (engine/onboarding register job handlers)
+from . import admin, engine, jobs, onboarding, prospecting, web, webhooks  # noqa: F401  (engine/onboarding/prospecting register job handlers)
 from .config import get_settings
 from .db import init_db, session_scope, utcnow
 
@@ -20,6 +20,12 @@ def schedule_daily_jobs() -> None:
         jobs.schedule(s, "phone_health", tomorrow, dedupe_key=f"phone_health:{tomorrow:%Y-%m-%d}")
         jobs.schedule(s, "google_check", utcnow() + timedelta(minutes=10), dedupe_key=f"google_check:{utcnow():%Y-%m-%d}")
         jobs.schedule(s, "google_check", tomorrow, dedupe_key=f"google_check:{tomorrow:%Y-%m-%d}")
+        # Prospecting (opt-in, PROSPECTING_ENABLED): the scan queues one run per enabled account at its allowed hours
+        jobs.schedule(s, "prospect_scan", utcnow() + timedelta(minutes=15), dedupe_key=f"prospect_scan:{utcnow():%Y-%m-%d}")
+        jobs.schedule(s, "prospect_scan", tomorrow, dedupe_key=f"prospect_scan:{tomorrow:%Y-%m-%d}")
+        # CASAFARI storage limit: always runs, even with prospecting off
+        jobs.schedule(s, "source_cleanup", utcnow() + timedelta(minutes=20), dedupe_key=f"source_cleanup:{utcnow():%Y-%m-%d}")
+        jobs.schedule(s, "source_cleanup", tomorrow, dedupe_key=f"source_cleanup:{tomorrow:%Y-%m-%d}")
 
 
 @asynccontextmanager

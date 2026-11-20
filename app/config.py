@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     ai_max_user_chars: int = 1000  # longer lead messages are cut before they reach the model
     llm_max_output_tokens: int = 1200  # per model call (includes the model's hidden reasoning)
 
+    # Prospecting: private-seller listings from CASAFARI (app/prospecting.py). Off unless both the global switch
+    # and the account's settings["prospecting"]["enabled"] are on.
+    prospecting_enabled: bool = False  # global kill switch
+    casafari_mode: str = "fake"  # live | fake
+    casafari_api_key: str = ""
+    prospecting_max_pages_per_run: int = 1  # paid searches per account per run (10 tokens each); hard-capped at 4
+    prospecting_retention_days: int = 365  # a never-answered CASAFARI lead is deleted after this
+    casafari_closed_on: str = ""  # YYYY-MM-DD the CASAFARI account closed: their data must go within 30 days
+
     # Timing (seconds)
     first_message_delay: int = 30
     reply_delay: int = 30

@@ -18,7 +18,7 @@ def _common(account: Account, lead: Lead, lang: str, labels: dict) -> dict:
     """Pieces every language needs, with the labels in that language."""
     agent = account.agent_name or L.text("the_agent", lang)
     agent_first = first_name(agent) or agent
-    facts = lead.facts or {}
+    facts = {k: v for k, v in (lead.facts or {}).items() if not str(k).startswith("_")}  # "_source" etc. are ours, not the AI's
     price = f"{lead.price:,.0f}" if lead.price else ""
     price = price.replace(",", ".") if lang == "es" else price.replace(",", " " if lang == "fr" else ",")
     rows = [("name", lead.name), ("phone", lead.phone), ("type", lead.property_type), ("zone", lead.zone), ("address", lead.address),
@@ -168,7 +168,7 @@ def _prompt_es(account: Account, lead: Lead, must_introduce: bool) -> str:
     agent = account.agent_name or "el agente"
     agent_first = first_name(agent) or agent
     now = to_local(utcnow(), account.timezone)
-    facts = lead.facts or {}
+    facts = {k: v for k, v in (lead.facts or {}).items() if not str(k).startswith("_")}
     known = "\n".join(f"- {k}: {v}" for k, v in facts.items()) or "- (nada todavía)"
     lead_info = "\n".join(
         f"- {k}: {v}"

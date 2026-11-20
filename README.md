@@ -24,8 +24,9 @@ How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rul
 | `app/helpchat.py` | Capped AI help inside the onboarding (questions, screenshots, change proposals the agent must confirm) |
 | `app/transcribe.py` | Voice-note transcription for leads (needs an Azure transcription deployment) |
 | `app/admin.py` | Ops console at `/admin` (also used for the App Review videos) |
+| `app/casafari.py`, `app/prospecting.py` | Prospecting (off by default): private-seller listings with a phone from CASAFARI for one zone become ordinary leads (Spanish phones only, filters, de-duplication across portals, daily cap), then the normal flow and guards decide. `scripts/casafari_yield.py` estimates leads and cost per area without touching the DB |
 | `app/jobs.py` | Job queue in Postgres (the worker runs inside the web process) |
-| `tests/` | 59 tests covering guardrails G1–G14, onboarding and the full flow |
+| `tests/` | 104 tests covering guardrails G1–G14, onboarding, the full flow and prospecting |
 
 ## Run locally (5 min, no accounts needed)
 

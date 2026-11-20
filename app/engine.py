@@ -820,7 +820,7 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
             return book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
         if name == "save_facts":
             facts = dict(lead.facts or {})
-            facts.update({k: v for k, v in args.items() if v})
+            facts.update({k: v for k, v in args.items() if v and not str(k).startswith("_")})  # "_" keys belong to code
             lead.facts = facts
             if args.get("address"):
                 lead.address = args["address"]
