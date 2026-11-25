@@ -75,6 +75,7 @@ def test_handoff_for_another_reason_keeps_the_reminders(clock, account):
     run_jobs()
     with db.session_scope() as s:
         assert s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().status == "booked"
+        assert s.execute(select(Job).where(Job.lead_id == lid, Job.type == "reminder", Job.status == "pending")).scalars().all()
 
 
 def test_phone_call_reminder_reads_right_in_spanish(clock, account):
@@ -115,3 +116,59 @@ def test_failed_first_message_alerts_the_agent(clock, account, monkeypatch):
     assert lead_of(lid).status == "failed"
     alert = [m for m in sent() if m["from"] == "sparrow"]
     assert alert and alert[-1]["template"] == "agent_needs_you_v1" and "primer mensaje" in alert[-1]["text"]
+
+
+@pytest.mark.parametrize("reason,said", [("quiere cancelar", "no puedo ir"), ("wants to cancel", "I can't make it"), ("veut modifier son rdv", "je dois décaler"),
+                                         ("pide otro día", "mejor otro día"), ("no puede venir mañana", "mañana no puedo")])
+def test_short_cancel_reasons_stop_the_reminders(clock, account, reason, said):
+    lid, m = _book(clock, account)
+    FakeBackend.push({"tool": "handoff", "input": {"reason": reason}})
+    inbound(account, said, "in3")
+    clock.advance(seconds=31)
+    run_jobs()
+    with db.session_scope() as s:
+        assert s.execute(select(Job).where(Job.lead_id == lid, Job.type == "reminder", Job.status == "pending")).scalars().all() == []
+
+
+@pytest.mark.parametrize("text", ["Hay okupas, ya puse una denuncia", "Tengo que denunciar a mi vecino por obras", "Can you report this to Marta?"])
+def test_ordinary_sales_talk_about_complaints_is_not_a_threat(text):
+    assert guards.warm_hard_stop(text) is None
+
+
+@pytest.mark.parametrize("text", ["Os voy a denunciar", "Os denuncio a la AEPD", "I will sue you", "Je vais porter plainte"])
+def test_a_threat_aimed_at_us_is_one(text):
+    assert guards.warm_hard_stop(text) == "threat"
+
+
+def test_two_hour_call_reminder_reads_right(clock, account):
+    lid, m = _book(clock, account)
+    with db.session_scope() as s:
+        s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().type = "call"
+    clock.set(m.start - timedelta(hours=2))
+    run_jobs()
+    text = sent(M)[-1]["text"]
+    assert "estará en contacto por teléfono" in text and "por por" not in text
+
+
+def test_data_request_after_opt_out_still_alerts_the_agent(clock, account):
+    lid = start_conversation(clock, account)
+    assert inbound(account, "BAJA", "in1") == "opted_out"
+    n = len(sent(M))
+    assert inbound(account, "Y borrad mis datos por favor", "in2") == "stored_only"
+    assert len(sent(M)) == n  # nothing is sent to an opted-out number
+    alert = [m for m in sent() if m["from"] == "sparrow"][-1]
+    assert alert["template"] == "agent_needs_you_v1" and alert["to"] == "34611111111"
+
+
+def test_failed_first_message_to_a_cold_lead_does_not_alert(clock, account):
+    from app import engine
+    lid, _ = ingest(account)
+    with db.session_scope() as s:
+        lead = s.get(Lead, lid)
+        lead.facts = {**(lead.facts or {}), "_source": {"provider": "casafari"}}
+    n = len([m for m in sent() if m["from"] == "sparrow"])
+    with db.session_scope() as s:
+        job = s.execute(select(Job).where(Job.lead_id == lid, Job.type == "first_contact")).scalars().first()
+        job.last_error = "WhatsAppError('(#131026) Message undeliverable')"
+        engine.job_first_contact_failed(s, job)
+    assert len([m for m in sent() if m["from"] == "sparrow"]) == n

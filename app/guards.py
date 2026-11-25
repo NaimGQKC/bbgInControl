@@ -42,7 +42,9 @@ _COLD_HARD_STOPS = {
 }
 
 
-_WARM_THREAT = re.compile(r"\bdenunci\w*|\baepd\b|\bporter plainte\b|\bcnil\b|\bvous signaler\b|\breport (you|this)\b|\bsue (you|us)\b", re.I)
+_WARM_THREAT = re.compile(
+    r"\b(os|te|le|les|nos)\s+(voy\s+a\s+)?denunci\w*|\bdenunciar(os|te|nos|les)\b|\bdenunciaré\b|\baepd\b|\bcnil\b|"
+    r"\bvous\s+(signaler|dénoncer)\b|\bje\s+(vais\s+)?porter\s+plainte\b|\breport\s+(you|us)\b|\bsue\s+(you|us)\b", re.I)
 
 
 def warm_hard_stop(text: str | None) -> str | None:
