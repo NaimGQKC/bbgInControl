@@ -178,7 +178,7 @@ def lead_summary(lead: Lead) -> str:
 LEAD_FIELDS = ("name", "property_type", "zone", "address", "listing_url", "stage", "source", "source_ref")
 
 
-def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False) -> tuple[Lead | None, str]:
+def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False, any_hour: bool = False) -> tuple[Lead | None, str]:
     """Standard `Lead` in, first message scheduled. Returns (lead, result)."""
     phone = normalize_phone(data.get("phone"), L.cc_for(account))
     if not phone:
@@ -228,6 +228,9 @@ def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False) -> tu
         return lead, f"skipped:{skip}"
 
     run_at = next_allowed_time(account, utcnow() + timedelta(seconds=get_settings().first_message_delay))
+    if is_test and any_hour:  # admin-only rehearsal switch: a TEST lead the operator ticked "any hour" skips the 09-21 window (never a real owner)
+        lead.facts = {**(lead.facts or {}), "_any_hour": True}
+        run_at = utcnow() + timedelta(seconds=get_settings().first_message_delay)
     jobs.schedule(s, "first_contact", run_at, lead_id=lead.id, account_id=account.id, dedupe_key=f"first:{lead.id}")
     lead.status = "queued"
     return lead, "queued"

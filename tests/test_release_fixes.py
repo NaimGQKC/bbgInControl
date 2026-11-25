@@ -172,3 +172,26 @@ def test_failed_first_message_to_a_cold_lead_does_not_alert(clock, account):
         job.last_error = "WhatsAppError('(#131026) Message undeliverable')"
         engine.job_first_contact_failed(s, job)
     assert len([m for m in sent() if m["from"] == "sparrow"]) == n
+
+
+def test_any_hour_applies_only_to_a_test_lead_created_with_it(clock, account):
+    clock.set(datetime(2026, 12, 1, 22, 0))  # Tuesday 23:00 Madrid: outside the window
+    with db.session_scope() as s:
+        acc = s.get(Account, account)
+        a, _ = engine_ingest(s, acc, "+34600111001", is_test=True, any_hour=True)
+        b, _ = engine_ingest(s, acc, "+34600111002", is_test=True, any_hour=False)
+        c, _ = engine_ingest(s, acc, "+34600111003", is_test=False, any_hour=True)  # a real owner can never skip the window
+        assert guards.can_contact(acc, a, kind="first") == (True, "ok")
+        assert guards.can_contact(acc, b, kind="first") == (False, "outside_hours")
+        assert guards.can_contact(acc, c, kind="first") == (False, "outside_hours")
+        assert "_any_hour" not in (c.facts or {})
+    run_jobs()
+    clock.advance(seconds=31)
+    run_jobs()
+    out = [m for m in sent() if m["from"] != "sparrow"]
+    assert len(out) == 1 and out[0]["to"] == "34600111001"  # only the any-hour test lead got a message
+
+
+def engine_ingest(s, acc, phone, **kw):
+    from app import engine
+    return engine.ingest_lead(s, acc, {"name": "Test", "phone": phone, "zone": "Delicias", "source": "admin"}, **kw)
