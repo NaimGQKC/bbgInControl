@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app import db, guards, jobs
 from app.llm import FakeBackend
-from app.models import Account, Job, Lead, Meeting
+from app.models import Account, Job, Lead, Meeting, Message
 from app.whatsapp import FakeWhatsApp, WhatsAppError
 from tests.conftest import run_jobs, sent
 from tests.test_flow import M, _book, ingest, inbound, lead_of, start_conversation
@@ -195,3 +195,45 @@ def test_any_hour_applies_only_to_a_test_lead_created_with_it(clock, account):
 def engine_ingest(s, acc, phone, **kw):
     from app import engine
     return engine.ingest_lead(s, acc, {"name": "Test", "phone": phone, "zone": "Delicias", "source": "admin"}, **kw)
+
+
+def _fail_last_out(error):
+    from app import engine
+    with db.session_scope() as s:
+        wid = s.execute(select(Message.wa_message_id).where(Message.direction == "out", Message.sender == "ai")
+                        .order_by(Message.id.desc())).scalars().first()
+        engine.handle_status(s, wid, "failed", error)
+
+
+def test_late_delivery_failure_of_the_first_message_alerts_the_agent_once(clock, account):
+    lid = start_conversation(clock, account)
+    assert lead_of(lid).status == "contacted"
+    _fail_last_out("131042: Business eligibility payment issue")
+    lead = lead_of(lid)
+    assert lead.status == "failed"
+    alerts = [m for m in sent() if m["from"] == "sparrow" and m["template"] == "agent_needs_you_v1"]
+    assert len(alerts) == 1 and alerts[0]["to"] == "34611111111" and "pago" in alerts[0]["text"] and "Marta" in alerts[0]["text"]
+    with db.session_scope() as s:  # no pointless follow-ups to a number we cannot reach
+        assert s.execute(select(Job).where(Job.lead_id == lid, Job.type == "followup", Job.status == "pending")).scalars().all() == []
+    _fail_last_out("131042: again")  # the same lead is not alerted twice
+    assert len([m for m in sent() if m["from"] == "sparrow" and m["template"] == "agent_needs_you_v1"]) == 1
+
+
+def test_undeliverable_number_says_so(clock, account):
+    start_conversation(clock, account)
+    _fail_last_out("(#131026) Message undeliverable")
+    alert = [m for m in sent() if m["from"] == "sparrow"][-1]
+    assert "no tiene WhatsApp" in alert["text"]
+
+
+def test_a_reply_that_never_arrived_hands_the_chat_to_the_agent(clock, account):
+    lid = start_conversation(clock, account)
+    FakeBackend.push({"text": "Perfecto, gracias. ¿Cuándo te viene bien?"})
+    inbound(account, "Sí, vendo", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    _fail_last_out("131047: Re-engagement message")
+    lead = lead_of(lid)
+    assert lead.status == "handoff" and lead.human_owned
+    alert = [m for m in sent() if m["from"] == "sparrow"][-1]
+    assert "Sí, vendo" in alert["text"] and "24 h" in alert["text"]

@@ -647,6 +647,28 @@ def handle_echo(s, account: Account, to_phone: str, msg: dict) -> str:
     return "agent_opening"
 
 
+def _delivery_failed(s, account: Account, lead: Lead, error: str) -> None:
+    """Meta accepted a message and later said it could not deliver it (no WhatsApp, payment problem, window closed...).
+    The agent hears about it once, with the contact's details, and takes the owner over: nothing else would reach them.
+    Cold prospecting leads are only logged (landlines are common there; one alert each would flood the agent)."""
+    facts = dict(lead.facts or {})
+    if is_cold(lead) or lead.do_not_contact or lead.human_owned or facts.get("_delivery_alerted"):
+        return
+    facts["_delivery_alerted"] = True  # code-only key
+    lead.facts = facts
+    lang = L.lead_lang(account)
+    code = (re.search(r"\d{5,6}", error or "") or [""])[0]
+    cause = (L.text("cause_no_whatsapp", lang) if code == "131026" else L.text("cause_window", lang) if code == "131047"
+             else L.text("cause_payment", lang) if code == "131042" else L.text("cause_other", lang, code=code or "?"))
+    why = L.text("why_delivery_failed", lang, cause=cause)
+    jobs.cancel(s, lead.id, ["followup", "mark_no_reply", "ai_turn"])
+    if lead.has_replied:  # a reply of ours did not arrive mid-chat: the agent takes the chat, with the owner's last message in the alert
+        do_handoff(s, account, lead, why, notify_lead=False)
+        return
+    lead.status = "failed"
+    alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
+
+
 def handle_status(s, wa_message_id: str, status: str, error: str = "") -> None:
     m = s.execute(select(Message).where(Message.wa_message_id == wa_message_id)).scalar_one_or_none()
     if not m:
@@ -655,6 +677,10 @@ def handle_status(s, wa_message_id: str, status: str, error: str = "") -> None:
     if status == "failed":
         m.status, m.error = "failed", error
         log_event(s, "delivery_failed", m.account_id, m.lead_id, error=error)
+        if m.direction == "out" and m.sender in ("ai", "system") and m.lead_id:
+            lead, account = s.get(Lead, m.lead_id), s.get(Account, m.account_id)
+            if lead is not None and account is not None:
+                _delivery_failed(s, account, lead, error)
     elif status in order and order.index(status) > (order.index(m.status) if m.status in order else 0):
         m.status = status
 
