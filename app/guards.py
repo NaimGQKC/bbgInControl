@@ -115,6 +115,32 @@ def tidy_name(name: str | None) -> str:
     return " ".join(w.lower() if i and w.lower() in _PARTICLES else w[:1].upper() + w[1:].lower() for i, w in enumerate(n.split()))
 
 
+_OPT_PHRASES = re.compile(
+    r"\b(no me (escrib|contact|llam|moleste)\w*( mas)?|dejad? de (escribir|contactar|molestar)\w*|dejen de (escribir|contactar)\w*|"
+    r"ne m'?ecri\w* plus|ne me contact\w* plus|arretez?\b|stop (writing|messaging|contacting)|do not (contact|message) me|don'?t (contact|message|text) me)", re.I)
+_OPT_BLOCK = {"precio", "precios", "prix", "price", "prices"}  # "baja el precio" is about the price, not an opt-out
+
+
+def _plain(text: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (text or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9' ]+", " ", s)
+
+
+def is_opt_out_text(text: str) -> bool:
+    """A short message that is an opt-out however it is written: 'BAJA', '¡BAJA!', 'baja por favor', 'STOP 🙏', 'Arrêtez',
+    'no me escribas más'. Long messages are left to the model (an owner can say 'baja' while talking about the price)."""
+    plain = _plain(text)
+    words = plain.split()
+    if not words or len(words) > 60:
+        return False
+    if _OPT_PHRASES.search(plain):
+        return True
+    plain_opt = {_plain(w).strip() for w in OPT_OUT_WORDS}
+    return len(words) <= 5 and bool(plain_opt & set(words)) and not (_OPT_BLOCK & set(words))
+
+
 def first_name(name: str | None) -> str:
     parts = (name or "").split()
     return parts[0] if parts else ""

@@ -328,6 +328,10 @@ def job_check_templates(s, job):
             advance(account, "done")
             log_event(s, "account_live", account.id)
             alert_agent(s, account, T.AGENT_LIVE, [L.agent_hi(account)])
+            from . import prospecting
+            from .engine import rearm_queued_leads
+            prospecting.activate_if_requested(s, account)
+            rearm_queued_leads(s, account)
         again = cold == "pending"  # only the agent's cold template is still waiting for Meta
     elif first == "REJECTED":
         log_event(s, "template_rejected", account.id, template=T.LEAD_FIRST_CONTACT.name)

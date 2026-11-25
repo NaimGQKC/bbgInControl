@@ -71,7 +71,7 @@ def _state(s, acc: Account) -> dict:
         "cc": L.cc_for(acc),
         # what a new owner will receive from their number, with a made-up lead name
         "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
-        "prospecting": _prospecting_state(acc),
+        "prospecting": _prospecting_state(acc) if _prospecting_offered(acc) else None,  # hidden until the feature is switched on (Spain only)
         "integrations": integrations,
         "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
                     "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
@@ -129,7 +129,7 @@ def onboarding_page(request: Request, token: str):
             "i18n": i18n_onb.strings(lang),
             "page_title": i18n.ONB_TITLE[lang],
             "token": token,
-            "state_json": json.dumps(state, ensure_ascii=False),
+            "state_json": json.dumps(state, ensure_ascii=False).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029"),
             "meta_app_id": st.meta_app_id,
             "meta_config_id": st.meta_config_id,
             "graph_version": st.graph_version,
@@ -155,7 +155,8 @@ async def api_answers(token: str, request: Request):
         acc = _account_by_token(s, token)
         for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
-                setattr(acc, f, tidy_name(str(data[f]).strip()[:500]) if f == "agent_name" else str(data[f]).strip()[:500])
+                v = _nobrackets(str(data[f]).strip()[:500])
+                setattr(acc, f, tidy_name(v) if f == "agent_name" else v)
         if data.get("lead_lang") in L.LANGS and data["lead_lang"] != L.lead_lang(acc):
             onboarding.change_lead_lang(s, acc, data["lead_lang"])
         elif data.get("lead_lang") in L.LANGS:
@@ -180,8 +181,17 @@ MAX_PRICE = 20_000_000
 ACK_TEXT_VERSION = 1
 
 
+def _nobrackets(text: str) -> str:
+    """Names, agencies and zones never need < or >: dropping them closes the door on injected HTML/JS."""
+    return str(text).replace("<", "").replace(">", "")
+
+
 def _pros(acc: Account) -> dict:
     return dict((acc.settings or {}).get("prospecting") or {})
+
+
+def _prospecting_offered(acc: Account) -> bool:
+    return bool(get_settings().prospecting_enabled) and L.lead_lang(acc) == "es"
 
 
 def _prospecting_state(acc: Account) -> dict:
@@ -332,7 +342,7 @@ async def api_prospecting(token: str, request: Request):
             cap = None
         cap = max(1, min(20, cap if cap is not None else 5))
 
-        body = str(data["cold_body"]).strip() if data.get("cold_body") else (old.get("cold_body") or coldmsg.default_body(lang))
+        body = _nobrackets(str(data["cold_body"]).strip()) if data.get("cold_body") else (old.get("cold_body") or coldmsg.default_body(lang))
         problems, warnings = coldmsg.validate(body)
         if problems:
             return _bad("cold_body", "El primer mensaje no es válido.", problems=problems, warnings=warnings)
@@ -347,7 +357,10 @@ async def api_prospecting(token: str, request: Request):
         now_iso = utcnow().isoformat()
         new = {**old, "location_id": loc, "zone_name": zone, "property_types": types, "min_price": lo, "max_price": hi,
                "daily_cap": cap, "cold_body": body, "success_pitch": pitch, "decided_at": old.get("decided_at") or now_iso}
-        if body != old.get("cold_body"):
+        declined = not want_on and not old.get("cold_body")  # "ahora no": keep nothing about a message and never send a template to Meta
+        if declined:
+            new.pop("cold_body", None)
+        elif body != old.get("cold_body"):
             new["cold_version"] = int(old.get("cold_version") or 0) + 1
             new["cold_template_status"] = "pending"  # another job submits it to Meta and updates this
         reason = None
@@ -355,11 +368,12 @@ async def api_prospecting(token: str, request: Request):
             want_on, reason = False, "paused"  # a pause (quality, opt-outs, credit, operator) is lifted by the operator only
         elif want_on and acc.status != "live":
             want_on, reason = False, "not_live"  # not connected yet: saved, but off until the account is live
+            new.update({"enable_when_live": True, "ack_at": now_iso, "ack_text_version": ACK_TEXT_VERSION})  # asked for + accepted; go-live turns it on
         elif want_on and not old.get("confirmed_at"):
             new.update({"confirmed_at": now_iso, "ack_at": now_iso, "ack_text_version": ACK_TEXT_VERSION})
         new["enabled"] = want_on
         acc.settings = {**(acc.settings or {}), "prospecting": new}
-        if new.get("cold_template_status") == "pending":
+        if not declined and new.get("cold_template_status") == "pending":
             s.flush()
             onboarding.submit_cold_template(s, acc)  # no-op until WhatsApp is connected; connect submits it then
         log_event(s, "prospecting_saved", acc.id, enabled=want_on, reason=reason or "", cold_version=new.get("cold_version"))

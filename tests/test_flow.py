@@ -635,6 +635,7 @@ def test_payment_step_and_stripe_webhook(clock, monkeypatch):
 
     monkeypatch.setenv("STRIPE_PAYMENT_LINK", "https://buy.stripe.com/test_123")
     monkeypatch.setenv("STRIPE_WEBHOOK_SECRET", "whsec_test")
+    monkeypatch.setenv("INTEGRATION_FEE_EUR", "90")  # the default is no setup fee; a fee can still be switched on
     get_settings.cache_clear()
     with TestClient(app) as c:
         token = _new_onboarding(c)

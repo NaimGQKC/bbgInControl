@@ -136,7 +136,7 @@ Status: ✅ built and covered by tests · 🟡 built, needs live verification ·
 ### 6.7 Billing
 | ID | Requirement | Status |
 |---|---|---|
-| BL-1 | A meeting is billable when accepted by the owner and created in the calendar; not billable if the owner cancels more than 24 h before | ✅ (counted) |
+| BL-1 | A meeting is billable when accepted by the owner and created in the calendar; not billable if the owner cancels more than 24 h before | ⏳ rule is in the terms; the code does not record cancellations (`cancelled_at`) yet, so count booked meetings by hand and check cancellations |
 | BL-2 | Monthly summary per agent (meetings × EUR 30) | ⏳ |
 | BL-3 | No-show policy (bill booked vs held) | ⏳ decision |
 | BL-4 | Stripe payment link for a setup fee | optional, off |

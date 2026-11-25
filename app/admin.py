@@ -23,6 +23,8 @@ security = HTTPBasic()
 
 def auth(creds: HTTPBasicCredentials = Depends(security)):
     st = get_settings()
+    if st.whatsapp_mode == "live" and st.admin_password in ("", "change-me"):
+        raise HTTPException(503, "Set ADMIN_PASSWORD (and ADMIN_USER) in the environment before using the admin console.")
     ok = secrets.compare_digest(creds.username, st.admin_user) and secrets.compare_digest(creds.password, st.admin_password)
     if not ok:
         raise HTTPException(401, headers={"WWW-Authenticate": "Basic"})
@@ -103,6 +105,9 @@ def account_action(account_id: int, action: str = Form(...)):
         if action == "go_live":
             acc.status = "live"
             log_event(s, "account_live", acc.id, manual=True)
+            prospecting.activate_if_requested(s, acc)
+            from .engine import rearm_queued_leads
+            rearm_queued_leads(s, acc)
             return _back(url, "Cuenta activa")
         if action == "pause":
             acc.status = "paused"
@@ -115,6 +120,11 @@ def test_lead(account_id: int, name: str = Form(...), phone: str = Form(...), zo
               test: str = Form("")):  # an unchecked checkbox sends nothing, so "" must mean "not a test"
     with session_scope() as s:
         acc = s.get(Account, account_id)
+        if test:  # rehearsals must be repeatable: the old test lead with this number (and its chat, jobs, meeting) goes first
+            p = normalize_phone(phone)
+            old = s.execute(select(Lead).where(Lead.account_id == acc.id, Lead.phone == p, Lead.is_test.is_(True))).scalar_one_or_none() if p else None
+            if old is not None:
+                prospecting.delete_lead(s, old)
         lead, result = ingest_lead(s, acc, {"name": name, "phone": phone, "zone": zone, "property_type": property_type, "source": "admin"},
                                    is_test=bool(test))
         return _back(f"/admin/accounts/{account_id}", f"Lead: {result}")
@@ -269,6 +279,8 @@ def prospecting_action(account_id: int, action: str = Form(...)):
         if action == "resume":
             if not cfg.get("location_id"):
                 return _back("/admin/prospecting", "Falta la zona: no se puede reanudar")
+            if not cfg.get("ack_at"):
+                return _back("/admin/prospecting", "El agente no ha aceptado los riesgos: no se puede reanudar")
             cfg.update({"enabled": True, "paused_reason": "", "confirmed_at": utcnow().isoformat()})
             acc.settings = {**(acc.settings or {}), "prospecting": cfg}
             log_event(s, "prospect_resumed", acc.id, by="operator")
