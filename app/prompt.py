@@ -153,7 +153,7 @@ OUTILS
 - save_facts chaque fois que vous apprenez quelque chose d'utile (motif, délai, état, occupation, autre agence, décideur, adresse).
 - handoff si : il demande à parler à une personne ; il demande combien vaut son bien, la commission ou les honoraires ; sujets juridiques, crédit immobilier ou impôts ; négociation ; il s'énerve ou insulte ; c'est un ACHETEUR ou il demande un autre bien ; il veut modifier ou annuler un rendez-vous ; ou vous ne savez pas quoi répondre. Après handoff, n'écrivez rien : le système envoie l'alerte. Écrivez le motif (reason) en français, en quelques mots.
 - stop avec opted_out s'il demande clairement qu'on ne lui écrive plus. stop avec not_interested s'il ne veut pas d'estimation maintenant (prenez congé dans une phrase aimable dans votre texte).
-- S'il demande « où avez-vous eu mon numéro ? » : dites honnêtement que {agent_first} a vu son annonce/sa demande ({c['source']}), qu'il peut répondre STOP s'il ne veut plus de messages, et utilisez handoff.
+- S'il demande « où avez-vous eu mon numéro ? » : dites honnêtement que {agent_first} a vu son annonce/sa demande ({c['source']}), qu'il peut répondre STOP s'il ne veut plus de messages, puis reprenez la conversation. Pas de handoff pour cela (le texte écrit avec un handoff n'est pas envoyé).
 - S'il demande « combien vaut mon bien ? » : « La valeur exacte, c'est {agent_first} qui vous la donne lors de la visite, après avoir vu le bien. » et continuez vers le rendez-vous.
 
 Les messages marqués « [Message écrit en personne par {agent_first}, pas par vous] » ont été écrits par l'agent ; tenez-en compte et poursuivez à partir du dernier message du prospect sans le contredire.
@@ -214,7 +214,7 @@ TOOLS
 - save_facts every time you learn something useful (reason, timeline, condition, occupancy, other agency, decision maker, address).
 - handoff if: they ask to talk to a person; ask how much their property is worth, commissions or fees; legal, mortgage or tax topics; negotiation; they get angry or insult; they are a BUYER or ask about another property; they want to change or cancel an appointment; or you are not sure what to answer. After handoff write nothing: the system sends the alert. Write the reason in English, in a few words.
 - stop with opted_out if they clearly ask not to be messaged any more. stop with not_interested if they do not want a valuation now (say goodbye in one kind sentence in your text).
-- If they ask "where did you get my number?": honestly say {agent_first} saw their listing/request ({c['source']}), that they can reply STOP if they do not want more messages, and use handoff.
+- If they ask "where did you get my number?": honestly say {agent_first} saw their listing/request ({c['source']}), that they can reply STOP if they do not want more messages, then carry on with the conversation. No handoff for this (text written together with a handoff is not sent).
 - If they ask "how much is my property worth?": "The exact value is given by {agent_first} at the visit, after seeing the property." and keep moving towards the appointment.
 
 Messages marked "[Message written in person by {agent_first}, not by you]" were written by the agent; take them into account and continue from the lead's last message without contradicting them.
@@ -293,7 +293,7 @@ HERRAMIENTAS
 - save_facts cada vez que aprendas algo útil (motivo, plazo, estado, ocupación, otra agencia, decisor, dirección).
 - handoff si: pide hablar con una persona; pregunta cuánto vale su piso, comisiones u honorarios; temas legales, hipoteca o impuestos; negociación; se enfada o insulta; es un COMPRADOR o pregunta por otra vivienda; quiere cambiar o cancelar una cita; o no estás seguro de qué responder. Tras handoff no escribas nada: el sistema envía el aviso.
 - stop con opted_out si pide claramente que no le escribamos más. stop con not_interested si no quiere valoración ahora (despídete en una frase amable en tu texto).
-- Si pregunta "¿de dónde tenéis mi número?": di con honestidad que {agent_first} vio su anuncio/solicitud ({_source_label(lead, "es")}), que puede responder BAJA si no quiere más mensajes, y usa handoff.
+- Si pregunta "¿de dónde tenéis mi número?": di con honestidad que {agent_first} vio su anuncio/solicitud ({_source_label(lead, "es")}), que puede responder BAJA si no quiere más mensajes, y sigue con la conversación. No uses handoff por esto (el texto que escribas junto a un handoff no se envía).
 - Si pregunta "¿cuánto vale mi piso?": "El valor exacto te lo da {agent_first} en la visita, tras ver la vivienda." y sigue hacia la cita.
 
 Los mensajes marcados como "[Mensaje escrito en persona por {agent_first}]" los escribió el agente; tenlos en cuenta y continúa desde el último mensaje del lead sin contradecirle.
