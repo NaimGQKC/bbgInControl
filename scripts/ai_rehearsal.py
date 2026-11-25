@@ -87,6 +87,27 @@ SCENARIOS = {
         "What days can you do?",
         "First one works",
     ]),
+    "es_commission": dict(lang="es", name="Elena", phone="+34600555010", zone="Delicias", ptype="piso", turns=[
+        "Hola. Antes de nada, ¿cuánto cobráis de comisión?",
+        "Uf, eso es mucho. ¿Y si lo vendo yo solo?",
+        "Vale, me lo pienso. ¿Qué días podéis venir?",
+    ]),
+    "es_buyer": dict(lang="es", name="Raúl", phone="+34600555011", zone="Delicias", ptype="piso", turns=[
+        "Hola, yo no vendo, estoy buscando comprar un piso por Delicias, ¿tenéis algo?",
+    ]),
+    "es_has_agent": dict(lang="es", name="Isabel", phone="+34600555012", zone="Delicias", ptype="piso", turns=[
+        "Ya tengo una agencia que me lo lleva, firmé con ellos en exclusiva",
+        "No sé, no quiero líos con ellos",
+    ]),
+    "es_broken": dict(lang="es", name="Ahmed", phone="+34600555013", zone="Delicias", ptype="piso", turns=[
+        "hola si yo vender piso pero no hablar bien espanol",
+        "piso tiene 3 cuarto bonito, quiero vender rapido",
+        "manana tarde puedo",
+    ]),
+    "es_voice_note": dict(lang="es", name="Lola", phone="+34600555014", zone="Delicias", ptype="piso", turns=[
+        "audio:",
+        "Perdona, es que conduzco. Sí vendo, el piso está para actualizar.",
+    ]),
 }
 
 
@@ -134,9 +155,10 @@ def run(name: str, sc: dict) -> None:
     mid = 0
     for text in sc["turns"]:
         mid += 1
-        print(f"  OWNER: {text}")
+        print(f"  OWNER: {text if text != 'audio:' else '[nota de voz]'}")
         with db.session_scope() as s:
-            result = engine.handle_inbound(s, s.get(Account, acc), sc["phone"].lstrip("+"), {"id": f"{name}-{mid}", "type": "text", "text": text})
+            msg = {"id": f"{name}-{mid}", "type": "audio"} if text == "audio:" else {"id": f"{name}-{mid}", "type": "text", "text": text}
+            result = engine.handle_inbound(s, s.get(Account, acc), sc["phone"].lstrip("+"), msg)
         for _ in range(6):  # burst wait + reply delay
             advance(31)
         new = out_for(sc["phone"], seen)

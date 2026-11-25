@@ -121,6 +121,7 @@ TEXTS: dict[str, dict[str, str]] = {
     "why_tech_error": {"es": "error técnico del asistente", "fr": "erreur technique de l'assistant", "en": "technical error in the assistant"},
     "why_limit": {"es": "límite de mensajes del asistente (posible abuso)", "fr": "limite de messages de l'assistant (abus possible)", "en": "assistant message limit (possible abuse)"},
     "why_unsure": {"es": "el asistente no está seguro", "fr": "l'assistant n'est pas sûr", "en": "the assistant is not sure"},
+    "why_first_failed": {"es": "No se pudo enviar el primer mensaje (¿número sin WhatsApp o fijo?)", "fr": "Le premier message n'a pas pu être envoyé (numéro sans WhatsApp ou fixe ?)", "en": "The first message could not be delivered (number without WhatsApp, or a landline?)"},
     "booked_fallback": {
         "es": "Perfecto {name}, tu cita con {agent} queda confirmada para el {when}. Si necesitas cambiarla, escríbeme por aquí.",
         "fr": "Parfait {name}, votre rendez-vous avec {agent} est confirmé le {when}. Pour le modifier, répondez simplement ici.",

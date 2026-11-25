@@ -455,6 +455,8 @@ def job_reminder(s, job):
     local = to_local(ev["start"], account.timezone)
     lang = L.lead_lang(account)
     where = L.where_phrase(meeting.address, meeting.type, lang)
+    if lang == "es" and meeting.type == "call" and not meeting.address:  # the approved texts read "pasa por {where}" / "estará en {where}"
+        where = "el teléfono (te llamará)" if which == "24h" else "contacto por teléfono"
     agent_first = first_name(account.agent_name) or L.text("the_agent", lang)
     lead_first = first_name(lead.name) or L.text("greeting_fallback", lang)
     at = L.fmt_time(local, lang)
@@ -482,6 +484,8 @@ def job_first_contact_failed(s, job):
     account, lead = _load(s, job)
     lead.status = "failed"
     log_event(s, "first_contact_failed", account.id, lead.id, error=job.last_error[:500])
+    # never lose a lead silently: the agent hears about it and can call the owner themselves
+    alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), L.text("why_first_failed", L.lead_lang(account))])
 
 
 @jobs.handler("google_check")
@@ -573,6 +577,10 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
 
     # Exact STOP/BAJA/ARRÊT → opt out in code, no LLM needed. A plain "no" counts only as the answer to follow-up 2.
     word = text.strip().lower().rstrip(".!")
+    if word not in OPT_OUT_WORDS and not lead.do_not_contact and not lead.human_owned:
+        hard = cold_hard_stop(text)  # data request / threat to report (any lead, not only cold ones): the agent must be told (GDPR: one month to answer)
+        if hard in ("data", "threat"):
+            return cold_hard_stop_out(s, account, lead, hard)
     if word in OPT_OUT_WORDS or is_opt_out_text(text) or (word in NO_THANKS and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
         opt_out(s, account, lead, source="keyword")
         return "opted_out"
@@ -699,10 +707,19 @@ def opt_out(s, account: Account, lead: Lead, *, source: str) -> None:
         pass
 
 
+_CHANGE_RE = re.compile(r"cancel|anul|cambi|mover|aplaz|reprogram|annul|chang|report|reschedul|postpon|move", re.I)
+
+
 def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: bool = True) -> None:
     lead.status = "handoff"
     lead.human_owned = True
     jobs.cancel(s, lead.id, ["ai_turn", "followup", "mark_no_reply", "first_contact"])
+    meeting = s.execute(select(Meeting).where(Meeting.lead_id == lead.id)).scalar_one_or_none()
+    if meeting is not None and meeting.status == "booked" and _CHANGE_RE.search(reason or ""):
+        # the owner wants to change or cancel: no automatic reminders for a time that may no longer stand (the agent decides)
+        meeting.status = "change_requested"
+        jobs.cancel(s, lead.id, ["reminder"])
+        log_event(s, "meeting_change_requested", account.id, lead.id)
     log_event(s, "handoff", account.id, lead.id, reason=reason)
     if notify_lead:
         try:

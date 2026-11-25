@@ -164,7 +164,8 @@ def in_allowed_hours(account: Account, when_utc: datetime | None = None) -> bool
     local = to_local(when_utc or utcnow(), account.timezone)
     if local.weekday() not in s["contact_days"]:
         return False
-    return parse_hm(s["contact_start"]) <= local.time() < parse_hm(s["contact_end"])
+    # same window as next_allowed_time: never wider than 09:00-21:00 whatever the settings say
+    return max(parse_hm(s["contact_start"]), time(9, 0)) <= local.time() < min(parse_hm(s["contact_end"]), time(21, 0))
 
 
 def next_allowed_time(account: Account, after_utc: datetime) -> datetime:
