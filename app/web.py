@@ -1,5 +1,6 @@
 """Public web routes: onboarding chat, Google OAuth, Meta signup callback, lead intake, legal pages."""
 import json
+import re
 import logging
 from pathlib import Path
 from urllib.parse import quote
@@ -137,6 +138,7 @@ def onboarding_page(request: Request, token: str):
         },
     )
     i18n.remember(r, request, lang)
+    r.headers["Cache-Control"] = "no-store"  # going Back after Google must not show a stale page
     return r
 
 
@@ -470,8 +472,9 @@ def api_calendar_check(token: str):
         log_event(s, "calendar_verified", acc.id, free_slots=len(labels))
         days, picks, ids = set(), [], []
         for x in slots:  # two different days read better than two times on the same day
-            if x["label"].split(",")[0] not in days:
-                days.add(x["label"].split(",")[0])
+            day_key = re.split(r",| à ", x["label"])[0]  # "jueves 29 de octubre" / "jeudi 29 octobre" / "Thursday 29 October"
+            if day_key not in days:
+                days.add(day_key)
                 picks.append(x["label"])
                 ids.append(x["slot_id"])
         return {"ok": True, "first": picks[:2], "first_ids": ids[:2]}
