@@ -15,7 +15,7 @@ from tests.test_flow import M, _book, ingest, inbound, lead_of, start_conversati
 
 
 @pytest.mark.parametrize("text", ["Dejad de molestar o os denuncio a la AEPD, borrad mis datos", "Quiero que borréis mis datos",
-                                  "Voy a hablar con mi abogado"])
+                                  "Os voy a denunciar por esto"])
 def test_data_or_threat_message_from_a_normal_lead_alerts_the_agent(clock, account, text):
     lid = start_conversation(clock, account)
     out = inbound(account, text, "in1")
@@ -40,13 +40,31 @@ def test_cancel_in_chat_stops_the_reminders(clock, account):
     run_jobs()
     with db.session_scope() as s:
         meeting = s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one()
-        assert meeting.status == "change_requested"
+        assert meeting.status == "booked"  # still counts; only the automatic reminders stop
         pending = s.execute(select(Job).where(Job.lead_id == lid, Job.type == "reminder", Job.status == "pending")).scalars().all()
         assert pending == []
     n = len(sent(M))
     clock.set(m.start - timedelta(hours=24))
     run_jobs()
     assert len(sent(M)) == n
+
+
+@pytest.mark.parametrize("reason", ["pregunta por cancelar la hipoteca", "quiere cambiar condiciones de comisión", "needs to exchange contracts"])
+def test_handoff_words_that_only_look_like_a_cancellation_keep_the_reminders(clock, account, reason):
+    lid, m = _book(clock, account)
+    FakeBackend.push({"tool": "handoff", "input": {"reason": reason}})
+    inbound(account, "tengo una duda", "in3")
+    clock.advance(seconds=31)
+    run_jobs()
+    with db.session_scope() as s:
+        assert s.execute(select(Job).where(Job.lead_id == lid, Job.type == "reminder", Job.status == "pending")).scalars().all()
+
+
+def test_a_lawyer_or_police_mention_in_a_normal_chat_is_not_a_threat(clock, account):
+    lid = start_conversation(clock, account)
+    FakeBackend.push({"text": "Entiendo, ¿qué día os viene bien?"})
+    assert inbound(account, "Mi abogada lleva la herencia, ¿qué día podéis venir?", "in1") not in ("handoff_threat", "opted_out")
+    assert not lead_of(lid).do_not_contact
 
 
 def test_handoff_for_another_reason_keeps_the_reminders(clock, account):
@@ -63,7 +81,7 @@ def test_phone_call_reminder_reads_right_in_spanish(clock, account):
     lid, m = _book(clock, account)
     with db.session_scope() as s:
         meeting = s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one()
-        meeting.type, meeting.address = "call", ""
+        meeting.type = "call"  # the lead's address stays on the row: it must not turn the call into a visit
     clock.set(m.start - timedelta(hours=24))
     run_jobs()
     text = sent(M)[-1]["text"]

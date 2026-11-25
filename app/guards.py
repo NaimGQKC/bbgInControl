@@ -42,6 +42,18 @@ _COLD_HARD_STOPS = {
 }
 
 
+_WARM_THREAT = re.compile(r"\bdenunci\w*|\baepd\b|\bporter plainte\b|\bcnil\b|\bvous signaler\b|\breport (you|this)\b|\bsue (you|us)\b", re.I)
+
+
+def warm_hard_stop(text: str | None) -> str | None:
+    """'data' | 'threat' | None for an owner who is already in a normal chat. Narrower than cold_hard_stop: words like
+    'abogada' or 'policía' come up in ordinary sales (inheritance, divorce), so only a data request or a clear threat to report counts."""
+    t = (text or "").strip()
+    if _COLD_HARD_STOPS["data"].search(t):
+        return "data"
+    return "threat" if _WARM_THREAT.search(t) else None
+
+
 def cold_hard_stop(text: str | None) -> str | None:
     """'data' | 'threat' | 'stop' | None for a cold owner's reply (checked in this order: the strongest wins)."""
     t = (text or "").strip()

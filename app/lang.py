@@ -64,10 +64,10 @@ def short_when(d_local: datetime, lang: str) -> str:
 
 def where_phrase(address: str, meeting_type: str, lang: str) -> str:
     """Where the meeting happens, ready for a sentence."""
-    if address:
-        return {"es": address, "fr": f"à {address}", "en": f"at {address}"}[lang]
     if meeting_type == "call":
         return {"es": "por teléfono", "fr": "par téléphone", "en": "by phone"}[lang]
+    if address:
+        return {"es": address, "fr": f"à {address}", "en": f"at {address}"}[lang]
     return {"es": "tu vivienda", "fr": "chez vous", "en": "at your home"}[lang]
 
 
