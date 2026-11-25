@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     template_language: str = "es"
 
     # Pricing (shown in the onboarding chat) and Stripe. No STRIPE_PAYMENT_LINK = the payment step is skipped (free pilots).
-    integration_fee_eur: int = 90  # one-time, per agent
+    integration_fee_eur: int = 0  # one-time, per agent (0 = no setup fee; the payment step is skipped without STRIPE_PAYMENT_LINK)
     meeting_fee_eur: int = 30  # per booked meeting
     stripe_payment_link: str = ""  # a Stripe Payment Link (https://buy.stripe.com/...)
     stripe_webhook_secret: str = ""  # whsec_... of the webhook that sends checkout.session.completed to /webhooks/stripe

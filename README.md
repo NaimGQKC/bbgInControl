@@ -19,7 +19,7 @@ How it works, with diagrams: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Rul
 | `app/templates.py` | ALL WhatsApp template names + texts, in Spanish, French and English |
 | `app/whatsapp.py`, `app/gcal.py` | Meta Cloud API and Google Calendar clients (real + fake) |
 | `app/webhooks.py` | Meta webhook: signature check, stored once, processed after |
-| `app/web.py`, `app/onboarding.py`, `web_templates/onboarding.html` | The onboarding: one continuous chat with a named, openly-AI guide (Google Calendar → name, agency, zones, preferences, mobile → preview of the first message with a real test event in the calendar → optional €90 payment → WhatsApp Embedded Signup with Coexistence). Scripted, so it costs no AI tokens. Agents can change any answer ("Mis datos") or ask the guide questions at any time |
+| `app/web.py`, `app/onboarding.py`, `web_templates/onboarding.html` | The onboarding: one continuous chat with a named, openly-AI guide (Google Calendar → name, agency, zones, preferences, mobile → preview of the first message with a real test event in the calendar → optional payment (off by default: no setup fee) → WhatsApp Embedded Signup with Coexistence). Scripted, so it costs no AI tokens. Agents can change any answer ("Mis datos") or ask the guide questions at any time |
 | `app/i18n.py`, `app/i18n_onb.py` | Languages for agents: Spanish (default), English and French. The language comes from `?lang=`, then a cookie, then the browser. Onboarding texts use the Spanish text as the key; English and French live in `i18n_onb.py`, and a test fails if one is missing. This is the screen language only. What an agent's owners receive (templates, the chat, dates, opt-out word) follows the agent's lead language (`account.settings["lang"]`: es, fr or en), see `app/lang.py` |
 | `app/helpchat.py` | Capped AI help inside the onboarding (questions, screenshots, change proposals the agent must confirm) |
 | `app/transcribe.py` | Voice-note transcription for leads (needs an Azure transcription deployment) |
@@ -96,7 +96,7 @@ These videos were used for the approved permissions (`whatsapp_business_messagin
 
 ## Known gaps / next
 
-- **Payment (optional):** set `STRIPE_PAYMENT_LINK` (a Stripe Payment Link) and `STRIPE_WEBHOOK_SECRET` (webhook → `/webhooks/stripe`, event `checkout.session.completed`). Without the link the payment step is skipped (free pilots). Prices shown in the chat: `INTEGRATION_FEE_EUR` (90) and `MEETING_FEE_EUR` (30).
+- **Payment (optional):** set `STRIPE_PAYMENT_LINK` (a Stripe Payment Link) and `STRIPE_WEBHOOK_SECRET` (webhook → `/webhooks/stripe`, event `checkout.session.completed`). Without the link the payment step is skipped (free pilots). Prices shown in the chat: `INTEGRATION_FEE_EUR` (default 0 = no setup fee) and `MEETING_FEE_EUR` (30).
 - **Help button:** set `OPS_WHATSAPP` to your mobile and submit the Sparrow templates from `/admin`: "Hablar con una persona" (call or message) then WhatsApps you who wants what, and where they are. Requests also show at the top of `/admin`.
 - **Onboarding guide name:** `ASSISTANT_NAME` (default Lucía).
 - **Lystos:** `/intake/{key}?source=lystos` accepts a generic JSON lead (English or Spanish field names). Write the real adapter in `app/intake.py` once we see their API.

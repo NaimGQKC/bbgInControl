@@ -26,7 +26,7 @@
   .w { opacity:0; animation:wd .55s var(--ease) forwards; } @keyframes wd { from { opacity:0; filter:blur(4px); transform:translateY(4px); } to { opacity:1; filter:none; transform:none; } }
   .who { flex:1; line-height:1.2; min-width:0; } .who b { display:block; font-size:15px; } .who span { font-family:"IBM Plex Mono", monospace; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); }
   .tools { max-width:560px; margin:0 auto; padding:0 16px 8px; display:flex; gap:8px; }
-  .langs { margin-left:auto; display:flex; gap:2px; } .langs button { border:0 !important; background:none !important; padding:4px 7px !important; color:var(--muted) !important; font-family:"IBM Plex Mono", monospace !important; font-size:11.5px !important; letter-spacing:.06em; }
+  .langs { margin-left:auto; display:flex; gap:2px; } .langs button { border:0 !important; background:none !important; padding:12px 10px !important; min-height:44px; color:var(--muted) !important; font-family:"IBM Plex Mono", monospace !important; font-size:11.5px !important; letter-spacing:.06em; }
   .langs button.on { color:var(--ink) !important; font-weight:600; text-decoration:underline; }
   .tools button { background:var(--card); border:1px solid var(--line); border-radius:99px; padding:4px 12px; font:inherit; font-size:12.5px; color:var(--ink); cursor:pointer; }
   .tools button:hover { border-color:var(--accent); }
@@ -36,9 +36,10 @@
   .msgs { flex:1; gap:14px; padding:calc(112px + env(safe-area-inset-top)) 16px calc(var(--dock) + 24px); display:flex; flex-direction:column; gap:10px; }
   .msgs > .new, .msgs > .opts { animation:rise .45s var(--ease) both; } .msgs.quiet > * { animation:none !important; }
   @keyframes rise { from { opacity:0; transform:translateY(10px) scale(.98); } to { opacity:1; transform:none; } }
-  .b { max-width:100%; white-space:pre-line; line-height:1.5; }
+  .b { max-width:100%; white-space:pre-line; line-height:1.5; overflow-wrap:anywhere; word-break:break-word; min-width:0; }
+  .msgs > * { min-width:0; max-width:100%; }
   .bot { font-size:19px; color:var(--ink); line-height:1.5; letter-spacing:-.005em; align-self:flex-start; margin:4px 0; }
-  .me { background:var(--line); color:var(--ink); align-self:flex-end; max-width:82%; padding:9px 16px; border-radius:22px; font-size:16px; }
+  .me { overflow-wrap:anywhere; word-break:break-word; min-width:0; background:var(--line); color:var(--ink); align-self:flex-end; max-width:82%; padding:9px 16px; border-radius:22px; font-size:16px; }
   .dock { position:fixed; left:0; right:0; bottom:0; z-index:5; display:flex; justify-content:center; padding:0 12px calc(12px + env(safe-area-inset-bottom)); pointer-events:none; }
   .actions { pointer-events:auto; width:100%; max-width:536px; background:var(--glass); -webkit-backdrop-filter:saturate(180%) blur(22px); backdrop-filter:saturate(180%) blur(22px); border:1px solid var(--line); border-radius:30px; padding:10px; box-shadow:0 10px 40px rgba(28,36,51,.14); }
   .comp { display:flex; align-items:flex-end; gap:4px; }
@@ -349,7 +350,7 @@ document.getElementById("aname").textContent = state.assistant;
 document.getElementById("avatar").textContent = state.assistant.charAt(0);
 function updateProgress() {
   const n = { google: 1, questions: 2, payment: 3, wa_check: 3, whatsapp: 4, waiting_templates: 4, done: 4 }[state.step] || 1;
-  document.getElementById("progress").textContent = state.step === "done" ? "listo" : `${n}/4`;
+  document.getElementById("progress").textContent = state.step === "done" ? tr("listo") : `${n}/4`;
   document.getElementById("barfill").style.width = (state.step === "done" ? 100 : n * 25 - 12) + "%";
 }
 document.getElementById("helpbtn").onclick = () => {
@@ -583,7 +584,7 @@ async function flow(my) {
         await bot(real ? tr("Lo que sí es real: acabo de crear una cita de prueba en tu **Google Calendar**. Abre el calendario.") : tr("Así de simple. Esto lo hago yo por ti, con tus huecos reales."));
       }
       await bot(tr("El primer mensaje es siempre este texto, aprobado por WhatsApp. El tono del resto de la conversación lo adapto a lo que me pidas."));
-      const go = async () => { if (real) await api("/test_event/delete", {}); store.set("previewOk", "1"); render(); };
+      const go = async () => { try { await api("/test_event/delete", {}); } catch (e) {} store.set("previewOk", "1"); render(); };  // idempotent: a reload must not leave the test event in the calendar
       buttons(real ? [{ label: tr("Lo he visto · borrar la prueba y seguir"), onClick: go }, { label: tr("No me ha llegado, seguir"), secondary: true, onClick: go }, { label: tr("Cambiar cómo trabajas"), secondary: true, onClick: () => editField("extra_context", tr("Cómo trabajo"), tr("Cuéntame cómo quieres que trabaje.")) }]
                    : [{ label: tr("Me gusta, seguimos"), onClick: go }, { label: tr("Cambiar cómo trabajas"), secondary: true, onClick: () => editField("extra_context", tr("Cómo trabajo"), tr("Cuéntame cómo quieres que trabaje.")) }]);
       return;
@@ -869,7 +870,7 @@ async function prospecting(my, early) {
   const risks = Array.isArray(P.risks) ? P.risks : [];
   await bot(tr("Antes de activarlo, cuatro cosas que conviene que sepas. Te las cuento como te las diría un compañero:"));
   const rc = document.createElement("div"); rc.className = "coach warn new"; const ul = document.createElement("ul"); ul.className = "risks";
-  risks.forEach((t) => { const l = document.createElement("li"); l.textContent = t; ul.appendChild(l); }); rc.appendChild(ul); $msgs.appendChild(rc); scroll();
+  risks.forEach((t) => { const l = document.createElement("li"); l.textContent = tr(t); ul.appendChild(l); }); rc.appendChild(ul); $msgs.appendChild(rc); scroll();
   const ACK = tr("Entiendo los riesgos y me hago responsable del texto y de los contactos");
   if (d.ack) await me(ACK);
   else {

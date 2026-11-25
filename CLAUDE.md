@@ -1,6 +1,6 @@
 # Sparrow AI — instructions for Claude Code
 
-WhatsApp AI assistant for independent real estate agents (RE/MAX first, leads from Lystos). New lead → WhatsApp from the agent's own number (Meta Coexistence) in 30s → Spanish seller conversation → valuation booked in the agent's Google Calendar. Pricing: €90 one-time per agent integration (Stripe) + €30 per booked meeting. The full product design lives in the Claude project (`sparrow-ai-design.md`); follow it.
+WhatsApp AI assistant for independent real estate agents (RE/MAX first, leads from Lystos). New lead → WhatsApp from the agent's own number (Meta Coexistence) in 30s → Spanish seller conversation → valuation booked in the agent's Google Calendar. Pricing: €30 per booked meeting, no setup fee (the Stripe payment step is skipped unless `STRIPE_PAYMENT_LINK` is set). The full product design lives in the Claude project (`sparrow-ai-design.md`); follow it.
 
 ## Talking to Naim
 English, short, simple language, explain any jargon. Push back when something is wrong. Lead-facing copy: Spanish from Spain.

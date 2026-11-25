@@ -26,7 +26,7 @@ def refresh(s, account: Account) -> str | None:
         return None
     try:
         info = get_phone_number(integ.external["phone_number_id"], decrypt(integ.token_enc))
-    except WhatsAppError as e:
+    except Exception as e:  # any Meta/network problem: keep the old rating, never break the caller
         log.warning("quality refresh failed for account %s: %s", account.id, e)
         return None
     rating = str(info.get("quality_rating") or "").upper()
