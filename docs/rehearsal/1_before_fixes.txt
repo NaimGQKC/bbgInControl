@@ -1,0 +1,169 @@
+==============================================================================
+SCENARIO es_normal  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Marta, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: Hola, sí, lo tengo a la venta yo solo desde hace un mes
+  ASSISTANT: Perfecto, gracias. Si el precio encajara, ¿en qué plazo te plantearías tomar una decisión?
+
+  OWNER: Porque no me gusta pagar comisiones, pero no he tenido muchas visitas
+  ASSISTANT: Perfecto, se lo paso a Laura y te escribe en breve.
+  -> lead status: handoff
+
+  FINAL STATUS: handoff; AI turns: 2; facts: {'reason': 'Está a la venta desde hace un mes', 'decision_maker': 'Decide ella sola', 'timeline': 'Lleva un mes anunciándolo'}
+
+==============================================================================
+SCENARIO es_who_are_you  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Luis, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Actur y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: ¿Quién eres? ¿Eres un robot?
+  ASSISTANT: Soy el asistente virtual de Laura; ella está detrás y revisa todo. ¿Prefieres que te ayude con una valoración por visita o por llamada?
+
+  OWNER: ¿De dónde has sacado mi número?
+  ASSISTANT: Laura vio tu anuncio/solicitud en Lystos, por eso te escribió. Si no quieres más mensajes, puedes responder BAJA; ¿prefieres valoración por visita o por llamada?
+
+  OWNER: Vale, pues sí sigo vendiendo. ¿Qué queréis?
+  ASSISTANT: Perfecto, Laura puede pasar el martes 1 a las 12:30 o el miércoles 2 a las 10:00. ¿Cuál te viene mejor?
+
+
+  FINAL STATUS: offering_slots; AI turns: 3; facts: {'reason': 'vender'}
+
+==============================================================================
+SCENARIO es_no_agencies  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Carmen, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: No quiero agencias, gracias
+  ASSISTANT: Entendido, gracias por responder. Si más adelante quieres una valoración, escríbeme por aquí.
+
+  OWNER: Ya os he dicho que no
+  ASSISTANT: Entendido, gracias por responder. Si más adelante quieres una valoración, escríbeme por aquí.
+
+
+  FINAL STATUS: not_interested; AI turns: 2; facts: {}
+
+==============================================================================
+SCENARIO es_baja  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Pedro, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: ¡BAJA!
+  ASSISTANT: Entendido, no te escribiremos más. Un saludo.
+  -> lead status: opted_out (do not contact)
+
+  FINAL STATUS: opted_out; AI turns: 0; facts: {}
+
+==============================================================================
+SCENARIO es_price_haggle  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Ana, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: Sí, vendo. Pido 250.000 pero el vecino vendió el suyo por 300.000
+  ASSISTANT: Perfecto, gracias. Laura puede pasar hoy a las 12:30 o esta tarde a las 16:30, ¿qué hueco te viene mejor?
+
+  OWNER: Dime ya cuánto vale mi piso, sin visitas
+  ASSISTANT: Perfecto, se lo paso a Laura y te escribe en breve.
+  -> lead status: handoff
+
+  FINAL STATUS: handoff; AI turns: 2; facts: {'reason': 'vender', 'notes': 'Indica precio pedido de 250.000 € y comenta que un vecino vendió el suyo por 300.000 €.'}
+
+==============================================================================
+SCENARIO es_hostile  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Jorge, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: Dejad de molestar o os denuncio a la AEPD, borrad mis datos
+  ASSISTANT: Entendido, no te escribiremos más. Un saludo.
+  -> lead status: opted_out (do not contact)
+
+  FINAL STATUS: opted_out; AI turns: 0; facts: {}
+
+==============================================================================
+SCENARIO es_voice_and_odd  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Rosa, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: 👍
+  ASSISTANT: Perfecto, gracias. ¿Ahora mismo está libre, habitado o alquilado?
+
+  OWNER: ok
+  ASSISTANT: Genial, y para orientarnos mejor: ¿la vivienda está libre, habitada o alquilada?
+
+  OWNER: jajaja y tú quien eres exactamente
+  ASSISTANT: Soy el asistente virtual de Laura, que lleva la valoración de viviendas en Delicias y Actur. Si te parece, seguimos y te propongo un hueco para que Laura te haga la valoración gratuita, ¿te va mejor visita o llamada?
+
+  OWNER: Estoy en Valencia ahora, ¿podéis el sábado?
+  ASSISTANT: Sí, claro. Laura puede el martes 1 a las 16:30 o el miércoles 2 a las 10:00, ¿cuál te encaja mejor?
+
+
+  FINAL STATUS: offering_slots; AI turns: 4; facts: {}
+
+==============================================================================
+SCENARIO fr_normal  (lead language fr)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Bonjour Sophie, je suis l'assistant virtuel de Laura (RE/MAX Confort). J'ai vu votre annonce à Delicias et je peux vous préparer une estimation gratuite. Votre bien est-il rénové, en bon état ou à rafraîchir ?
+
+Si vous ne souhaitez plus recevoir de messages, répondez STOP.
+
+  OWNER: Bonjour, oui je vends seule
+  ASSISTANT: Parfait, merci. Laura peut passer mardi 1er décembre à 12h30 ou mercredi 2 décembre à 10h00. Lequel vous convient le mieux ?
+
+  OWNER: Je cherche à vendre dans 2 mois, 80 m2 rénové
+  ASSISTANT: Merci, c’est noté. Laura peut passer mardi 1er décembre à 16h30 ou jeudi 3 décembre à 10h00, lequel vous convient le mieux ?
+
+  OWNER: Quels jours êtes-vous disponibles ?
+  ASSISTANT: Laura peut passer mardi 1 décembre à 12h30 ou mercredi 2 décembre à 10h00. Lequel vous convient le mieux ?
+
+  OWNER: Le premier me convient
+  ASSISTANT: C'est noté ✅ mardi 1 décembre à 12h30. Laura viendra avec une étude de prix de votre secteur. Si vous devez le modifier, dites-le-moi ici.
+  -> lead status: booked
+
+  FINAL STATUS: booked; AI turns: 4; facts: {'decision_maker': 'Vend seule', 'reason': 'Vente', 'timeline': 'Dans 2 mois', 'condition': 'Rénové', 'notes': 'Appartement 80 m²'}
+  CALENDAR EVENT: Estimation · Sophie M. · appartement Delicias @ 2026-12-01 11:30:00
+
+==============================================================================
+SCENARIO en_normal  (lead language en)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hi James, I'm the virtual assistant of Laura (RE/MAX Confort). I saw your listing in Delicias and I can prepare a free valuation for you. Is the property renovated, in good condition or in need of updating?
+
+If you'd rather not receive more messages, reply STOP.
+
+  OWNER: Hi yes I'm selling it myself
+  ASSISTANT: Thanks, that helps. Is it currently empty, rented, or lived in?
+
+  OWNER: Two bedrooms, renovated, I'd like to sell within 3 months
+  ASSISTANT: Great, thanks. Laura can come on Tuesday 1 December at 12:30 or Wednesday 2 December at 16:30, which suits you better?
+
+  OWNER: What days can you do?
+  ASSISTANT: Laura can come on Tuesday 1 December at 12:30 or Thursday 3 December at 16:30. Which of those works better for you?
+
+  OWNER: First one works
+  ASSISTANT: Perfect, I just need the exact address to book the visit. Could you send it to me?
+
+
+  FINAL STATUS: offering_slots; AI turns: 4; facts: {'reason': 'selling it themselves', 'notes': 'Accepted first slot option', 'condition': 'renovated', 'timeline': 'within 3 months'}
+
