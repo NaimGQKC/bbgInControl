@@ -1,0 +1,69 @@
+==============================================================================
+SCENARIO es_has_agent  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Isabel, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: Ya tengo una agencia que me lo lleva, firmé con ellos en exclusiva
+  ASSISTANT: Gracias por decírmelo, no quiero interferir con tu contrato. Si te viene bien, puedo ofrecerte una segunda opinión sin compromiso cuando quieras.
+
+  OWNER: No sé, no quiero líos con ellos
+  ASSISTANT: Entendido, gracias por responder. Si más adelante quieres una valoración, escríbeme por aquí.
+
+
+  FINAL STATUS: not_interested; AI turns: 2; facts: {'other_agency': 'Firmó con otra agencia en exclusiva'}
+
+==============================================================================
+SCENARIO es_voice_and_odd  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Rosa, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: 👍
+  ASSISTANT: Perfecto, gracias 😊 ¿La vivienda está libre, alquilada o la tenéis habitada ahora mismo?
+
+  OWNER: ok
+  ASSISTANT: Gracias, Rosa. ¿Es para vender, para herencia o solo para conocer el precio de mercado?
+
+  OWNER: jajaja y tú quien eres exactamente
+  ASSISTANT: Soy el asistente virtual de Laura; ella está detrás y revisa la conversación. ¿Quieres que te pase una valoración gratuita en visita o prefieres que te la organicemos por llamada?
+
+  OWNER: Estoy en Valencia ahora, ¿podéis el sábado?
+  ASSISTANT: Este sábado no veo hueco, pero Laura puede pasar el martes 1 a las 12:30 o el miércoles 2 a las 16:30. ¿Cuál te viene mejor?
+
+
+  FINAL STATUS: offering_slots; AI turns: 4; facts: {}
+
+==============================================================================
+SCENARIO es_normal  (lead language es)
+==============================================================================
+  ASSISTANT (first message, template lead_first_contact_v2):
+    Hola Marta, soy el asistente virtual de Laura (RE/MAX Confort). Vi tu anuncio en Delicias y puedo prepararte una valoración gratuita. ¿Lo tienes reformado, en buen estado o para actualizar?
+
+Si no quieres más mensajes, responde BAJA.
+
+  OWNER: Hola, sí, lo tengo a la venta yo solo desde hace un mes
+  ASSISTANT: Perfecto, así Laura puede orientarte mejor con una valoración sin compromiso. Puede pasar hoy martes a las 12:30 o a las 16:30, ¿cuál te viene mejor?
+
+  OWNER: Porque no me gusta pagar comisiones, pero no he tenido muchas visitas
+  ASSISTANT: Te entiendo, y precisamente por eso Laura puede darte una orientación clara al verlo sin compromiso. Puede pasar mañana miércoles a las 10:00 o a las 16:30, ¿qué opción te encaja mejor?
+
+  OWNER: Está reformado hace 3 años, 3 habitaciones, 95 m2. Lo quiero vender en unos 3 meses
+  ASSISTANT: Genial, con eso Laura ya puede hacerse una buena idea. Puede pasar hoy martes a las 16:30 o mañana miércoles a las 10:00, ¿cuál te viene mejor?
+
+  OWNER: Pues no sé, ¿cuánto vale según vosotros?
+  ASSISTANT: El valor exacto te lo da Laura en la visita, tras ver la vivienda. Puede pasar hoy a las 12:30 o a las 16:30, ¿cuál te viene mejor?
+
+  OWNER: Vale, ¿qué días tenéis?
+  ASSISTANT: Laura puede pasar hoy martes a las 16:30 o mañana miércoles a las 10:00. ¿Cuál te viene mejor?
+
+  OWNER: El primero me viene bien
+  ASSISTANT: Perfecto, para la visita solo me falta la dirección exacta del piso, ¿me la pasas por aquí?
+
+
+  FINAL STATUS: offering_slots; AI turns: 6; facts: {'reason': 'Vende el piso por su cuenta', 'timeline': 'en unos 3 meses', 'notes': 'Piso de 3 habitaciones y 95 m2', 'condition': 'reformado hace 3 años'}
+

@@ -229,6 +229,6 @@ def can_contact(account: Account, lead: Lead, *, kind: str) -> tuple[bool, str]:
         return False, "hot_stage"
     if kind in ("first", "followup") and lead.lead_type == "buyer":
         return False, "buyer"  # G14
-    if kind in ("first", "followup") and not in_allowed_hours(account):
-        return False, "outside_hours"  # G9
+    if kind in ("first", "followup") and not in_allowed_hours(account) and not (lead.is_test and (lead.facts or {}).get("_any_hour")):
+        return False, "outside_hours"  # G9 (the one exception: a TEST lead the operator created with "any hour")
     return True, "ok"

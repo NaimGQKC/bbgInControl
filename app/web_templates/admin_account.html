@@ -61,6 +61,7 @@
         <input name="zone" placeholder="Zona" value="{{ (a.zones or '').split(',')[0] }}">
         <input name="property_type" placeholder="Tipo" value="piso">
         <label class="small"><input type="checkbox" name="test" checked style="width:auto"> Marcar como prueba (funciona aunque la cuenta no esté activa)</label>
+        <label class="small"><input type="checkbox" name="any_hour" style="width:auto"> Solo pruebas: enviar ya, aunque sea fuera de 9:00-21:00 (necesita "prueba" marcada)</label>
         <button class="btn">Crear lead</button>
       </form>
     </div>

@@ -117,7 +117,7 @@ def account_action(account_id: int, action: str = Form(...)):
 
 @router.post("/accounts/{account_id}/test_lead")
 def test_lead(account_id: int, name: str = Form(...), phone: str = Form(...), zone: str = Form(""), property_type: str = Form("piso"),
-              test: str = Form("")):  # an unchecked checkbox sends nothing, so "" must mean "not a test"
+              test: str = Form(""), any_hour: str = Form("")):  # an unchecked checkbox sends nothing, so "" must mean "not a test"
     with session_scope() as s:
         acc = s.get(Account, account_id)
         if test:  # rehearsals must be repeatable: the old test lead with this number (and its chat, jobs, meeting) goes first
@@ -126,7 +126,7 @@ def test_lead(account_id: int, name: str = Form(...), phone: str = Form(...), zo
             if old is not None:
                 prospecting.delete_lead(s, old)
         lead, result = ingest_lead(s, acc, {"name": name, "phone": phone, "zone": zone, "property_type": property_type, "source": "admin"},
-                                   is_test=bool(test))
+                                   is_test=bool(test), any_hour=bool(test and any_hour))
         return _back(f"/admin/accounts/{account_id}", f"Lead: {result}")
 
 
