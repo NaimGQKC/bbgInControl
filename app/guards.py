@@ -42,6 +42,20 @@ _COLD_HARD_STOPS = {
 }
 
 
+_WARM_THREAT = re.compile(
+    r"\b(os|te|le|les|nos)\s+(voy\s+a\s+)?denunci\w*|\bdenunciar(os|te|nos|les)\b|\bdenunciaré\b|\baepd\b|\bcnil\b|"
+    r"\bvous\s+(signaler|dénoncer)\b|\bje\s+(vais\s+)?porter\s+plainte\b|\breport\s+(you|us)\b|\bsue\s+(you|us)\b", re.I)
+
+
+def warm_hard_stop(text: str | None) -> str | None:
+    """'data' | 'threat' | None for an owner who is already in a normal chat. Narrower than cold_hard_stop: words like
+    'abogada' or 'policía' come up in ordinary sales (inheritance, divorce), so only a data request or a clear threat to report counts."""
+    t = (text or "").strip()
+    if _COLD_HARD_STOPS["data"].search(t):
+        return "data"
+    return "threat" if _WARM_THREAT.search(t) else None
+
+
 def cold_hard_stop(text: str | None) -> str | None:
     """'data' | 'threat' | 'stop' | None for a cold owner's reply (checked in this order: the strongest wins)."""
     t = (text or "").strip()
@@ -115,6 +129,32 @@ def tidy_name(name: str | None) -> str:
     return " ".join(w.lower() if i and w.lower() in _PARTICLES else w[:1].upper() + w[1:].lower() for i, w in enumerate(n.split()))
 
 
+_OPT_PHRASES = re.compile(
+    r"\b(no me (escrib|contact|llam|moleste)\w*( mas)?|dejad? de (escribir|contactar|molestar)\w*|dejen de (escribir|contactar)\w*|"
+    r"ne m'?ecri\w* plus|ne me contact\w* plus|arretez?\b|stop (writing|messaging|contacting)|do not (contact|message) me|don'?t (contact|message|text) me)", re.I)
+_OPT_BLOCK = {"precio", "precios", "prix", "price", "prices"}  # "baja el precio" is about the price, not an opt-out
+
+
+def _plain(text: str) -> str:
+    import unicodedata
+    s = unicodedata.normalize("NFKD", (text or "").lower())
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    return re.sub(r"[^a-z0-9' ]+", " ", s)
+
+
+def is_opt_out_text(text: str) -> bool:
+    """A short message that is an opt-out however it is written: 'BAJA', '¡BAJA!', 'baja por favor', 'STOP 🙏', 'Arrêtez',
+    'no me escribas más'. Long messages are left to the model (an owner can say 'baja' while talking about the price)."""
+    plain = _plain(text)
+    words = plain.split()
+    if not words or len(words) > 60:
+        return False
+    if _OPT_PHRASES.search(plain):
+        return True
+    plain_opt = {_plain(w).strip() for w in OPT_OUT_WORDS}
+    return len(words) <= 5 and bool(plain_opt & set(words)) and not (_OPT_BLOCK & set(words))
+
+
 def first_name(name: str | None) -> str:
     parts = (name or "").split()
     return parts[0] if parts else ""
@@ -138,7 +178,8 @@ def in_allowed_hours(account: Account, when_utc: datetime | None = None) -> bool
     local = to_local(when_utc or utcnow(), account.timezone)
     if local.weekday() not in s["contact_days"]:
         return False
-    return parse_hm(s["contact_start"]) <= local.time() < parse_hm(s["contact_end"])
+    # same window as next_allowed_time: never wider than 09:00-21:00 whatever the settings say
+    return max(parse_hm(s["contact_start"]), time(9, 0)) <= local.time() < min(parse_hm(s["contact_end"]), time(21, 0))
 
 
 def next_allowed_time(account: Account, after_utc: datetime) -> datetime:

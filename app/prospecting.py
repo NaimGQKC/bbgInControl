@@ -43,7 +43,7 @@ RAMP = ((3, 3), (7, 5))  # (days since confirmed_at below which, daily cap): 3 a
 OPT_OUT_WINDOW = 50  # the last N prospecting leads
 OPT_OUT_MAX_RATE = 0.15  # more than this share opted out -> pause
 OPT_OUT_MIN_SAMPLE = 10  # fewer leads than this say nothing yet (one "no" out of two is not a trend)
-QUALITY_OK = {"", "GREEN", "UNKNOWN"}  # Meta quality_rating of the agent's number; YELLOW, RED, FLAGGED... are not healthy
+QUALITY_OK = {"", "GREEN", "UNKNOWN", "NA"}  # "NA" is what Meta says about a number that has no rating yet  # Meta quality_rating of the agent's number; YELLOW, RED, FLAGGED... are not healthy
 MAX_PAGES_HARD = 4  # the Free plan's page depth (100 results); never more, whatever the settings say
 MAX_DAILY_CAP = 50
 MAX_LOOKBACK_DAYS = 89  # the API accepts at most 90 days back
@@ -262,6 +262,8 @@ def _blocked_phones(s, account: Account, phones: list[str]) -> tuple[set, set]:
 def why_not(account: Account, cfg: dict) -> str | None:
     if not get_settings().prospecting_enabled:
         return "kill_switch"
+    if get_settings().casafari_mode != "live" and get_settings().whatsapp_mode == "live":
+        return "fake_source_with_live_whatsapp"  # fixture numbers must never get real WhatsApps
     if not cfg.get("enabled"):
         return "disabled"
     if not cfg.get("location_id"):
@@ -472,6 +474,17 @@ def job_prospect_scan(s, job):
     schedule_prospecting(s)
 
 
+def activate_if_requested(s, account: Account) -> bool:
+    """At go-live: switch prospecting on if the agent asked for it (and accepted the risks) during onboarding."""
+    cfg = dict((account.settings or {}).get("prospecting") or {})
+    if not cfg.get("enable_when_live") or cfg.get("paused_reason") or not cfg.get("ack_at") or not cfg.get("location_id") or not cfg.get("cold_body"):
+        return False
+    cfg.update({"enabled": True, "enable_when_live": False, "confirmed_at": utcnow().isoformat()})
+    account.settings = {**(account.settings or {}), "prospecting": cfg}
+    s.add(Event(name="prospecting_activated", account_id=account.id, data={"by": "go_live"}))
+    return True
+
+
 @jobs.handler("prospect")
 def job_prospect(s, job):
     account = s.get(Account, job.account_id)
@@ -481,7 +494,11 @@ def job_prospect(s, job):
         job.status = "pending"
         job.run_at = next_allowed_time(account, utcnow())
         return
-    run_for_account(s, account)
+    try:
+        run_for_account(s, account)
+    except Exception as e:  # a retry would pay CASAFARI again for the same pull: log it, the next scan tries again
+        log.exception("prospect run failed for account %s", account.id)
+        s.add(Event(name="prospect_error", account_id=account.id, data={"error": type(e).__name__}))
 
 
 # ---------------------------------------------------------------- cleanup (CASAFARI storage limit)
@@ -496,6 +513,14 @@ def _expires(lead: Lead) -> date:
     if closed:
         exp = min(exp, date.fromisoformat(closed) + timedelta(days=30))
     return exp
+
+
+def delete_lead(s, lead: Lead) -> None:
+    """Remove a lead with its chat, jobs, AI turns and meeting (events keep their numbers but lose the link)."""
+    for model in (Message, Job, LlmTurn, Meeting):
+        s.execute(delete(model).where(model.lead_id == lead.id))
+    s.execute(update(Event).where(Event.lead_id == lead.id).values(lead_id=None))
+    s.delete(lead)
 
 
 def cleanup_expired(s) -> dict:

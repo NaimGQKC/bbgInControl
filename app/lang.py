@@ -62,12 +62,20 @@ def short_when(d_local: datetime, lang: str) -> str:
     return {"es": f"{day} {d_local.day} a las {t}", "fr": f"{day} {d_local.day} à {t}", "en": f"{day} {d_local.day} at {t}"}[lang]
 
 
+def reminder_where(address: str, meeting_type: str, which: str, lang: str) -> str:
+    """The {where} value of the reminder templates. Their Spanish text reads "pasa por {where}" (24h) / "estará en {where}" (2h),
+    so a phone call needs its own wording there."""
+    if meeting_type == "call" and lang == "es":
+        return "el teléfono (te llamará)" if which == "24h" else "contacto por teléfono"
+    return where_phrase(address, meeting_type, lang)
+
+
 def where_phrase(address: str, meeting_type: str, lang: str) -> str:
     """Where the meeting happens, ready for a sentence."""
-    if address:
-        return {"es": address, "fr": f"à {address}", "en": f"at {address}"}[lang]
     if meeting_type == "call":
         return {"es": "por teléfono", "fr": "par téléphone", "en": "by phone"}[lang]
+    if address:
+        return {"es": address, "fr": f"à {address}", "en": f"at {address}"}[lang]
     return {"es": "tu vivienda", "fr": "chez vous", "en": "at your home"}[lang]
 
 
@@ -121,6 +129,13 @@ TEXTS: dict[str, dict[str, str]] = {
     "why_tech_error": {"es": "error técnico del asistente", "fr": "erreur technique de l'assistant", "en": "technical error in the assistant"},
     "why_limit": {"es": "límite de mensajes del asistente (posible abuso)", "fr": "limite de messages de l'assistant (abus possible)", "en": "assistant message limit (possible abuse)"},
     "why_unsure": {"es": "el asistente no está seguro", "fr": "l'assistant n'est pas sûr", "en": "the assistant is not sure"},
+    "why_first_failed": {"es": "No se pudo enviar el primer mensaje (¿número sin WhatsApp o fijo?)", "fr": "Le premier message n'a pas pu être envoyé (numéro sans WhatsApp ou fixe ?)", "en": "The first message could not be delivered (number without WhatsApp, or a landline?)"},
+    "why_first_failed_tech": {"es": "No se pudo enviar el primer mensaje (fallo técnico: lo revisamos)", "fr": "Le premier message n'a pas pu être envoyé (problème technique : nous vérifions)", "en": "The first message could not be sent (technical problem: we are checking)"},
+    "booked_fallback": {
+        "es": "Perfecto {name}, tu cita con {agent} queda confirmada para el {when}. Si necesitas cambiarla, escríbeme por aquí.",
+        "fr": "Parfait {name}, votre rendez-vous avec {agent} est confirmé le {when}. Pour le modifier, répondez simplement ici.",
+        "en": "Perfect {name}, your appointment with {agent} is confirmed for {when}. If you need to change it, write to me here.",
+    },
     "why_no_reply": {"es": "el asistente no generó respuesta", "fr": "l'assistant n'a pas généré de réponse", "en": "the assistant produced no reply"},
     # calendar event
     "ev_summary": {"es": "Valoración", "fr": "Estimation", "en": "Valuation"},

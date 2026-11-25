@@ -111,10 +111,10 @@ class OpenAIBackend:
             if not (s.azure_openai_endpoint and s.azure_openai_key):
                 raise RuntimeError("AZURE_OPENAI_ENDPOINT / AZURE_OPENAI_KEY missing")
             self.client = OpenAI(base_url=s.azure_openai_endpoint.rstrip("/") + "/openai/v1/", api_key=s.azure_openai_key,
-                                 default_headers={"api-key": s.azure_openai_key})
+                                 default_headers={"api-key": s.azure_openai_key}, timeout=25, max_retries=1)
             self.model = s.azure_openai_llm_deployment
         else:
-            self.client = OpenAI(api_key=s.openai_api_key)
+            self.client = OpenAI(api_key=s.openai_api_key, timeout=25, max_retries=1)
             self.model = s.openai_model
         self.effort = s.llm_reasoning_effort
         self.max_out = s.llm_max_output_tokens

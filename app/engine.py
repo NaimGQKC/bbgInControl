@@ -18,8 +18,10 @@ from .guards import (
     HOT_STAGES,
     NO_AI_TAGS,
     OPT_OUT_WORDS,
+    is_opt_out_text,
     can_contact,
     cold_hard_stop,
+    warm_hard_stop,
     first_name,
     is_cold,
     next_allowed_time,
@@ -247,7 +249,7 @@ def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:0
 def first_contact_values(account: Account, lead_name: str, zone: str) -> list[str]:
     lang = L.lead_lang(account)
     return [
-        first_name(lead_name) or L.text("greeting_fallback", lang),
+        first_name(tidy_name(lead_name)) or L.text("greeting_fallback", lang),
         first_name(tidy_name(account.agent_name)) or L.text("your_agent", lang),
         account.agency or L.text("your_agency", lang),
         zone or (account.zones.split(",")[0].strip() if account.zones else L.text("your_zone", lang)),
@@ -330,6 +332,19 @@ def release_cold_queue(s, account: Account) -> int:
     if waiting:
         log_event(s, "cold_queue_released", account.id, n=len(waiting))
     return len(waiting)
+
+
+def rearm_queued_leads(s, account: Account) -> int:
+    """When an account goes live (or is switched back on), leads that arrived earlier and were left queued get their first
+    message now. Cold (prospecting) leads have their own release once their template is approved."""
+    n = 0
+    for lead in s.execute(select(Lead).where(Lead.account_id == account.id, Lead.status == "queued", Lead.do_not_contact.is_(False))).scalars():
+        if is_cold(lead):
+            continue
+        jobs.schedule(s, "first_contact", utcnow() + timedelta(seconds=get_settings().first_message_delay), lead_id=lead.id,
+                      account_id=account.id, dedupe_key=f"first:{lead.id}:live")
+        n += 1
+    return n
 
 
 @jobs.handler("first_contact")
@@ -440,7 +455,7 @@ def job_reminder(s, job):
         return
     local = to_local(ev["start"], account.timezone)
     lang = L.lead_lang(account)
-    where = L.where_phrase(meeting.address, meeting.type, lang)
+    where = L.reminder_where(meeting.address, meeting.type, which, lang)
     agent_first = first_name(account.agent_name) or L.text("the_agent", lang)
     lead_first = first_name(lead.name) or L.text("greeting_fallback", lang)
     at = L.fmt_time(local, lang)
@@ -468,6 +483,12 @@ def job_first_contact_failed(s, job):
     account, lead = _load(s, job)
     lead.status = "failed"
     log_event(s, "first_contact_failed", account.id, lead.id, error=job.last_error[:500])
+    if is_cold(lead):  # landlines are common in prospecting data: no per-lead alerts (prospecting's own auto-pause watches the number)
+        return
+    # never lose a lead silently: the agent hears about it and can call the owner themselves
+    undeliverable = "131026" in (job.last_error or "")  # Meta: the number cannot receive WhatsApp
+    why = L.text("why_first_failed" if undeliverable else "why_first_failed_tech", L.lead_lang(account))
+    alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
 
 
 @jobs.handler("google_check")
@@ -559,7 +580,17 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
 
     # Exact STOP/BAJA/ARRÊT → opt out in code, no LLM needed. A plain "no" counts only as the answer to follow-up 2.
     word = text.strip().lower().rstrip(".!")
-    if word in OPT_OUT_WORDS or (word in NO_THANKS and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
+    if lead.do_not_contact and not lead.human_owned and word not in OPT_OUT_WORDS and warm_hard_stop(text) == "data":
+        # already opted out, now asking for their data: no reply (we may not write), but the agent must know (GDPR: one month)
+        log_event(s, "data_request_after_opt_out", account.id, lead.id)
+        alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), L.text("why_cold_data", L.lead_lang(account))])
+        return "stored_only"
+    if word not in OPT_OUT_WORDS and not lead.do_not_contact and not lead.human_owned:
+        # data request / threat to report, for any lead (not only cold ones): the agent must be told (GDPR: one month to answer)
+        hard = cold_hard_stop(text) if is_cold(lead) else warm_hard_stop(text)
+        if hard in ("data", "threat"):
+            return cold_hard_stop_out(s, account, lead, hard)
+    if word in OPT_OUT_WORDS or is_opt_out_text(text) or (word in NO_THANKS and _last_template(s, lead) == T.LEAD_FOLLOWUP_2.name):
         opt_out(s, account, lead, source="keyword")
         return "opted_out"
 
@@ -569,7 +600,7 @@ def handle_inbound(s, account: Account, from_phone: str, msg: dict) -> str:
         hard = cold_hard_stop(text)
         if hard:
             return cold_hard_stop_out(s, account, lead, hard)
-        if word in NO_THANKS:
+        if word in NO_THANKS and (first_reply or word not in ("no", "non", "nope")):  # a bare "no" mid-chat answers a question, it is not a refusal
             return cold_soft_no(s, account, lead)
     if lead.status in ("new", "queued", "contacted", "no_reply", "not_interested"):
         lead.status = "in_conversation"
@@ -685,10 +716,31 @@ def opt_out(s, account: Account, lead: Lead, *, source: str) -> None:
         pass
 
 
+_CHANGE_RE = re.compile(
+    r"\b(cancel\w*|anul\w*|annul\w*|aplaz\w*|reprogram\w*|reschedul\w*|postpon\w*|cambi\w*|modific\w*|modifi\w*|"
+    r"mover|mueve|move|chang\w*|d[ée]plac\w*|d[ée]cal\w*)\b|otro d[ií]a|no (puedo|puede) (ir|venir|asistir)|can'?t (make|come)|ne peux pas", re.I)
+_OTHER_TOPIC_RE = re.compile(r"hipotec|mortgage|cr[ée]dit|pr[ée]stamo|comisi|commission|honorari|contrato|contract|impuesto|tax|plusval", re.I)
+
+
+def _wants_meeting_change(reason: str, last_text: str) -> bool:
+    """A booked owner who wants to cancel or move the visit (said in the handoff reason or in their own last message).
+    Other topics that share the words ("cancelar la hipoteca", "cambiar la comisión") do not count."""
+    both = f"{reason or ''} {last_text or ''}"
+    return bool(_CHANGE_RE.search(both)) and not _OTHER_TOPIC_RE.search(both)
+
+
 def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: bool = True) -> None:
     lead.status = "handoff"
     lead.human_owned = True
     jobs.cancel(s, lead.id, ["ai_turn", "followup", "mark_no_reply", "first_contact"])
+    last_in = s.execute(select(Message.text).where(Message.lead_id == lead.id, Message.direction == "in")
+                        .order_by(Message.id.desc())).first()
+    meeting = s.execute(select(Meeting).where(Meeting.lead_id == lead.id)).scalar_one_or_none()
+    if meeting is not None and meeting.status == "booked" and _wants_meeting_change(reason, last_in[0] if last_in else ""):
+        # no automatic reminders for a time that may no longer stand (the agent decides); the status stays "booked":
+        # it still counts and book_slot must not double-book
+        jobs.cancel(s, lead.id, ["reminder"])
+        log_event(s, "meeting_change_requested", account.id, lead.id)
     log_event(s, "handoff", account.id, lead.id, reason=reason)
     if notify_lead:
         try:
@@ -696,8 +748,6 @@ def do_handoff(s, account: Account, lead: Lead, reason: str, *, notify_lead: boo
                          text=L.text("handoff_to_lead", L.lead_lang(account), agent_first_name=first_name(account.agent_name) or L.text("the_agent", L.lead_lang(account))))
         except WhatsAppError:
             pass
-    last_in = s.execute(select(Message.text).where(Message.lead_id == lead.id, Message.direction == "in")
-                        .order_by(Message.id.desc())).first()
     why = _clip(reason, 80) + (f' ("{_clip(last_in[0], 80)}")' if last_in else "")
     alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
 
@@ -1043,6 +1093,13 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         return "not_interested"
 
     reply = (reply or "").strip()
+    if not reply and lead.status == "booked":  # the meeting exists: confirm it in our own words, never "I'll pass you to the agent"
+        m = s.execute(select(Meeting).where(Meeting.lead_id == lead.id, Meeting.status == "booked")).scalars().first()
+        if m is not None:
+            lg = L.lead_lang(account)
+            reply = L.text("booked_fallback", lg, name=first_name(tidy_name(lead.name)) or L.text("greeting_fallback", lg),
+                           agent=first_name(tidy_name(account.agent_name)) or L.text("your_agent", lg),
+                           when=L.short_when(to_local(m.start, account.timezone), lg))
     if not reply:
         do_handoff(s, account, lead, L.text("why_no_reply", L.lead_lang(account)))
         return "empty_handoff"

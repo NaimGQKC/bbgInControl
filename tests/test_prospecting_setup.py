@@ -400,7 +400,7 @@ def test_429_does_not_pause(account):
 # ------------------------------------------------------------------ admin
 
 def test_admin_line_pause_and_resume(account, client, clock):
-    configure(account, cold_body=GOOD_BODY, cold_template_status="approved", daily_cap=4)
+    configure(account, cold_body=GOOD_BODY, cold_template_status="approved", daily_cap=4, ack_at="2026-09-29T08:00:00")
     run(account)
     assert client.get("/admin/prospecting").status_code == 401
     page = client.get("/admin/prospecting", auth=ADMIN)
