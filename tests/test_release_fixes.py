@@ -545,7 +545,7 @@ def _approve_v3(account):
         integ.external = {**integ.external, "tpl_status": {"lead_first_contact_v3:es": "APPROVED", "lead_first_contact_v2:es": "APPROVED"}}
 
 
-def test_new_first_message_does_not_mention_the_ai_but_the_first_reply_always_does(clock, account):
+def test_new_first_message_says_it_is_an_ai_in_a_one_line_footer(clock, account):
     _approve_v3(account)
     lid, _ = ingest(account)
     clock.advance(seconds=31)
@@ -553,14 +553,14 @@ def test_new_first_message_does_not_mention_the_ai_but_the_first_reply_always_do
     first = sent(M)[0]
     assert first["template"] == "lead_first_contact_v3"
     assert first["text"].startswith("Hola Marta, te escribo de parte de Laura (RE/MAX Confort)")
-    assert "asistente" not in first["text"].lower() and "STOP" in first["text"]
-    assert lead_of(lid).introduced is False  # the disclosure is still owed
-    FakeBackend.push({"text": "Perfecto, gracias. ¿Lo tienes reformado o para actualizar?"})  # the model forgets to say what it is
+    assert "asistente" not in first["text"].lower()  # no "asistente virtual" in the message itself
+    assert first["text"].rstrip().splitlines()[-1].startswith("Soy IA. ") and "STOP" in first["text"]  # the disclosure and the opt-out, in the footer
+    assert lead_of(lid).introduced is True  # already disclosed: the AI does not repeat a long introduction
+    FakeBackend.push({"text": "Perfecto, gracias. ¿Lo tienes reformado o para actualizar?"})
     inbound(account, "Sí, sigo pensando en venderlo", "in1")
     clock.advance(seconds=31)
     run_jobs()
-    assert sent(M)[-1]["text"].startswith("Soy el asistente de inteligencia artificial de Laura. ")  # added by code: agents cannot remove it
-    assert lead_of(lid).introduced is True
+    assert sent(M)[-1]["text"] == "Perfecto, gracias. ¿Lo tienes reformado o para actualizar?"
 
 
 def test_until_meta_approves_v3_the_previous_first_message_is_used(clock, account):

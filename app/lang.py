@@ -188,9 +188,9 @@ def text(key: str, lang: str, **kw) -> str:
 
 # Any of these in a text counts as "the assistant said what it is" (G13): the new wording and the older "virtual assistant" one
 INTRO_MARKERS = {
-    "es": ("inteligencia artificial", "asistente virtual", "asistente de ia", "asistente ia"),
-    "fr": ("intelligence artificielle", "assistant virtuel", "assistant ia", "assistant d'ia"),
-    "en": ("artificial intelligence", "virtual assistant", "ai assistant", "assistant is an ai"),
+    "es": ("inteligencia artificial", "asistente virtual", "asistente de ia", "asistente ia", "soy ia", "soy una ia"),
+    "fr": ("intelligence artificielle", "assistant virtuel", "assistant ia", "assistant d'ia", "je suis une ia"),
+    "en": ("artificial intelligence", "virtual assistant", "ai assistant", "assistant is an ai", "i'm an ai", "i am an ai"),
 }
 
 

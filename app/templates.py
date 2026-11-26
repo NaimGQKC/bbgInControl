@@ -63,18 +63,18 @@ LEAD_FIRST_CONTACT_V3 = Template(
     body=(
         "Hola {{1}}, te escribo de parte de {{2}} ({{3}}), que te ofrece, sin coste ni compromiso, un estudio de mercado "
         "con los precios a los que se han vendido viviendas parecidas a la tuya en {{4}}. ¿Sigues pensando en venderla?\n\n"
-        "Respeto tu tiempo: si prefieres que no te escriba, respóndeme STOP y no te molesto más."
+        "Soy IA. Respeto tu tiempo: si prefieres que no te escriba, respóndeme STOP y no te molesto más."
     ),
     params=("lead_name", "agent_first_name", "agency", "zone"),
     example=("Marta", "Laura", "RE/MAX Zaragoza", "Delicias"),
     texts={
         "fr": ("Bonjour {{1}}, je vous écris de la part de {{2}} ({{3}}), qui vous propose, sans frais ni engagement, une étude de marché "
                "avec les prix auxquels des biens similaires au vôtre se sont vendus à {{4}}. Envisagez-vous toujours de vendre ?\n\n"
-               "Je respecte votre temps : si vous préférez que je ne vous écrive pas, répondez STOP et je ne vous dérangerai plus.",
+               "Je suis une IA. Je respecte votre temps : si vous préférez que je ne vous écrive pas, répondez STOP et je ne vous dérangerai plus.",
                ("Marie", "Laura", "Agence Soleil", "Lyon 3e")),
         "en": ("Hi {{1}}, I'm writing on behalf of {{2}} ({{3}}), who offers you, at no cost and with no commitment, a market study "
                "with the prices similar homes to yours have sold for in {{4}}. Are you still thinking of selling?\n\n"
-               "I respect your time: if you'd rather I didn't write, reply STOP and I won't bother you again.",
+               "I'm an AI. I respect your time: if you'd rather I didn't write, reply STOP and I won't bother you again.",
                ("Marta", "Laura", "Sunrise Realty", "Delicias")),
     },
 )
