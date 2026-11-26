@@ -194,7 +194,7 @@ def waba_payment_state(waba_id: str, token: str) -> tuple[str, str]:
     try:
         data = _check(httpx.get(_graph(waba_id), params={"fields": "primary_funding_id"}, headers={"Authorization": f"Bearer {token}"}, timeout=15))
     except WhatsAppError as e:
-        return "unknown", f"Meta: {str(e)[:120]} (code {e.code})"
+        return "unknown", f"Meta: {str(e)[:400]} (code {e.code})"
     except Exception as e:
         return "unknown", f"{type(e).__name__}"
     if "primary_funding_id" not in data:

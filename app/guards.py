@@ -197,7 +197,7 @@ def to_utc_naive(dt_local: datetime) -> datetime:
 
 # Hard limits by kind of contact. The agent's settings can narrow the window, never widen it.
 WARM_LIMITS = (time(8, 0), time(22, 0), {0, 1, 2, 3, 4, 5, 6})  # the owner asked us (form, portal request): speed is the product
-COLD_LIMITS = (time(9, 0), time(21, 0), {0, 1, 2, 3, 4, 5})  # we wrote first (prospecting): Mon-Sat 09-21 only
+COLD_LIMITS = WARM_LIMITS  # prospecting uses the same outer window (messages, not calls); each agent chooses their own hours inside it
 
 
 def _window(account: Account, cold: bool) -> tuple[time, time, set]:

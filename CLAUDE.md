@@ -41,6 +41,8 @@ Adding a language later: texts in `lang.py`, bodies in each template's `texts`, 
 - Terms/privacy (`legal.html`): agent = controller and responsible for contacts, messages and lawful basis; Sparrow = processor (DPA in the terms) and own controller only for aggregated analytics. Draft pending a Spanish lawyer's review (LSSI art. 21 on cold WhatsApp is the main open point).
 - No schema changes without a migration path: `create_all` does not alter existing tables, so new data goes into existing columns/JSON (e.g. the `stripe` row in `integrations`).
 
+- Hours and billing (founder decisions, 26 Nov 2026): messages (owners who asked AND prospecting) go out 08:00-22:00 every day in the account's timezone; the agent can only narrow that window (`guards._window`). The agent pays €30 when a meeting is SCHEDULED by our assistant (`/admin/billing`, by booking date, test meetings excluded); deleting or moving the calendar event does not undo it; owners who asked to cancel in chat are flagged for a manual credit decision.
+
 ## Tests
 `pytest -q` must stay green. Every guardrail G1–G14 has a test in `tests/test_flow.py`; add one for every new rule. Use the frozen clock (`db.FROZEN_NOW`) and fakes.
 

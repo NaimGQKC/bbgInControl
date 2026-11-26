@@ -649,6 +649,7 @@ async function flow(my) {
   await bot(tr("Último paso: conectar tu WhatsApp. Se abre una ventana de Meta. Ten a mano el móvil y una tarjeta."));
   if (at(step) > at("whatsapp")) await me(tr("✅ WhatsApp conectado"));
   else {
+    await bot(tr("Antes de conectar, haz una **copia de seguridad** de tus chats en WhatsApp (Ajustes → Chats → Copia de seguridad). Si no la haces, puede que algunas fotos y archivos de tus conversaciones se vean en gris."));
     if (isMobile) {
       await bot(tr("Ojo: este paso es mucho más fácil desde un ordenador, porque tienes que escanear un código con el móvil."));
       const mail = `mailto:${encodeURIComponent(a.email || "")}?subject=${encodeURIComponent(tr("Continuar la configuración de Sparrow"))}&body=${encodeURIComponent(location.href)}`;

@@ -256,8 +256,9 @@ def prospecting_line(s, acc: Account) -> dict:
 
 @router.get("/billing", response_class=HTMLResponse)
 def billing_page(month: str = ""):
-    """Meetings per agent for one month, read from the agents' own calendars (meeting_check). Billable = booked through our chats and
-    still in the calendar after it took place. Test meetings are left out. Billing itself is done by hand from this table."""
+    """What each agent owes for one month. The agent pays when the meeting is SCHEDULED: every meeting our assistant books in their
+    calendar counts (test meetings left out, one per lead), even if they later delete or move the event. The other columns are
+    information: whether the event is still in their calendar, and owners who asked to cancel in chat (a person decides about a credit)."""
     from datetime import datetime as _dt
 
     e = html.escape
@@ -269,24 +270,22 @@ def billing_page(month: str = ""):
     fee = get_settings().meeting_fee_eur
     rows, total = [], 0
     with session_scope() as s:
-        verified = {(lid, (data or {}).get("start")) for lid, data in s.execute(select(Event.lead_id, Event.data).where(Event.name == "meeting_verified")).all()}
         changed_ids = {lid for (lid,) in s.execute(select(Event.lead_id).where(Event.name == "meeting_change_requested")).all()}
         for acc in s.execute(select(Account).order_by(Account.id)).scalars():
-            ms = s.execute(select(Meeting).where(Meeting.account_id == acc.id, Meeting.is_test.is_(False), Meeting.start >= first, Meeting.start < last)).scalars().all()
+            ms = s.execute(select(Meeting).where(Meeting.account_id == acc.id, Meeting.is_test.is_(False),
+                                                 Meeting.created_at >= first, Meeting.created_at < last)).scalars().all()
             if not ms:
                 continue
-            ok = [m for m in ms if m.status == "booked" and (m.lead_id, m.start.isoformat()) in verified]  # by meeting, not by lead: a rebooked meeting is a new one
-            cancelled = [m for m in ms if m.status == "cancelled"]
-            pending = [m for m in ms if m.status == "booked" and (m.lead_id, m.start.isoformat()) not in verified]
-            review = [m for m in ok if m.lead_id in changed_ids]
-            total += len(ok) * fee
-            rows.append(f"<tr><td><a href='/admin/accounts/{acc.id}'>{e(acc.agent_name or str(acc.id))}</a></td><td>{len(ms)}</td><td><b>{len(ok)}</b></td>"
-                        f"<td>{len(cancelled)}</td><td>{len(pending)}</td><td>{len(review)}</td><td><b>{len(ok) * fee} €</b></td></tr>")
-    head = "<tr><th>Agente</th><th>Reservadas</th><th>Facturables</th><th>Canceladas</th><th>Sin verificar aún</th><th>Revisar (el lead pidió cambio)</th><th>Importe</th></tr>"
+            deleted = [m for m in ms if m.status == "cancelled"]
+            review = [m for m in ms if m.lead_id in changed_ids]
+            total += len(ms) * fee
+            rows.append(f"<tr><td><a href='/admin/accounts/{acc.id}'>{e(acc.agent_name or str(acc.id))}</a></td><td><b>{len(ms)}</b></td>"
+                        f"<td>{len(deleted)}</td><td>{len(review)}</td><td><b>{len(ms) * fee} €</b></td></tr>")
+    head = "<tr><th>Agente</th><th>Reservadas (se cobran)</th><th>Evento borrado por el agente</th><th>Revisar: el lead pidió cancelar/cambiar</th><th>Importe</th></tr>"
     return HTMLResponse(f"<!doctype html><meta charset='utf-8'><title>Facturación · Sparrow Ops</title><p><a href='/admin'>← Ops</a></p>"
-                        f"<h1>Facturación {first:%Y-%m}</h1><p>Facturable = reservada en nuestros chats y todavía en el calendario del agente después de la cita ({fee} € cada una). "
-                        f"Citas de prueba excluidas. Otro mes: <code>?month=AAAA-MM</code></p>"
-                        f"<table border='1' cellpadding='6' cellspacing='0'>{head}{''.join(rows) or '<tr><td colspan=7>Ninguna cita este mes</td></tr>'}</table><p><b>Total: {total} €</b></p>")
+                        f"<h1>Facturación {first:%Y-%m}</h1><p>El agente paga cuando la cita se agenda: {fee} € por cada cita reservada en nuestros chats, "
+                        f"aunque luego borre o mueva el evento. Citas de prueba excluidas. Mes por fecha de reserva. Otro mes: <code>?month=AAAA-MM</code></p>"
+                        f"<table border='1' cellpadding='6' cellspacing='0'>{head}{''.join(rows) or '<tr><td colspan=5>Ninguna cita este mes</td></tr>'}</table><p><b>Total: {total} €</b></p>")
 
 
 @router.get("/prospecting", response_class=HTMLResponse)
