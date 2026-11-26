@@ -8,7 +8,7 @@ normal first_contact job, `can_contact` and `send_to_lead` do that, with all the
 
 Cost: every pull (one CASAFARI page, up to 25 listings) costs 10 CASAFARI tokens = EUR 0.40 (casafari.TOKENS_PER_SEARCH,
 EUR_PER_TOKEN). With PROSPECTING_MAX_PAGES_PER_RUN=1 and a pull every PROSPECTING_POLL_HOURS (default 3) inside the allowed
-hours (09:00-21:00, about 4 pulls a day) one enabled account costs about EUR 1.60 a day at most. A run that finds the daily
+hours (08:00-22:00, about 4 pulls a day) one enabled account costs about EUR 1.60 a day at most. A run that finds the daily
 cap already reached pulls nothing.
 
 Safety: before every pull the account is checked. If the WhatsApp number quality is not healthy, or more than 15% of the

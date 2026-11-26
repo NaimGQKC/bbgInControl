@@ -90,19 +90,16 @@ def test_phone_call_reminder_reads_right_in_spanish(clock, account):
     assert "por por" not in text and "te llamará" in text
 
 
-def test_hours_owners_who_asked_08_to_22_every_day_cold_09_to_21_mon_sat(clock, account):
+def test_hours_08_to_22_every_day_for_everyone_and_the_agent_can_only_narrow_them(clock, account):
     with db.session_scope() as s:
         a = s.get(Account, account)
         # Madrid is UTC+1 in December. Tuesday 1 Dec: 07:30, 08:30, 21:30, 22:30 local
-        assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 6, 30))
-        assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 7, 30))
-        assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 20, 30))
-        assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 21, 30))
-        # Sunday 6 Dec 11:00 local: fine for an owner who asked, never for a cold contact
-        assert guards.in_allowed_hours(a, datetime(2026, 12, 6, 10, 0))
-        assert not guards.in_allowed_hours(a, datetime(2026, 12, 6, 10, 0), cold=True)
-        assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 7, 30), cold=True)  # 08:30 local: still before 09:00 for cold
-        assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 8, 30), cold=True)
+        for cold in (False, True):  # owners who asked and prospecting share the same outer window (messages, not calls)
+            assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 6, 30), cold=cold)
+            assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 7, 30), cold=cold)
+            assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 20, 30), cold=cold)
+            assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 21, 30), cold=cold)
+            assert guards.in_allowed_hours(a, datetime(2026, 12, 6, 10, 0), cold=cold)  # Sunday 11:00 local
         # the agent may narrow the window, never widen it
         a.settings = {"contact_start": "06:00", "contact_end": "23:30", "contact_days": [0, 1, 2, 3, 4, 5, 6]}
         s.flush()
@@ -113,7 +110,6 @@ def test_hours_owners_who_asked_08_to_22_every_day_cold_09_to_21_mon_sat(clock, 
         assert not guards.in_allowed_hours(a, datetime(2026, 12, 1, 8, 30))  # 09:30 local, before the agent's own 10:00
         assert not guards.in_allowed_hours(a, datetime(2026, 12, 5, 10, 0))  # Saturday, agent excluded it
         assert guards.in_allowed_hours(a, datetime(2026, 12, 1, 12, 0))
-        # the next allowed moment follows the same windows
         nxt = guards.next_allowed_time(a, datetime(2026, 12, 4, 17, 30))  # Friday 18:30 local -> Monday 10:00 local
         assert nxt == datetime(2026, 12, 7, 9, 0)
 
@@ -408,24 +404,23 @@ def test_real_opt_outs_still_work(text):
     assert guards.is_opt_out_text(text)
 
 
-def test_meeting_check_counts_a_meeting_only_if_the_event_is_still_there_after_it_took_place(clock, account, monkeypatch):
+def test_billing_counts_a_meeting_when_it_is_scheduled_even_if_the_agent_deletes_the_event(clock, account, monkeypatch):
     from fastapi.testclient import TestClient
-    from app.gcal import FakeCalendar
     from app.main import app
     monkeypatch.setenv("ADMIN_PASSWORD", "pw")
     from app.config import get_settings
     get_settings.cache_clear()
     lid, m = _book(clock, account)
+    booked_month = f"{db.utcnow():%Y-%m}"
+    with db.session_scope() as s:
+        s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().is_test = False  # test meetings are left out of billing
+    FakeCalendar.events[m.google_event_id]["deleted"] = True  # the agent deletes it to dodge the fee
     clock.set(m.end + timedelta(minutes=11))
     run_jobs()
-    with db.session_scope() as s:
-        assert s.execute(select(Event).where(Event.name == "meeting_verified", Event.lead_id == lid)).first()
     with TestClient(app) as c:
-        # test meetings are left out of the billing table, so mark this one as a real one first
-        with db.session_scope() as s:
-            s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().is_test = False
-        r = c.get(f"/admin/billing?month={m.start:%Y-%m}", auth=("admin", "pw"))
-        assert r.status_code == 200 and "Facturación" in r.text and "<b>1</b>" in r.text and "30 €" in r.text
+        r = c.get(f"/admin/billing?month={booked_month}", auth=("admin", "pw"))
+    assert r.status_code == 200 and "<b>1</b>" in r.text and "30 €" in r.text  # still billed: it was scheduled through our chat
+    assert "Total: 30 €" in r.text
 
 
 def test_meeting_check_marks_a_deleted_event_as_cancelled(clock, account):
@@ -541,21 +536,3 @@ def test_the_first_message_guard_still_schedules_the_follow_ups(clock, account):
         engine.job_first_contact(s, job)
         s.flush()
         assert len(s.execute(select(Job).where(Job.lead_id == lid, Job.type == "followup")).scalars().all()) == 2
-
-
-def test_billing_counts_a_rebooked_meeting_only_after_it_is_verified(clock, account, monkeypatch):
-    from fastapi.testclient import TestClient
-    from app.config import get_settings
-    from app.main import app
-    monkeypatch.setenv("ADMIN_PASSWORD", "pw")
-    get_settings.cache_clear()
-    lid, m = _book(clock, account)
-    clock.set(m.end + timedelta(minutes=11))
-    run_jobs()
-    with db.session_scope() as s:
-        mt = s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one()
-        mt.is_test = False
-        mt.start = mt.start + timedelta(days=1)  # rebooked to another day: same row, new meeting, not verified yet
-    with TestClient(app) as c:
-        r = c.get(f"/admin/billing?month={(m.start + timedelta(days=1)):%Y-%m}", auth=("admin", "pw"))
-    assert "<b>0</b>" in r.text

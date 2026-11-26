@@ -7,6 +7,7 @@ EN_FR: dict[str, tuple[str, str]] = {
     "Añádelo en **business.facebook.com → WhatsApp Manager → Métodos de pago**. Son dos minutos.": ("Add it at **business.facebook.com → WhatsApp Manager → Payment methods**. It takes two minutes.", "Ajoutez-le sur **business.facebook.com → WhatsApp Manager → Moyens de paiement**. Deux minutes suffisent."),
     "Ya lo he añadido, comprobar": ("I've added it, check again", "Je l'ai ajouté, vérifier"),
     "Lo haré luego": ("I'll do it later", "Je le ferai plus tard"),
+    "Antes de conectar, haz una **copia de seguridad** de tus chats en WhatsApp (Ajustes → Chats → Copia de seguridad). Si no la haces, puede que algunas fotos y archivos de tus conversaciones se vean en gris.": ("Before connecting, make a **backup** of your chats in WhatsApp (Settings → Chats → Chat backup). If you don't, some photos and files in your conversations may show up grey.", "Avant de vous connecter, faites une **sauvegarde** de vos discussions dans WhatsApp (Réglages → Discussions → Sauvegarde). Sinon, certaines photos et certains fichiers de vos conversations pourraient apparaître en gris."),
     "Listo. Ya puedes cerrar esta ventana y volver a Sparrow.": ("Done. You can close this window and go back to Sparrow.", "C'est fait. Vous pouvez fermer cette fenêtre et revenir sur Sparrow."),
     "Error de conexión": ("Connection error", "Erreur de connexion"),
     "Escribe o toca una opción…": ("Type or tap an option…", "Écrivez ou touchez une option…"),

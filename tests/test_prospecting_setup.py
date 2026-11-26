@@ -301,7 +301,7 @@ def test_no_pull_outside_allowed_hours(account, clock):
     with db.session_scope() as s:
         assert P.schedule_prospecting(s) == 1
         job = s.execute(select(Job).where(Job.type == "prospect")).scalar_one()
-        assert job.run_at == clock.now.replace(hour=7, minute=0) + timedelta(days=1)  # 09:00 Madrid
+        assert job.run_at == clock.now.replace(hour=6, minute=0) + timedelta(days=1)  # 08:00 Madrid
     run_jobs()
     assert FakeCasafari.calls == []
 
