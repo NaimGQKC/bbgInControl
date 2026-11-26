@@ -1,55 +1,70 @@
-# Sparrow AI: costs and pricing proposal (26 Nov 2026)
+# Sparrow AI: costs and pricing for networks (26 Nov 2026)
 
-Tags: R = repo/your decision, W = third-party web figure (unverified), A = my assumption.
+Tags: M = measured today, R = repo/your decision, W = third-party web figure (unverified), A = my assumption.
+
+## Measured today (CASAFARI, 10 tokens = EUR 0.40)
+- Postal codes are not searchable in CASAFARI (the lookup for a postal code returned nothing). The finest level is the neighbourhood (for example Delicias, Zaragoza). We sell "zonas" = neighbourhoods; the network's sheet can label them with postal codes.
+- Delicias, last 30 days, one page: 25 private listings, 52% with phone, 40% usable (10 leads), more pages exist.
 
 ## Our costs
 
 | Cost | Unit | Amount | Tag |
 |---|---|---|---|
-| Prospecting data (CASAFARI) | per new usable owner lead | EUR 0.08-0.27 | R / W |
-| Standard area (3 new leads a day) | per area per month | EUR 7-24 (mid 12) | calc |
-| Premium area (5 new leads a day) | per area per month | EUR 12-40 (mid 20) | calc |
+| Prospecting data | per page (up to 25 listings) | EUR 0.40 | M |
+| Prospecting data per zona | per month, 1-4 pages | EUR 0.40-1.60 | calc |
 | AI model | per booked meeting | EUR 1-3 | A |
-| Payment fee | per charge | card about 1.5% + EUR 0.25; bank transfer about 0 | A |
+| Payment fee | per charge | card about 1.5% + EUR 0.25; transfer about 0 | A |
 | Hosting, database, monitoring | per month | EUR 25 now; EUR 100-200 at 100+ agents | A |
-| Meta messages | per message | paid by the agent or office to Meta, not by us | W |
+| Meta messages | per message | paid by the agent or office to Meta | W |
 | Lawyer review | once | EUR 2-5k | A |
-| Corporate build (organisation, area allocation, lead routing, one invoice) | once | about 2-3 weeks of work | A |
+| Network build (organisation, zona allocation, routing, one invoice) | once | about 2-3 weeks of work | A |
 
-## Plans
+## Three choices for the network
+1. How many zonas. 2. Reservada (exclusive, default) or Compartida (-30%). 3. How to pay.
 
-| | Plan A: Results | Plan B: Territory |
-|---|---|---|
-| Platform fee | EUR 0 | none |
-| Meetings from leads who asked (forms, CRM) | EUR 30 each | EUR 30 each |
-| Prospecting areas | EUR 25 per area per month (Standard), EUR 45 (Premium), only while the area is active | EUR 89 per area per month (Standard), EUR 149 (Premium), all-in |
-| Meetings from prospecting areas | EUR 30 each | included: 4 per Standard area, 6 per Premium area per month; extra EUR 20 each |
-| Predictability | optional monthly spending cap: Sparrow pauses at the cap | fixed bill per area |
-| Commitment | none, 30 days notice | 3 areas minimum, 30 days notice |
-| Volume discount | 10+ areas -10%, 25+ areas -20%; annual prepay -10% | same |
+| | Resultados | Equilibrado (recommended) | Fijo |
+|---|---|---|---|
+| Per zona per month | EUR 4 | EUR 8 | EUR 12 |
+| Per meeting scheduled | EUR 30 | EUR 12 | included, up to 3 per zona per month, extra EUR 20 |
+| Expected cost per zona per month (0.3 meetings) | EUR 13 | EUR 11.6 | EUR 12 |
+| If the zona gives 0.15 / 0.6 meetings | EUR 8.5 / 22 | EUR 9.8 / 15.2 | EUR 12 / 12 |
+| Risk | the network carries the upside cost | shared | Sparrow carries the upside; guarantee: a zona with 0 meetings in 90 days is free the next month |
 
-Sparrow margin per area per month (mid / worst data cost): Standard in B EUR 69 / 57; Premium in B EUR 117 / 97; Standard add-on in A EUR 13 / 1 plus EUR 30 per meeting.
+## Volume ladder (the whole bill, all zonas at the tier price)
 
-## Example: one network, 10 Standard areas, about 20 prospecting meetings a month
+| Zonas | Discount | Resultados | Equilibrado | Fijo |
+|---|---|---|---|---|
+| 1-24 | list | EUR 4 + 30 | EUR 8 + 12 | EUR 12 |
+| 25-99 | -15% | EUR 3.40 + 25.50 | EUR 6.80 + 10.20 | EUR 10.20 |
+| 100-249 | -25% | EUR 3 + 22.50 | EUR 6 + 9 | EUR 9 |
+| 250-499 | -35% | EUR 2.60 + 19.50 | EUR 5.20 + 7.80 | EUR 7.80 |
+| 500+ | -40% or bid | EUR 2.40 + 18 | EUR 4.80 + 7.20 | EUR 7.20 |
 
-| | Plan A | Plan B |
-|---|---|---|
-| Low (9 meetings) | EUR 520 | EUR 890 |
-| Expected (20 meetings) | EUR 850 | EUR 890 |
-| High (27 meetings) | EUR 1,060 | EUR 890 |
-| With 10% volume discount | EUR 765 expected | EUR 801 |
-| Sparrow cost (data + AI), expected / worst data | EUR 160 / 280 | EUR 160 / 280 |
-| Sparrow margin, expected | EUR 690 (81%) | EUR 730 (82%) |
+## Example: 100 zonas, Reservada, tier -25%
 
-## Decisions and questions for the conversation with a network
+| Meetings per month | Resultados | Equilibrado | Fijo |
+|---|---|---|---|
+| 15 | EUR 638 | EUR 735 | EUR 900 |
+| 30 (expected) | EUR 975 | EUR 870 | EUR 900 |
+| 60 | EUR 1,650 | EUR 1,140 | EUR 900 |
+| Sparrow cost at 30 meetings (data + AI + share of hosting) | about EUR 180 | about EUR 180 | about EUR 180 |
+| Sparrow margin at 30 meetings | EUR 795 | EUR 690 | EUR 720 |
 
-| Topic | Recommendation |
+## Psychology built into the offer
+
+| Factor | In the offer |
 |---|---|
-| What is an area | one CASAFARI location (city or district) with a capacity of leads per day |
-| Exclusivity | one network per area while subscribed (stops two networks messaging the same owner; basis for future bidding) |
-| Who holds the CASAFARI relationship | needs CASAFARI's written yes for resale to networks; otherwise the network brings its own key |
-| Lead routing | by agent zone first, then round robin inside the office |
-| Billing | one invoice to the network with a report per office |
-| Inbound leads | included in both plans, no area needed |
-| Prospecting | stays off until the lawyer answers |
-| Ask the network | how many offices and agents; today's lead sources; who owns the leads (office or agent); billing per office or central; their data protection officer's view on AI WhatsApp; budget predictability needed; one pilot area |
+| Choice architecture | three columns, Equilibrado pre-selected; Fijo is the anchor, Resultados the easy entry |
+| Compromise effect | the middle plan is the cheapest at the expected yield |
+| Scarcity and loss aversion | Reservada zonas are exclusive and can be taken by another network; a live map of reserved and free zonas |
+| Price lock | zonas reserved before the bidding starts keep today's price for 12 months, and renewals rise at most 10% a year |
+| Volume cliff | 25 zonas cost less than 24, so every network sees the next tier |
+| Foot in the door | pilot of 5 zonas for 60 days, Resultados only, no monthly fee; upgrading within 30 days keeps the pilot price lock |
+| Risk reversal | a zona with no meeting in 90 days is free the next month (Fijo); credit for owner no-shows |
+| Mental accounting | EUR 9 per zona per month = EUR 0.30 a day, one invoice for the whole network |
+| Value anchor | one meeting costs EUR 30 against a listing worth thousands in commission |
+| Commitment | annual prepay -10% |
+
+## Open points
+- Booking rate is an assumption (1-3%); a 30-day pilot on 5 zonas measures it before prices are final.
+- Prospecting stays off until the lawyer answers; CASAFARI must approve in writing that we serve networks.
