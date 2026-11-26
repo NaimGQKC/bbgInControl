@@ -7,8 +7,9 @@ import pytest
 from sqlalchemy import select
 
 from app import db, guards, jobs
+from app.gcal import FakeCalendar
 from app.llm import FakeBackend
-from app.models import Account, Job, Lead, Meeting, Message
+from app.models import Account, Event, Job, Lead, Meeting, Message
 from app.whatsapp import FakeWhatsApp, WhatsAppError
 from tests.conftest import run_jobs, sent
 from tests.test_flow import M, _book, ingest, inbound, lead_of, start_conversation
@@ -403,3 +404,77 @@ def test_scheduling_preferences_and_listing_talk_are_not_opt_outs(text):
                                   "STOP", "no me molestéis nunca más"])
 def test_real_opt_outs_still_work(text):
     assert guards.is_opt_out_text(text)
+
+
+def test_meeting_check_counts_a_meeting_only_if_the_event_is_still_there_after_it_took_place(clock, account, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.gcal import FakeCalendar
+    from app.main import app
+    monkeypatch.setenv("ADMIN_PASSWORD", "pw")
+    from app.config import get_settings
+    get_settings.cache_clear()
+    lid, m = _book(clock, account)
+    clock.set(m.end + timedelta(minutes=11))
+    run_jobs()
+    with db.session_scope() as s:
+        assert s.execute(select(Event).where(Event.name == "meeting_verified", Event.lead_id == lid)).first()
+    with TestClient(app) as c:
+        # test meetings are left out of the billing table, so mark this one as a real one first
+        with db.session_scope() as s:
+            s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().is_test = False
+        r = c.get(f"/admin/billing?month={m.start:%Y-%m}", auth=("admin", "pw"))
+        assert r.status_code == 200 and "Facturación" in r.text and "<b>1</b>" in r.text and "30 €" in r.text
+
+
+def test_meeting_check_marks_a_deleted_event_as_cancelled(clock, account):
+    lid, m = _book(clock, account)
+    FakeCalendar.events[m.google_event_id]["deleted"] = True
+    clock.set(m.end + timedelta(minutes=11))
+    run_jobs()
+    with db.session_scope() as s:
+        assert s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one().status == "cancelled"
+        assert not s.execute(select(Event).where(Event.name == "meeting_verified", Event.lead_id == lid)).first()
+
+
+def test_slots_can_be_asked_for_a_given_day_part_of_day_or_hour(clock, account):
+    from app import engine
+    from datetime import date
+    clock.set(datetime(2026, 12, 1, 9, 0))  # Tuesday 10:00 Madrid
+    with db.session_scope() as s:
+        acc = s.get(Account, account)
+        default = engine.compute_free_slots(s, acc)
+        assert 1 <= len(default) <= 6
+        sat = engine.compute_free_slots(s, acc, on_date=date(2026, 12, 5))  # Saturday, 4 days away
+        assert sat and all(x["slot_id"].startswith("2026-12-05") for x in sat)
+        morning = engine.compute_free_slots(s, acc, on_date=date(2026, 12, 5), part_of_day="morning")
+        assert morning and all(int(x["slot_id"][11:13]) < 14 for x in morning)
+        eleven = engine.compute_free_slots(s, acc, on_date=date(2026, 12, 5), near_time="11:00")
+        assert any(x["slot_id"].endswith("T11:00") for x in eleven)  # 11:00 is free even though it is off the 3 h grid
+        assert engine.compute_free_slots(s, acc, on_date=date(2026, 12, 6)) == []  # Sunday is not a slot day: empty, so "no hay hueco" is true
+
+
+def test_missing_meta_payment_method_is_reported_and_rechecked(clock, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.config import get_settings
+    from app.main import app
+    monkeypatch.setenv("OPS_WHATSAPP", "699 000 111")
+    get_settings.cache_clear()
+    FakeWhatsApp.payment_state = "missing"
+    try:
+        with TestClient(app) as c:
+            tok = c.post("/start", follow_redirects=False).headers["location"].split("/")[-1]
+            c.post(f"/api/o/{tok}/answers", json={"agent_name": "Laura", "agency": "RE/MAX", "zones": "Delicias", "email": "l@x.es", "personal_whatsapp": "611 111 111"})
+            with db.session_scope() as s:
+                from app import onboarding
+                acc = s.execute(select(Account).order_by(Account.id.desc())).scalars().first()
+                onboarding.upsert_integration(s, acc.id, "meta", external={"waba_id": "w9", "phone_number_id": "p9"}, token_enc="x")
+            st = c.post(f"/api/o/{tok}/meta_payment/recheck").json()
+            assert st["meta_payment"] == "missing"
+            ops = [m for m in sent("+34699000111") if m["from"] == "sparrow"]
+            assert len(ops) == 1 and "método de pago" in ops[0]["text"]
+            c.post(f"/api/o/{tok}/meta_payment/recheck")  # still missing: the operator is not told twice
+            assert len([m for m in sent("+34699000111") if m["from"] == "sparrow"]) == 1
+            FakeWhatsApp.payment_state = "ok"  # the agent added the card
+            assert c.post(f"/api/o/{tok}/meta_payment/recheck").json()["meta_payment"] == "ok"
+    finally:
+        FakeWhatsApp.payment_state = "ok"

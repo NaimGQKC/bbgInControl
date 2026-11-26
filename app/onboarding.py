@@ -6,7 +6,7 @@ from sqlalchemy import select
 
 from . import coldmsg, gcal, jobs, lang as L, templates as T
 from .config import get_settings
-from .crypto import encrypt
+from .crypto import decrypt, encrypt
 from .db import utcnow
 from .engine import alert_agent, alert_ops, first_name, log_event
 from .guards import normalize_phone, tidy_name
@@ -281,11 +281,36 @@ def connect_meta(s, account: Account, *, code: str, waba_id: str, phone_number_i
     if not account.personal_whatsapp:  # alerts default to the number they just connected; the chat lets them change it
         account.personal_whatsapp = normalize_phone(info.get("display_phone_number")) or ""
     account.last_agent_activity_at = utcnow()
+    check_meta_payment(s, account, token=token, waba_id=waba_id)
     results = submit_templates(s, account, wa)
     advance(account, "waiting_templates")
     jobs.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=account.id, dedupe_key=f"check_templates:{account.id}", reuse=True)
     log_event(s, "meta_connected", account.id, waba_id=waba_id, phone_number_id=phone_number_id)
     return {"ok": True, "templates": results}
+
+
+def check_meta_payment(s, account: Account, *, token: str | None = None, waba_id: str | None = None) -> str:
+    """Asks Meta whether the agent's WhatsApp Business account has a payment method and remembers the answer next to the connection.
+    A warning only (it never holds the account back): the onboarding shows what to do, /admin shows the state, and the operator is told once."""
+    from .whatsapp import waba_payment_state
+
+    integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+    if integ is None:
+        return "unknown"
+    ext = dict(integ.external or {})
+    if get_settings().whatsapp_mode == "fake":
+        from .whatsapp import FakeWhatsApp
+        state = FakeWhatsApp.payment_state
+    else:
+        tok = token if token is not None else (decrypt(integ.token_enc) if integ.token_enc else "")
+        state = waba_payment_state(waba_id or ext.get("waba_id") or "", tok) if tok else "unknown"
+    before = ext.get("payment_state")
+    integ.external = {**ext, "payment_state": state, "payment_checked_at": utcnow().isoformat()}
+    log_event(s, "meta_payment_checked", account.id, state=state)
+    if state == "missing" and before != "missing":
+        alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or f"cuenta {account.id}", "pago de Meta", account.personal_whatsapp or "-",
+                                                 "su cuenta de WhatsApp Business no tiene método de pago: Meta no entregará mensajes"])
+    return state
 
 
 def link_test_number(s, account: Account) -> None:

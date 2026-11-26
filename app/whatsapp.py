@@ -188,11 +188,24 @@ def get_phone_number(phone_number_id: str, token: str) -> dict:
 
 # ---------- Fake (tests / local demo) ----------
 
+def waba_payment_state(waba_id: str, token: str) -> str:
+    """'ok' | 'missing' | 'unknown': does the agent's WhatsApp Business account have a payment method? Meta refuses to deliver business
+    messages without one (error 131042). Best effort: any doubt is 'unknown' and never blocks anything (a delivery failure is caught later)."""
+    try:
+        data = _check(httpx.get(_graph(waba_id), params={"fields": "primary_funding_id"}, headers={"Authorization": f"Bearer {token}"}, timeout=15))
+    except Exception:
+        return "unknown"
+    if "primary_funding_id" not in data:
+        return "unknown"
+    return "ok" if data.get("primary_funding_id") else "missing"
+
+
 class FakeWhatsApp(WhatsAppClient):
     outbox: list[dict] = []
     created_templates: list[dict] = []
     _ids = itertools.count(1)
     fail_next: Exception | None = None
+    payment_state: str = "ok"  # tests: "missing" | "unknown"
 
     def __init__(self, token: str = "fake", phone_number_id: str = "fake-phone", waba_id: str = "fake-waba"):
         super().__init__(token, phone_number_id, waba_id)

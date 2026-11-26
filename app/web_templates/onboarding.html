@@ -681,6 +681,15 @@ async function flow(my) {
     return;
   }
 
+  // 8a. Meta will not deliver our messages without a payment method on their WhatsApp Business account: say what to do (warning only)
+  if (state.meta_payment === "missing" && store.get("payLater") !== "1") {
+    await bot(tr("Un detalle de Meta: tu cuenta de WhatsApp Business todavía no tiene un **método de pago**. Lo necesita para cobrarte sus céntimos por mensaje (a ti, no a nosotros); sin él, Meta no entrega los mensajes a tus clientes."));
+    await bot(tr("Añádelo en **business.facebook.com → WhatsApp Manager → Métodos de pago**. Son dos minutos."));
+    buttons([{ label: tr("Ya lo he añadido, comprobar"), onClick: async () => { await api("/meta_payment/recheck", {}); render(); } },
+             { label: tr("Lo haré luego"), secondary: true, onClick: () => { store.set("payLater", "1"); render(); } }]);
+    return;
+  }
+
   // 8. Waiting for Meta / done
   if (state.status !== "live") {
     await bot(tr("Solo falta que WhatsApp apruebe mis mensajes (unas horas, a veces un día). Te escribo yo en cuanto esté."));

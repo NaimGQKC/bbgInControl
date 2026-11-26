@@ -484,6 +484,35 @@ def job_reminder(s, job):
         log_event(s, f"reminder_{which}_sent", account.id, lead.id)
 
 
+@jobs.handler("meeting_check")
+def job_meeting_check(s, job):
+    """Billing proof, read from the agent's own Google Calendar: a meeting we booked counts when its event is still there after
+    the meeting time. Deleted before then = cancelled (not billable). Moved later = checked again after the new time."""
+    account, lead = _load(s, job)
+    meeting = s.execute(select(Meeting).where(Meeting.lead_id == lead.id)).scalar_one_or_none()
+    if not meeting or meeting.status != "booked":
+        return
+    try:
+        ev = calendar_for_account(s, account).get_event(meeting.google_event_id)  # a calendar error raises: the job retries
+    except CalendarError as e:
+        log.warning("meeting_check: calendar error %s", e)
+        raise
+    if ev is None:
+        meeting.status = "cancelled"
+        log_event(s, "meeting_cancelled_by_agent", account.id, lead.id, by="meeting_check")
+        return
+    if ev.get("all_day"):
+        return
+    if ev["start"] != meeting.start:  # moved by the agent: the new time is the one that counts
+        meeting.start, meeting.end = ev["start"], ev["end"]
+    check_at = meeting.end + timedelta(minutes=10)
+    if check_at > utcnow():
+        job.status, job.run_at = "pending", check_at
+        return
+    if not s.execute(select(Event.id).where(Event.name == "meeting_verified", Event.lead_id == lead.id)).first():
+        log_event(s, "meeting_verified", account.id, lead.id, start=meeting.start.isoformat(), test=meeting.is_test)
+
+
 @jobs.handler("ai_turn:failed")
 def job_ai_turn_failed(s, job):  # G10: fail closed
     account, lead = _load(s, job)
@@ -890,12 +919,20 @@ def _cold_pitch_repeated(account: Account, lead: Lead, reply: str) -> bool:
 
 # ---------------------------------------------------------------- slots & booking
 
-def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
+def compute_free_slots(s, account: Account, max_slots: int = 6, *, on_date=None, part_of_day: str | None = None,
+                       near_time: str | None = None) -> list[dict]:
+    """Real free slots. Without filters: up to 6, two per day, 3 h apart (what the assistant offers by default).
+    With a day, a part of the day or a time the owner asked for: every free half hour that matches (up to 8)."""
     cfg = settings_for(account)
     tz = ZoneInfo(account.timezone)
     now = utcnow()
+    filtered = bool(on_date or part_of_day or near_time)
+    days_ahead = cfg["days_ahead"]
+    if on_date:
+        days_ahead = min(21, max(days_ahead, (on_date - to_local(now, account.timezone).date()).days))
+    near_min = (lambda h: h.hour * 60 + h.minute)(parse_hm(near_time)) if near_time else None
     earliest = now + timedelta(hours=cfg["min_notice_hours"])
-    horizon = now + timedelta(days=cfg["days_ahead"])
+    horizon = now + timedelta(days=days_ahead)
     dur = timedelta(minutes=cfg["meeting_minutes"])
     buf = timedelta(minutes=cfg["buffer_minutes"])
     busy = calendar_for_account(s, account).busy(now, horizon + timedelta(days=1))
@@ -903,25 +940,33 @@ def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
     out: list[dict] = []
     per_day: dict = {}
     day = to_local(now, account.timezone).date()
-    for _ in range(cfg["days_ahead"] + 1):
-        if day.weekday() in cfg["slot_days"]:
+    for _ in range(days_ahead + 1):
+        if day.weekday() in cfg["slot_days"] and (on_date is None or day == on_date):
             for w_start, w_end in cfg["slot_windows"]:
                 t = datetime.combine(day, parse_hm(w_start), tzinfo=tz)
                 end_w = datetime.combine(day, parse_hm(w_end), tzinfo=tz)
                 while t + dur <= end_w:
                     su = to_utc_naive(t)
                     eu = su + dur
-                    if su >= earliest and su <= horizon and not any(b0 < eu + buf and b1 > su - buf for b0, b1 in busy):
-                        if per_day.get(day, 0) < 2:
-                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone, L.lead_lang(account))})
+                    part_ok = part_of_day is None or (part_of_day == "morning") == (t.hour < 14)
+                    if part_ok and su >= earliest and su <= horizon and not any(b0 < eu + buf and b1 > su - buf for b0, b1 in busy):
+                        if per_day.get(day, 0) < (8 if filtered else 2):
+                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone, L.lead_lang(account)),
+                                        "_min": t.hour * 60 + t.minute})
                             per_day[day] = per_day.get(day, 0) + 1
-                            t += timedelta(hours=3)  # spread the options within a day
-                            continue
+                            if not filtered:
+                                t += timedelta(hours=3)  # spread the options within a day
+                                continue
                     t += timedelta(minutes=30)
         day += timedelta(days=1)
-        if len(out) >= max_slots:
+        if not filtered and len(out) >= max_slots:
             break
-    return out[:max_slots]
+    if near_min is not None:  # the ones closest to the hour the owner mentioned, back in calendar order
+        keep = sorted(out, key=lambda x: abs(x["_min"] - near_min))[: min(max_slots, 4)]
+        out = [x for x in out if x in keep]
+    elif filtered:
+        out = out[:8]
+    return [{k: v for k, v in x.items() if k != "_min"} for x in out[: (8 if filtered else max_slots)]]
 
 
 def _slot_to_utc(slot_id: str, tz: str) -> datetime:
@@ -1015,6 +1060,8 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         lead.status = "booked"  # G6: only after the event exists
         s.commit()  # the event exists in Google: never lose (or duplicate) its record
     log_event(s, "meeting_booked", account.id, lead.id, start=start.isoformat(), type=meeting_type, test=lead.is_test)
+    jobs.schedule(s, "meeting_check", end + timedelta(minutes=10), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"meetcheck:{lead.id}:{slot_id}")  # billing proof: is the event still in the agent's calendar after it took place?
     for which, delta in (("24h", timedelta(hours=24)), ("2h", timedelta(hours=2))):
         if start - delta > utcnow() + timedelta(minutes=10):
             jobs.schedule(s, "reminder", start - delta, lead_id=lead.id, account_id=account.id,
@@ -1117,12 +1164,26 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
 
     def execute(name: str, args: dict) -> dict:
         if name == "get_free_slots":
-            slots = compute_free_slots(s, account)
+            from datetime import date as _date
+            try:
+                on_date = _date.fromisoformat(str(args["date"])) if args.get("date") else None
+            except ValueError:
+                on_date = None
+            part = args.get("part_of_day") if args.get("part_of_day") in ("morning", "afternoon") else None
+            try:
+                near = str(args["near_time"]) if args.get("near_time") and parse_hm(str(args["near_time"])) else None
+            except (ValueError, TypeError):
+                near = None
+            slots = compute_free_slots(s, account, on_date=on_date, part_of_day=part, near_time=near)
             lead.offered_slots = sorted(set((lead.offered_slots or []) + [x["slot_id"] for x in slots]))
             if lead.status == "in_conversation":
                 lead.status = "offering_slots"
             log_event(s, "slots_offered", account.id, lead.id, n=len(slots))
-            return {"slots": slots} if slots else {"slots": [], "hint": "No hay huecos: usa handoff para que el agente proponga hora."}
+            if slots:
+                return {"slots": slots}
+            asked = bool(on_date or part or near)
+            return {"slots": [], "hint": ("Ese día/hora no tiene huecos libres: di cuáles sí hay llamando a get_free_slots sin filtros u otro día." if asked
+                                          else "No hay huecos: usa handoff para que el agente proponga hora.")}
         if name == "book_slot":
             return book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
         if name == "save_facts":

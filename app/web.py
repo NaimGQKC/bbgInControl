@@ -76,6 +76,7 @@ def _state(s, acc: Account) -> dict:
         "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
         "prospecting": _prospecting_state(acc) if _prospecting_offered(acc) else None,  # hidden until the feature is switched on (Spain only)
         "integrations": integrations,
+        "meta_payment": (integrations.get("meta") or {}).get("payment_state", ""),  # ok | missing | unknown | "" (not checked yet)
         "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
                     "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
     }
@@ -421,6 +422,15 @@ async def api_meta(token: str, request: Request):
             log_event(s, "meta_connect_failed", acc.id, error=str(e))
             return JSONResponse({"ok": False, "error": "No hemos podido terminar la conexión con WhatsApp. Vuelve a intentarlo."}, 500)
         return {**res, **_state(s, acc)}
+
+
+@router.post("/api/o/{token}/meta_payment/recheck")
+async def api_meta_payment_recheck(token: str):
+    """The agent says they added the payment method at Meta: ask Meta again."""
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        onboarding.check_meta_payment(s, acc)
+        return {"ok": True, **_state(s, acc)}
 
 
 @router.post("/api/o/{token}/meta_event")
