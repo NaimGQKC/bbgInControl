@@ -364,6 +364,8 @@ def job_first_contact(s, job):
         return
     if s.execute(select(Message.id).where(Message.lead_id == lead.id, Message.direction == "out", Message.sender == "ai", Message.status != "failed")).first():
         lead.status = "contacted"  # a first message already left (the job was re-run after a crash or a timeout): never send it twice
+        lead.introduced = True
+        _schedule_after_first_message(s, account, lead)
         return
     ok, why = can_contact(account, lead, kind="first")
     if why == "outside_hours":
@@ -383,10 +385,18 @@ def job_first_contact(s, job):
         lead.introduced = True
         latency = (utcnow() - lead.created_at).total_seconds()
         log_event(s, "first_message_sent", account.id, lead.id, seconds_after_lead=round(latency))
-        jobs.schedule(s, "followup", _at_local(account, utcnow(), 1), lead_id=lead.id, account_id=account.id,
-                      dedupe_key=f"followup1:{lead.id}", payload={"n": 1})
-        jobs.schedule(s, "followup", _at_local(account, utcnow(), 3), lead_id=lead.id, account_id=account.id,
-                      dedupe_key=f"followup2:{lead.id}", payload={"n": 2})
+        _schedule_after_first_message(s, account, lead)
+
+
+def _schedule_after_first_message(s, account: Account, lead: Lead) -> None:
+    """Follow-ups for an owner who asked; the no-reply timeout for a cold one (no follow-ups: the owner never asked us). Idempotent."""
+    if is_cold(lead):
+        jobs.schedule(s, "mark_no_reply", utcnow() + timedelta(days=3), lead_id=lead.id, account_id=account.id, dedupe_key=f"noreply:{lead.id}")
+        return
+    jobs.schedule(s, "followup", _at_local(account, utcnow(), 1), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"followup1:{lead.id}", payload={"n": 1})
+    jobs.schedule(s, "followup", _at_local(account, utcnow(), 3), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"followup2:{lead.id}", payload={"n": 2})
 
 
 def _cold_first_contact(s, account: Account, lead: Lead) -> None:
@@ -551,7 +561,7 @@ def job_watchdog(s, job):
         WebhookEvent.processed_at.is_(None), WebhookEvent.received_at > day,
         WebhookEvent.error.startswith("[3]") | (WebhookEvent.received_at < now - timedelta(minutes=5)))).scalar_one()
     noisy = {name: n for name, n in s.execute(select(Event.name, func.count(Event.id)).where(
-        Event.name.in_(["send_unknown", "alert_failed", "alert_not_sent", "ai_unavailable", "send_failed"]), Event.at > hour).group_by(Event.name)).all()}
+        Event.name.in_(["send_unknown", "ai_unavailable", "send_failed"]), Event.at > hour).group_by(Event.name)).all()}
     if failed:
         problems["jobs_failed_24h"] = failed
     if late:
@@ -561,14 +571,15 @@ def job_watchdog(s, job):
     problems.update({k: v for k, v in noisy.items() if v})
     if not problems:
         return
-    signature = ",".join(f"{k}={v}" for k, v in sorted(problems.items()))
+    signature = ",".join(sorted(problems))  # which kinds of problem exist, not how many: counts would re-alert every 5 minutes
+    detail = ", ".join(f"{k}={v}" for k, v in sorted(problems.items()))
     last = s.execute(select(Event).where(Event.name == "watchdog_alert").order_by(Event.id.desc())).scalars().first()
     if last and last.data.get("signature") == signature and last.at > now - timedelta(hours=2):
         return
     account = s.execute(select(Account).order_by(Account.id)).scalars().first()
     log_event(s, "watchdog_alert", None, None, signature=signature)
     if account is not None:
-        alert_ops(s, account, T.OPS_NEEDS_HELP, ["Sparrow watchdog", "producción", "-", signature[:150]])
+        alert_ops(s, account, T.OPS_NEEDS_HELP, ["Sparrow watchdog", "producción", "-", detail[:150]])
 
 
 @jobs.handler("google_check")
@@ -1066,6 +1077,7 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         if start - delta > utcnow() + timedelta(minutes=10):
             jobs.schedule(s, "reminder", start - delta, lead_id=lead.id, account_id=account.id,
                           dedupe_key=f"reminder{which}:{lead.id}:{slot_id}", payload={"which": which})
+    s.commit()  # the meeting_check and the reminders must survive anything that goes wrong later in this turn
     return {"ok": True, "when": when_label(start, account.timezone, L.lead_lang(account)), "where": where}
 
 
@@ -1185,7 +1197,10 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
             return {"slots": [], "hint": ("Ese día/hora no tiene huecos libres: di cuáles sí hay llamando a get_free_slots sin filtros u otro día." if asked
                                           else "No hay huecos: usa handoff para que el agente proponga hora.")}
         if name == "book_slot":
-            return book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
+            res = book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
+            if res.get("ok"):
+                state["booked"] = True
+            return res
         if name == "save_facts":
             facts = dict(lead.facts or {})
             facts.update({k: v for k, v in args.items() if v and not str(k).startswith("_")})  # "_" keys belong to code
@@ -1204,19 +1219,24 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
     turn = LlmTurn(lead_id=lead.id)
     s.add(turn)
     t0 = time.time()
+    reply = ""
     try:
         system = build_system_prompt(account, lead, must_introduce=not lead.introduced)
         reply, transcript, model = run_tool_loop(system, messages, execute, stop_after=lambda: state["terminal"] is not None)
         turn.transcript, turn.reply, turn.model = transcript, reply, model
     except Exception as e:  # G10: never guess, hand over
-        if _is_transient(e):
+        if _is_transient(e) and not state.get("booked"):
             log.warning("LLM turn for lead %s hit a temporary error (%r): the job will retry", lead.id, e)
             raise  # jobs.run_job retries up to 3 times; ai_turn:failed then hands over and tells the agent
-        log.exception("LLM turn failed for lead %s", lead.id)
-        turn.error = repr(e)[:2000]
-        turn.latency_ms = int((time.time() - t0) * 1000)
-        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)))
-        return "error_handoff"
+        if _is_transient(e):  # the meeting was booked in this very turn: confirm it in code below (a retry would roll the booking's jobs back)
+            log.warning("LLM turn for lead %s failed after booking (%r): confirming by code", lead.id, e)
+            s.commit()
+        else:
+            log.exception("LLM turn failed for lead %s", lead.id)
+            turn.error = repr(e)[:2000]
+            turn.latency_ms = int((time.time() - t0) * 1000)
+            do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)))
+            return "error_handoff"
     turn.latency_ms = int((time.time() - t0) * 1000)
 
     s.flush()

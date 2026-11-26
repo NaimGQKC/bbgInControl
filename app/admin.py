@@ -267,15 +267,15 @@ def billing_page(month: str = ""):
     fee = get_settings().meeting_fee_eur
     rows, total = [], 0
     with session_scope() as s:
-        verified_ids = {lid for (lid,) in s.execute(select(Event.lead_id).where(Event.name == "meeting_verified")).all()}
+        verified = {(lid, (data or {}).get("start")) for lid, data in s.execute(select(Event.lead_id, Event.data).where(Event.name == "meeting_verified")).all()}
         changed_ids = {lid for (lid,) in s.execute(select(Event.lead_id).where(Event.name == "meeting_change_requested")).all()}
         for acc in s.execute(select(Account).order_by(Account.id)).scalars():
             ms = s.execute(select(Meeting).where(Meeting.account_id == acc.id, Meeting.is_test.is_(False), Meeting.start >= first, Meeting.start < last)).scalars().all()
             if not ms:
                 continue
-            ok = [m for m in ms if m.status == "booked" and m.lead_id in verified_ids]
+            ok = [m for m in ms if m.status == "booked" and (m.lead_id, m.start.isoformat()) in verified]  # by meeting, not by lead: a rebooked meeting is a new one
             cancelled = [m for m in ms if m.status == "cancelled"]
-            pending = [m for m in ms if m.status == "booked" and m.lead_id not in verified_ids]
+            pending = [m for m in ms if m.status == "booked" and (m.lead_id, m.start.isoformat()) not in verified]
             review = [m for m in ok if m.lead_id in changed_ids]
             total += len(ok) * fee
             rows.append(f"<tr><td><a href='/admin/accounts/{acc.id}'>{e(acc.agent_name or str(acc.id))}</a></td><td>{len(ms)}</td><td><b>{len(ok)}</b></td>"

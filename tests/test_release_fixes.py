@@ -401,7 +401,9 @@ def test_scheduling_preferences_and_listing_talk_are_not_opt_outs(text):
 
 
 @pytest.mark.parametrize("text", ["no me escribas más", "No me llames más por favor", "baja por favor", "dame de baja", "no me llames, no me escribas más",
-                                  "STOP", "no me molestéis nunca más"])
+                                  "STOP", "no me molestéis nunca más", "No me escribáis, prefiero vender por mi cuenta", "No me contactéis por WhatsApp",
+                                  "No me escribas por WhatsApp, gracias", "Ya lo quité del portal. BAJA", "Ya lo di de baja, STOP", "Lo he retirado, dadme de baja",
+                                  "no me llames por la tarde, nunca más", "do not contact me"])
 def test_real_opt_outs_still_work(text):
     assert guards.is_opt_out_text(text)
 
@@ -478,3 +480,82 @@ def test_missing_meta_payment_method_is_reported_and_rechecked(clock, monkeypatc
             assert c.post(f"/api/o/{tok}/meta_payment/recheck").json()["meta_payment"] == "ok"
     finally:
         FakeWhatsApp.payment_state = "ok"
+
+
+def test_a_temporary_model_error_after_a_booking_still_confirms_and_keeps_the_reminders(clock, account):
+    import httpx
+    lid = start_conversation(clock, account)
+    FakeBackend.push({"tool": "get_free_slots"})
+    FakeBackend.push({"text": "¿Te va bien alguno?"})
+    inbound(account, "sí", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    slot = lead_of(lid).offered_slots[-1]
+    FakeBackend.push({"tool": "book_slot", "input": {"slot_id": slot, "meeting_type": "visit", "address": "Calle Mayor 1"}})
+    orig = FakeBackend.complete
+    calls = {"n": 0}
+
+    def flaky(self, system, messages, tools):
+        calls["n"] += 1
+        if calls["n"] == 2:  # the model call that writes the reply after the booking times out
+            raise httpx.ReadTimeout("slow")
+        return orig(self, system, messages, tools)
+    FakeBackend.complete = flaky
+    try:
+        inbound(account, "ese", "in2")
+        clock.advance(seconds=31)
+        run_jobs()
+    finally:
+        FakeBackend.complete = orig
+    assert lead_of(lid).status == "booked"
+    assert "confirmada" in sent(M)[-1]["text"].lower()  # confirmed by code, not "se lo paso al agente"
+    with db.session_scope() as s:
+        pending = s.execute(select(Job).where(Job.lead_id == lid, Job.type.in_(["reminder", "meeting_check"]), Job.status == "pending")).scalars().all()
+        assert {j.type for j in pending} == {"reminder", "meeting_check"}
+        assert s.execute(select(Event).where(Event.name == "meeting_booked", Event.lead_id == lid)).first()
+
+
+def test_the_watchdog_does_not_alert_about_its_own_alerts_and_stays_quiet_when_nothing_changes(clock, account, monkeypatch):
+    from app import engine
+    from app.config import get_settings
+    monkeypatch.setenv("OPS_WHATSAPP", "")  # no operator number: the alert cannot be sent (alert_not_sent)
+    get_settings.cache_clear()
+    with db.session_scope() as s:
+        s.add(Job(type="followup", run_at=db.utcnow() - timedelta(minutes=1), status="failed", last_error="boom"))
+    for _ in range(4):
+        with db.session_scope() as s:
+            engine.job_watchdog(s, Job(type="watchdog", run_at=db.utcnow()))
+        clock.advance(seconds=60)
+    with db.session_scope() as s:
+        assert len(s.execute(select(Event).where(Event.name == "watchdog_alert")).scalars().all()) == 1
+
+
+def test_the_first_message_guard_still_schedules_the_follow_ups(clock, account):
+    from app import engine
+    lid = start_conversation(clock, account)
+    with db.session_scope() as s:
+        for j in s.execute(select(Job).where(Job.lead_id == lid, Job.type == "followup")).scalars():
+            s.delete(j)
+        s.get(Lead, lid).status = "queued"
+        job = s.execute(select(Job).where(Job.lead_id == lid, Job.type == "first_contact")).scalars().first()
+        engine.job_first_contact(s, job)
+        s.flush()
+        assert len(s.execute(select(Job).where(Job.lead_id == lid, Job.type == "followup")).scalars().all()) == 2
+
+
+def test_billing_counts_a_rebooked_meeting_only_after_it_is_verified(clock, account, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.config import get_settings
+    from app.main import app
+    monkeypatch.setenv("ADMIN_PASSWORD", "pw")
+    get_settings.cache_clear()
+    lid, m = _book(clock, account)
+    clock.set(m.end + timedelta(minutes=11))
+    run_jobs()
+    with db.session_scope() as s:
+        mt = s.execute(select(Meeting).where(Meeting.lead_id == lid)).scalar_one()
+        mt.is_test = False
+        mt.start = mt.start + timedelta(days=1)  # rebooked to another day: same row, new meeting, not verified yet
+    with TestClient(app) as c:
+        r = c.get(f"/admin/billing?month={(m.start + timedelta(days=1)):%Y-%m}", auth=("admin", "pw"))
+    assert "<b>0</b>" in r.text

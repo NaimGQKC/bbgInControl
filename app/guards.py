@@ -135,12 +135,13 @@ _OPT_PHRASES = re.compile(
 _OPT_BLOCK = {"precio", "precios", "prix", "price", "prices"}  # "baja el precio" is about the price, not an opt-out
 
 
-# "no me llames por la mañana, prefiero por la tarde" is a scheduling preference, not an opt-out; "lo di de baja" is about their listing.
+# A message about WHEN to contact them ("no me llames por la mañana, prefiero por la tarde") is a scheduling preference, not an opt-out.
+# Only clock words count: a preference about the channel or a plain "no me escribas" stays an opt-out (WhatsApp is our only channel).
 _OPT_PREFERENCE = re.compile(
-    r"\b(por la (manana|tarde|noche)|en horario|horario|antes de|despues de|hasta las|a partir de|fines? de semana|mientras (trabajo|estoy)|durante|"
-    r"escribidme|escribeme|escribenos|por whatsapp|por escrito|mejor por|prefiero|prefiere)\b")
+    r"\b(por la (manana|tarde|noche)|en horario|horario|antes de|despues de|hasta las|a partir de|fines? de semana|mientras (trabajo|estoy)|durante)\b")
 _OPT_STRONG = re.compile(r"\b(mas|nunca|jamas|dejad?|dejen|stop|baja|arretez?|plus)\b")
-_OPT_LISTING_BAJA = re.compile(r"\b(di|dado|dio|dimos|he dado|quite|retire|retirado)\b.*\bbaja\b")
+_OPT_GIVE_BAJA = re.compile(r"\b(dame|dadme|dadnos|danos|deme|me (das|dais|deis)|nos (das|dais))\b.*\bbaja\b")  # "dadme de baja": theirs
+_OPT_LISTING_BAJA = re.compile(r"\b(di|dado|dio|dimos|quite|retire|retirado|retirada)\b.*\bde baja\b|\bde baja\b.*\b(anuncio|portal|piso|casa|vivienda)\b")
 
 
 def _plain(text: str) -> str:
@@ -157,13 +158,23 @@ def is_opt_out_text(text: str) -> bool:
     words = plain.split()
     if not words or len(words) > 60:
         return False
-    if _OPT_LISTING_BAJA.search(plain) and "me" not in words:
-        return False  # "lo di de baja": about their listing
-    if _OPT_PHRASES.search(plain):
-        # a preference about WHEN or HOW to contact them is not an opt-out unless they also say "no more" / stop in some form
-        return not (_OPT_PREFERENCE.search(plain) and not _OPT_STRONG.search(plain))
     plain_opt = {_plain(w).strip() for w in OPT_OUT_WORDS}
-    return len(words) <= 5 and bool(plain_opt & set(words)) and not (_OPT_BLOCK & set(words))
+    if _OPT_GIVE_BAJA.search(plain):
+        return True
+    # "lo di de baja" is about their listing, unless there is also a bare BAJA/STOP or an explicit "no me escribas": then it is an opt-out
+    bare_baja = re.search(r"(?<!de )\bbaja\b", plain)
+    if _OPT_LISTING_BAJA.search(plain) and not bare_baja and not ((plain_opt - {"baja"}) & set(words)) and not _OPT_PHRASES.search(plain):
+        return False
+    if _OPT_PHRASES.search(plain):
+        # a preference about WHEN to contact them is not an opt-out unless they also say "no more" / stop in some form
+        return not (_OPT_PREFERENCE.search(plain) and not _OPT_STRONG.search(plain))
+    if _OPT_BLOCK & set(words):
+        return False
+    if {"stop", "arret", "arretez", "unsubscribe"} & set(words) and len(words) <= 10:
+        return True  # unambiguous words: "Ya lo di de baja, STOP"
+    if words[-1] == "baja" and not plain.endswith("de baja") and len(words) <= 8:
+        return True  # a closing bare BAJA: "Ya lo quité del portal. BAJA"
+    return len(words) <= 5 and bool(plain_opt & set(words))
 
 
 def first_name(name: str | None) -> str:
