@@ -1036,6 +1036,8 @@ def test_account_budget_is_a_circuit_breaker(clock, account, monkeypatch):
     assert FakeBackend.calls == [] and lead_of(lid).status != "handoff"  # no model call, and no alert storm
     with db.session_scope() as s:
         assert s.execute(select(Event).where(Event.name == "ai_limit_reached", Event.lead_id == lid)).scalar_one().data["window"] == "account_day"
+    alerts = [m for m in sent() if m["from"] == "sparrow" and "límite diario" in m["text"]]
+    assert len(alerts) == 1  # the agent is told once, not once per owner
 
 
 def test_very_long_lead_messages_are_cut_before_the_model(clock, account, monkeypatch):

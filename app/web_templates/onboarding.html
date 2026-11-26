@@ -93,7 +93,7 @@
   .risks { margin:0; padding-left:20px; } .risks li { margin:7px 0; }
   .btnrow { display:flex; flex-wrap:wrap; gap:8px; }
   .pedit .wa2 { align-self:stretch; } .pedit .wab { max-width:100%; word-break:break-word; }
-  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
+  @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } .w { opacity:1 !important; filter:none !important; transform:none !important; } }
 </style>
 {% endblock %}
 {% block body %}
@@ -678,6 +678,15 @@ async function flow(my) {
       await bot(tr("Un último detalle: ¿a qué móvil te aviso si un cliente necesita que intervengas tú? Solo te escribiré para eso."));
       inputRow({ ph: PHONE_PH(), type: "tel", onSubmit: saveAlert });
     }
+    return;
+  }
+
+  // 8a. Meta will not deliver our messages without a payment method on their WhatsApp Business account: say what to do (warning only)
+  if (state.meta_payment === "missing" && store.get("payLater") !== "1") {
+    await bot(tr("Un detalle de Meta: tu cuenta de WhatsApp Business todavía no tiene un **método de pago**. Lo necesita para cobrarte sus céntimos por mensaje (a ti, no a nosotros); sin él, Meta no entrega los mensajes a tus clientes."));
+    await bot(tr("Añádelo en **business.facebook.com → WhatsApp Manager → Métodos de pago**. Son dos minutos."));
+    buttons([{ label: tr("Ya lo he añadido, comprobar"), onClick: async () => { await api("/meta_payment/recheck", {}); render(); } },
+             { label: tr("Lo haré luego"), secondary: true, onClick: () => { store.set("payLater", "1"); render(); } }]);
     return;
   }
 

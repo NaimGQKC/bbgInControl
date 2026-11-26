@@ -20,6 +20,11 @@ class WhatsAppError(Exception):
         self.payload = payload or {}
 
 
+class AmbiguousSend(WhatsAppError):
+    """The request went out but no answer came back (read timeout, dropped connection): Meta may or may not have the message.
+    Retrying could send it twice, so callers record it as 'unknown' and do not retry."""
+
+
 def _graph(path: str) -> str:
     return f"https://graph.facebook.com/{get_settings().graph_version}/{path.lstrip('/')}"
 
@@ -47,7 +52,12 @@ class WhatsAppClient:
 
     def _post_message(self, body: dict) -> str:
         body = {"messaging_product": "whatsapp", "recipient_type": "individual", **body}
-        r = httpx.post(_graph(f"{self.phone_number_id}/messages"), json=body, headers=self._headers, timeout=20)
+        try:
+            r = httpx.post(_graph(f"{self.phone_number_id}/messages"), json=body, headers=self._headers, timeout=20)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:  # it never left: safe to retry
+            raise WhatsAppError(f"connection failed before sending ({type(e).__name__})") from e
+        except httpx.HTTPError as e:  # it may have left: never retry blindly
+            raise AmbiguousSend(f"no answer from WhatsApp ({type(e).__name__})") from e
         data = _check(r)
         return data["messages"][0]["id"]
 
@@ -178,11 +188,24 @@ def get_phone_number(phone_number_id: str, token: str) -> dict:
 
 # ---------- Fake (tests / local demo) ----------
 
+def waba_payment_state(waba_id: str, token: str) -> str:
+    """'ok' | 'missing' | 'unknown': does the agent's WhatsApp Business account have a payment method? Meta refuses to deliver business
+    messages without one (error 131042). Best effort: any doubt is 'unknown' and never blocks anything (a delivery failure is caught later)."""
+    try:
+        data = _check(httpx.get(_graph(waba_id), params={"fields": "primary_funding_id"}, headers={"Authorization": f"Bearer {token}"}, timeout=15))
+    except Exception:
+        return "unknown"
+    if "primary_funding_id" not in data:
+        return "unknown"
+    return "ok" if data.get("primary_funding_id") else "missing"
+
+
 class FakeWhatsApp(WhatsAppClient):
     outbox: list[dict] = []
     created_templates: list[dict] = []
     _ids = itertools.count(1)
     fail_next: Exception | None = None
+    payment_state: str = "ok"  # tests: "missing" | "unknown"
 
     def __init__(self, token: str = "fake", phone_number_id: str = "fake-phone", waba_id: str = "fake-waba"):
         super().__init__(token, phone_number_id, waba_id)

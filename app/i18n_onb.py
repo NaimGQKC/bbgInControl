@@ -3,6 +3,10 @@ Placeholders like {tel} and markers like **bold** must survive translation (a te
 leads in Spain always get Spanish."""
 
 EN_FR: dict[str, tuple[str, str]] = {
+    "Un detalle de Meta: tu cuenta de WhatsApp Business todavía no tiene un **método de pago**. Lo necesita para cobrarte sus céntimos por mensaje (a ti, no a nosotros); sin él, Meta no entrega los mensajes a tus clientes.": ("One thing about Meta: your WhatsApp Business account does not have a **payment method** yet. Meta needs it to charge you its small per-message fees (you, not us); without it, Meta does not deliver messages to your clients.", "Un point côté Meta : votre compte WhatsApp Business n'a pas encore de **moyen de paiement**. Meta en a besoin pour vous facturer ses frais par message (à vous, pas à nous) ; sans lui, Meta ne livre pas les messages à vos clients."),
+    "Añádelo en **business.facebook.com → WhatsApp Manager → Métodos de pago**. Son dos minutos.": ("Add it at **business.facebook.com → WhatsApp Manager → Payment methods**. It takes two minutes.", "Ajoutez-le sur **business.facebook.com → WhatsApp Manager → Moyens de paiement**. Deux minutes suffisent."),
+    "Ya lo he añadido, comprobar": ("I've added it, check again", "Je l'ai ajouté, vérifier"),
+    "Lo haré luego": ("I'll do it later", "Je le ferai plus tard"),
     "Listo. Ya puedes cerrar esta ventana y volver a Sparrow.": ("Done. You can close this window and go back to Sparrow.", "C'est fait. Vous pouvez fermer cette fenêtre et revenir sur Sparrow."),
     "Error de conexión": ("Connection error", "Erreur de connexion"),
     "Escribe o toca una opción…": ("Type or tap an option…", "Écrivez ou touchez une option…"),

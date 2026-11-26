@@ -16,6 +16,7 @@ _stop = threading.Event()
 def schedule_daily_jobs() -> None:
     with session_scope() as s:
         tomorrow = utcnow() + timedelta(days=1)
+        jobs.schedule(s, "watchdog", utcnow() + timedelta(minutes=2), dedupe_key=f"watchdog:boot:{utcnow():%Y-%m-%d-%H-%M}")
         jobs.schedule(s, "phone_health", utcnow() + timedelta(minutes=5), dedupe_key=f"phone_health:{utcnow():%Y-%m-%d}")
         jobs.schedule(s, "phone_health", tomorrow, dedupe_key=f"phone_health:{tomorrow:%Y-%m-%d}")
         jobs.schedule(s, "google_check", utcnow() + timedelta(minutes=10), dedupe_key=f"google_check:{utcnow():%Y-%m-%d}")

@@ -38,7 +38,7 @@ from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Me
 from .prompt import build_system_prompt
 from .transcribe import transcribe
 from . import lang as L
-from .whatsapp import FakeWhatsApp, WhatsAppClient, WhatsAppError
+from .whatsapp import AmbiguousSend, FakeWhatsApp, WhatsAppClient, WhatsAppError
 
 log = logging.getLogger("sparrow.engine")
 _booking_locks: dict[int, threading.Lock] = {}
@@ -119,6 +119,13 @@ def send_to_lead(s, account: Account, lead: Lead, *, kind: str, text: str | None
             wid = wa.send_text(lead.phone, text)
             _store_out(s, account, lead, sender=sender, type_="text", text=text, wa_id=wid)
         s.commit()  # the message is out: never lose its record (and never resend it on a retry)
+    except AmbiguousSend as e:  # Meta may have it: record it, tell nobody it failed, never send it again on a retry
+        _store_out(s, account, lead, sender=sender, type_="template" if template else "text",
+                   text=template.render(values or [], lang) if template else text or "", template_name=template.name if template else "",
+                   status="unknown", error=str(e))
+        log_event(s, "send_unknown", account.id, lead.id, error=str(e))
+        s.commit()
+        return True
     except WhatsAppError as e:
         _store_out(s, account, lead, sender=sender, type_="template" if template else "text",
                    text=template.render(values or [], lang) if template else text or "", template_name=template.name if template else "",
@@ -227,7 +234,7 @@ def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False, any_h
         log_event(s, "lead_skipped", account.id, lead.id, reason=skip)
         return lead, f"skipped:{skip}"
 
-    run_at = next_allowed_time(account, utcnow() + timedelta(seconds=get_settings().first_message_delay))
+    run_at = next_allowed_time(account, utcnow() + timedelta(seconds=get_settings().first_message_delay), cold=is_cold(lead))
     if is_test and any_hour:  # admin-only rehearsal switch: a TEST lead the operator ticked "any hour" skips the 09-21 window (never a real owner)
         lead.facts = {**(lead.facts or {}), "_any_hour": True}
         run_at = utcnow() + timedelta(seconds=get_settings().first_message_delay)
@@ -328,7 +335,7 @@ def release_cold_queue(s, account: Account) -> int:
     """The cold template was just approved: re-arm the first message of cold leads that were waiting for it
     (spaced 2 minutes apart, inside allowed hours; can_contact still decides at send time)."""
     waiting = [l for l in s.execute(select(Lead).where(Lead.account_id == account.id, Lead.status == "queued")).scalars() if is_cold(l)]
-    start = next_allowed_time(account, utcnow())
+    start = next_allowed_time(account, utcnow(), cold=True)
     for i, lead in enumerate(waiting):
         jobs.schedule(s, "first_contact", start + timedelta(minutes=2 * i), lead_id=lead.id, account_id=account.id,
                       dedupe_key=f"first:{lead.id}", reuse=True)
@@ -355,10 +362,15 @@ def job_first_contact(s, job):
     account, lead = _load(s, job)
     if lead.status not in ("queued", "new"):
         return
+    if s.execute(select(Message.id).where(Message.lead_id == lead.id, Message.direction == "out", Message.sender == "ai", Message.status != "failed")).first():
+        lead.status = "contacted"  # a first message already left (the job was re-run after a crash or a timeout): never send it twice
+        lead.introduced = True
+        _schedule_after_first_message(s, account, lead)
+        return
     ok, why = can_contact(account, lead, kind="first")
     if why == "outside_hours":
         job.status = "pending"
-        job.run_at = next_allowed_time(account, utcnow())
+        job.run_at = next_allowed_time(account, utcnow(), cold=is_cold(lead))
         return
     if not ok:
         if why != "account_not_live":  # a not-yet-live account keeps the lead queued; any other block is final
@@ -373,10 +385,18 @@ def job_first_contact(s, job):
         lead.introduced = True
         latency = (utcnow() - lead.created_at).total_seconds()
         log_event(s, "first_message_sent", account.id, lead.id, seconds_after_lead=round(latency))
-        jobs.schedule(s, "followup", _at_local(account, utcnow(), 1), lead_id=lead.id, account_id=account.id,
-                      dedupe_key=f"followup1:{lead.id}", payload={"n": 1})
-        jobs.schedule(s, "followup", _at_local(account, utcnow(), 3), lead_id=lead.id, account_id=account.id,
-                      dedupe_key=f"followup2:{lead.id}", payload={"n": 2})
+        _schedule_after_first_message(s, account, lead)
+
+
+def _schedule_after_first_message(s, account: Account, lead: Lead) -> None:
+    """Follow-ups for an owner who asked; the no-reply timeout for a cold one (no follow-ups: the owner never asked us). Idempotent."""
+    if is_cold(lead):
+        jobs.schedule(s, "mark_no_reply", utcnow() + timedelta(days=3), lead_id=lead.id, account_id=account.id, dedupe_key=f"noreply:{lead.id}")
+        return
+    jobs.schedule(s, "followup", _at_local(account, utcnow(), 1), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"followup1:{lead.id}", payload={"n": 1})
+    jobs.schedule(s, "followup", _at_local(account, utcnow(), 3), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"followup2:{lead.id}", payload={"n": 2})
 
 
 def _cold_first_contact(s, account: Account, lead: Lead) -> None:
@@ -474,11 +494,41 @@ def job_reminder(s, job):
         log_event(s, f"reminder_{which}_sent", account.id, lead.id)
 
 
+@jobs.handler("meeting_check")
+def job_meeting_check(s, job):
+    """Billing proof, read from the agent's own Google Calendar: a meeting we booked counts when its event is still there after
+    the meeting time. Deleted before then = cancelled (not billable). Moved later = checked again after the new time."""
+    account, lead = _load(s, job)
+    meeting = s.execute(select(Meeting).where(Meeting.lead_id == lead.id)).scalar_one_or_none()
+    if not meeting or meeting.status != "booked":
+        return
+    try:
+        ev = calendar_for_account(s, account).get_event(meeting.google_event_id)  # a calendar error raises: the job retries
+    except CalendarError as e:
+        log.warning("meeting_check: calendar error %s", e)
+        raise
+    if ev is None:
+        meeting.status = "cancelled"
+        log_event(s, "meeting_cancelled_by_agent", account.id, lead.id, by="meeting_check")
+        return
+    if ev.get("all_day"):
+        return
+    if ev["start"] != meeting.start:  # moved by the agent: the new time is the one that counts
+        meeting.start, meeting.end = ev["start"], ev["end"]
+    check_at = meeting.end + timedelta(minutes=10)
+    if check_at > utcnow():
+        job.status, job.run_at = "pending", check_at
+        return
+    if not s.execute(select(Event.id).where(Event.name == "meeting_verified", Event.lead_id == lead.id)).first():
+        log_event(s, "meeting_verified", account.id, lead.id, start=meeting.start.isoformat(), test=meeting.is_test)
+
+
 @jobs.handler("ai_turn:failed")
 def job_ai_turn_failed(s, job):  # G10: fail closed
     account, lead = _load(s, job)
     if lead.status not in ("handoff", "opted_out"):
-        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)), notify_lead=False)
+        log_event(s, "ai_unavailable", account.id, lead.id, error=(job.last_error or "")[:300])
+        do_handoff(s, account, lead, L.text("why_ai_unavailable", L.lead_lang(account)))
 
 
 @jobs.handler("first_contact:failed")
@@ -492,6 +542,44 @@ def job_first_contact_failed(s, job):
     undeliverable = "131026" in (job.last_error or "")  # Meta: the number cannot receive WhatsApp
     why = L.text("why_first_failed" if undeliverable else "why_first_failed_tech", L.lead_lang(account))
     alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
+
+
+@jobs.handler("watchdog")
+def job_watchdog(s, job):
+    """Every 5 minutes: tells the operator on WhatsApp when production is not healthy (failed or late jobs, webhook events that
+    could not be processed, sends with no answer from Meta, the AI down). One message per change, or every 2 hours while it lasts."""
+    now = utcnow()
+    nxt = now + timedelta(minutes=5)
+    jobs.schedule(s, "watchdog", nxt, dedupe_key=f"watchdog:{nxt:%Y-%m-%d-%H-%M}")
+    day, hour = now - timedelta(hours=24), now - timedelta(hours=1)
+    problems = {}
+    failed = s.execute(select(func.count(Job.id)).where(Job.status == "failed", Job.run_at > day)).scalar_one()
+    late = s.execute(select(func.count(Job.id)).where(Job.status == "pending", Job.run_at < now - timedelta(minutes=5))).scalar_one()
+    from .models import WebhookEvent  # local: models is imported above, this keeps the block readable
+
+    stuck_events = s.execute(select(func.count(WebhookEvent.id)).where(
+        WebhookEvent.processed_at.is_(None), WebhookEvent.received_at > day,
+        WebhookEvent.error.startswith("[3]") | (WebhookEvent.received_at < now - timedelta(minutes=5)))).scalar_one()
+    noisy = {name: n for name, n in s.execute(select(Event.name, func.count(Event.id)).where(
+        Event.name.in_(["send_unknown", "ai_unavailable", "send_failed"]), Event.at > hour).group_by(Event.name)).all()}
+    if failed:
+        problems["jobs_failed_24h"] = failed
+    if late:
+        problems["jobs_late"] = late
+    if stuck_events:
+        problems["webhook_events_stuck"] = stuck_events
+    problems.update({k: v for k, v in noisy.items() if v})
+    if not problems:
+        return
+    signature = ",".join(sorted(problems))  # which kinds of problem exist, not how many: counts would re-alert every 5 minutes
+    detail = ", ".join(f"{k}={v}" for k, v in sorted(problems.items()))
+    last = s.execute(select(Event).where(Event.name == "watchdog_alert").order_by(Event.id.desc())).scalars().first()
+    if last and last.data.get("signature") == signature and last.at > now - timedelta(hours=2):
+        return
+    account = s.execute(select(Account).order_by(Account.id)).scalars().first()
+    log_event(s, "watchdog_alert", None, None, signature=signature)
+    if account is not None:
+        alert_ops(s, account, T.OPS_NEEDS_HELP, ["Sparrow watchdog", "producción", "-", detail[:150]])
 
 
 @jobs.handler("google_check")
@@ -842,12 +930,20 @@ def _cold_pitch_repeated(account: Account, lead: Lead, reply: str) -> bool:
 
 # ---------------------------------------------------------------- slots & booking
 
-def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
+def compute_free_slots(s, account: Account, max_slots: int = 6, *, on_date=None, part_of_day: str | None = None,
+                       near_time: str | None = None) -> list[dict]:
+    """Real free slots. Without filters: up to 6, two per day, 3 h apart (what the assistant offers by default).
+    With a day, a part of the day or a time the owner asked for: every free half hour that matches (up to 8)."""
     cfg = settings_for(account)
     tz = ZoneInfo(account.timezone)
     now = utcnow()
+    filtered = bool(on_date or part_of_day or near_time)
+    days_ahead = cfg["days_ahead"]
+    if on_date:
+        days_ahead = min(21, max(days_ahead, (on_date - to_local(now, account.timezone).date()).days))
+    near_min = (lambda h: h.hour * 60 + h.minute)(parse_hm(near_time)) if near_time else None
     earliest = now + timedelta(hours=cfg["min_notice_hours"])
-    horizon = now + timedelta(days=cfg["days_ahead"])
+    horizon = now + timedelta(days=days_ahead)
     dur = timedelta(minutes=cfg["meeting_minutes"])
     buf = timedelta(minutes=cfg["buffer_minutes"])
     busy = calendar_for_account(s, account).busy(now, horizon + timedelta(days=1))
@@ -855,25 +951,33 @@ def compute_free_slots(s, account: Account, max_slots: int = 6) -> list[dict]:
     out: list[dict] = []
     per_day: dict = {}
     day = to_local(now, account.timezone).date()
-    for _ in range(cfg["days_ahead"] + 1):
-        if day.weekday() in cfg["slot_days"]:
+    for _ in range(days_ahead + 1):
+        if day.weekday() in cfg["slot_days"] and (on_date is None or day == on_date):
             for w_start, w_end in cfg["slot_windows"]:
                 t = datetime.combine(day, parse_hm(w_start), tzinfo=tz)
                 end_w = datetime.combine(day, parse_hm(w_end), tzinfo=tz)
                 while t + dur <= end_w:
                     su = to_utc_naive(t)
                     eu = su + dur
-                    if su >= earliest and su <= horizon and not any(b0 < eu + buf and b1 > su - buf for b0, b1 in busy):
-                        if per_day.get(day, 0) < 2:
-                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone, L.lead_lang(account))})
+                    part_ok = part_of_day is None or (part_of_day == "morning") == (t.hour < 14)
+                    if part_ok and su >= earliest and su <= horizon and not any(b0 < eu + buf and b1 > su - buf for b0, b1 in busy):
+                        if per_day.get(day, 0) < (8 if filtered else 2):
+                            out.append({"slot_id": t.strftime("%Y-%m-%dT%H:%M"), "label": when_label(su, account.timezone, L.lead_lang(account)),
+                                        "_min": t.hour * 60 + t.minute})
                             per_day[day] = per_day.get(day, 0) + 1
-                            t += timedelta(hours=3)  # spread the options within a day
-                            continue
+                            if not filtered:
+                                t += timedelta(hours=3)  # spread the options within a day
+                                continue
                     t += timedelta(minutes=30)
         day += timedelta(days=1)
-        if len(out) >= max_slots:
+        if not filtered and len(out) >= max_slots:
             break
-    return out[:max_slots]
+    if near_min is not None:  # the ones closest to the hour the owner mentioned, back in calendar order
+        keep = sorted(out, key=lambda x: abs(x["_min"] - near_min))[: min(max_slots, 4)]
+        out = [x for x in out if x in keep]
+    elif filtered:
+        out = out[:8]
+    return [{k: v for k, v in x.items() if k != "_min"} for x in out[: (8 if filtered else max_slots)]]
 
 
 def _slot_to_utc(slot_id: str, tz: str) -> datetime:
@@ -967,10 +1071,13 @@ def book_slot(s, account: Account, lead: Lead, slot_id: str, meeting_type: str, 
         lead.status = "booked"  # G6: only after the event exists
         s.commit()  # the event exists in Google: never lose (or duplicate) its record
     log_event(s, "meeting_booked", account.id, lead.id, start=start.isoformat(), type=meeting_type, test=lead.is_test)
+    jobs.schedule(s, "meeting_check", end + timedelta(minutes=10), lead_id=lead.id, account_id=account.id,
+                  dedupe_key=f"meetcheck:{lead.id}:{slot_id}")  # billing proof: is the event still in the agent's calendar after it took place?
     for which, delta in (("24h", timedelta(hours=24)), ("2h", timedelta(hours=2))):
         if start - delta > utcnow() + timedelta(minutes=10):
             jobs.schedule(s, "reminder", start - delta, lead_id=lead.id, account_id=account.id,
                           dedupe_key=f"reminder{which}:{lead.id}:{slot_id}", payload={"which": which})
+    s.commit()  # the meeting_check and the reminders must survive anything that goes wrong later in this turn
     return {"ok": True, "when": when_label(start, account.timezone, L.lead_lang(account)), "where": where}
 
 
@@ -1029,6 +1136,18 @@ def _ai_over_limit(s, account: Account, lead: Lead) -> str | None:
     return None
 
 
+def _is_transient(e: Exception) -> bool:
+    """A timeout, a dropped connection, a rate limit or a 5xx from the model provider: worth trying again in a minute."""
+    import httpx
+
+    if isinstance(e, (TimeoutError, ConnectionError, httpx.TransportError)):
+        return True
+    if type(e).__name__ in {"APITimeoutError", "APIConnectionError", "RateLimitError", "InternalServerError"}:
+        return True
+    code = getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+    return code in (408, 409, 425, 429, 500, 502, 503, 504)
+
+
 def run_ai_turn(s, account: Account, lead: Lead) -> str:
     ok, why = can_contact(account, lead, kind="ai_reply")
     if not ok:
@@ -1046,6 +1165,10 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         if full.startswith("lead"):
             do_handoff(s, account, lead, L.text("why_limit", L.lead_lang(account)))
             return "limit_handoff"
+        today = utcnow() - timedelta(hours=24)  # one alert a day for the whole agent (not one per owner): the chats stay visible in their own WhatsApp Business app
+        if not s.execute(select(Event.id).where(Event.name == "ai_account_cap_alert", Event.account_id == account.id, Event.at > today)).first():
+            log_event(s, "ai_account_cap_alert", account.id, lead.id)
+            alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), L.text("why_account_cap", L.lead_lang(account))])
         return "account_budget"
 
     started = utcnow()
@@ -1053,14 +1176,31 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
 
     def execute(name: str, args: dict) -> dict:
         if name == "get_free_slots":
-            slots = compute_free_slots(s, account)
+            from datetime import date as _date
+            try:
+                on_date = _date.fromisoformat(str(args["date"])) if args.get("date") else None
+            except ValueError:
+                on_date = None
+            part = args.get("part_of_day") if args.get("part_of_day") in ("morning", "afternoon") else None
+            try:
+                near = str(args["near_time"]) if args.get("near_time") and parse_hm(str(args["near_time"])) else None
+            except (ValueError, TypeError):
+                near = None
+            slots = compute_free_slots(s, account, on_date=on_date, part_of_day=part, near_time=near)
             lead.offered_slots = sorted(set((lead.offered_slots or []) + [x["slot_id"] for x in slots]))
             if lead.status == "in_conversation":
                 lead.status = "offering_slots"
             log_event(s, "slots_offered", account.id, lead.id, n=len(slots))
-            return {"slots": slots} if slots else {"slots": [], "hint": "No hay huecos: usa handoff para que el agente proponga hora."}
+            if slots:
+                return {"slots": slots}
+            asked = bool(on_date or part or near)
+            return {"slots": [], "hint": ("Ese día/hora no tiene huecos libres: di cuáles sí hay llamando a get_free_slots sin filtros u otro día." if asked
+                                          else "No hay huecos: usa handoff para que el agente proponga hora.")}
         if name == "book_slot":
-            return book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
+            res = book_slot(s, account, lead, str(args.get("slot_id", "")), args.get("meeting_type", "visit"), args.get("address", "") or "")
+            if res.get("ok"):
+                state["booked"] = True
+            return res
         if name == "save_facts":
             facts = dict(lead.facts or {})
             facts.update({k: v for k, v in args.items() if v and not str(k).startswith("_")})  # "_" keys belong to code
@@ -1079,16 +1219,24 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
     turn = LlmTurn(lead_id=lead.id)
     s.add(turn)
     t0 = time.time()
+    reply = ""
     try:
         system = build_system_prompt(account, lead, must_introduce=not lead.introduced)
         reply, transcript, model = run_tool_loop(system, messages, execute, stop_after=lambda: state["terminal"] is not None)
         turn.transcript, turn.reply, turn.model = transcript, reply, model
     except Exception as e:  # G10: never guess, hand over
-        log.exception("LLM turn failed for lead %s", lead.id)
-        turn.error = repr(e)[:2000]
-        turn.latency_ms = int((time.time() - t0) * 1000)
-        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)))
-        return "error_handoff"
+        if _is_transient(e) and not state.get("booked"):
+            log.warning("LLM turn for lead %s hit a temporary error (%r): the job will retry", lead.id, e)
+            raise  # jobs.run_job retries up to 3 times; ai_turn:failed then hands over and tells the agent
+        if _is_transient(e):  # the meeting was booked in this very turn: confirm it in code below (a retry would roll the booking's jobs back)
+            log.warning("LLM turn for lead %s failed after booking (%r): confirming by code", lead.id, e)
+            s.commit()
+        else:
+            log.exception("LLM turn failed for lead %s", lead.id)
+            turn.error = repr(e)[:2000]
+            turn.latency_ms = int((time.time() - t0) * 1000)
+            do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)))
+            return "error_handoff"
     turn.latency_ms = int((time.time() - t0) * 1000)
 
     s.flush()

@@ -127,6 +127,8 @@ TEXTS: dict[str, dict[str, str]] = {
                                      "en": "WhatsApp rejected your first message to owners ({reason}); change it from your Sparrow link"},
     # handoff reasons shown to the agent
     "why_tech_error": {"es": "error técnico del asistente", "fr": "erreur technique de l'assistant", "en": "technical error in the assistant"},
+    "why_ai_unavailable": {"es": "el asistente no pudo responder (fallo técnico): escríbele tú", "fr": "l'assistant n'a pas pu répondre (panne) : écrivez-lui", "en": "the assistant could not reply (technical issue): write to them"},
+    "why_account_cap": {"es": "límite diario de IA alcanzado: atiende tú los chats", "fr": "limite quotidienne d'IA atteinte : répondez vous-même", "en": "daily AI limit reached: please handle the chats yourself"},
     "why_limit": {"es": "límite de mensajes del asistente (posible abuso)", "fr": "limite de messages de l'assistant (abus possible)", "en": "assistant message limit (possible abuse)"},
     "why_unsure": {"es": "el asistente no está seguro", "fr": "l'assistant n'est pas sûr", "en": "the assistant is not sure"},
     "why_first_failed": {"es": "No se pudo enviar el primer mensaje (¿número sin WhatsApp o fijo?)", "fr": "Le premier message n'a pas pu être envoyé (numéro sans WhatsApp ou fixe ?)", "en": "The first message could not be delivered (number without WhatsApp, or a landline?)"},

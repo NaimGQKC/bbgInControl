@@ -6,10 +6,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
+from datetime import timedelta
+
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import casafari, coldmsg, gcal, i18n, i18n_onb, lang as L, onboarding, templates as T
 from .gcal import CalendarError
@@ -18,7 +20,7 @@ from .db import session_scope, utcnow
 from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
 from .guards import normalize_phone, tidy_name
 from .intake import from_lystos, normalize
-from .models import Account, Integration
+from .models import Account, Integration, Job
 
 log = logging.getLogger("sparrow.web")
 router = APIRouter()
@@ -74,6 +76,7 @@ def _state(s, acc: Account) -> dict:
         "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
         "prospecting": _prospecting_state(acc) if _prospecting_offered(acc) else None,  # hidden until the feature is switched on (Spain only)
         "integrations": integrations,
+        "meta_payment": (integrations.get("meta") or {}).get("payment_state", ""),  # ok | missing | unknown | "" (not checked yet)
         "payment": {"required": onboarding.payment_required(), "paid": integrations.get("stripe", {}).get("status") == "active",
                     "url": pay_url, "fee": st.integration_fee_eur, "per_meeting": st.meeting_fee_eur},
     }
@@ -421,6 +424,15 @@ async def api_meta(token: str, request: Request):
         return {**res, **_state(s, acc)}
 
 
+@router.post("/api/o/{token}/meta_payment/recheck")
+async def api_meta_payment_recheck(token: str):
+    """The agent says they added the payment method at Meta: ask Meta again."""
+    with session_scope() as s:
+        acc = _account_by_token(s, token)
+        onboarding.check_meta_payment(s, acc)
+        return {"ok": True, **_state(s, acc)}
+
+
 @router.post("/api/o/{token}/meta_event")
 async def api_meta_event(token: str, request: Request):
     data = await request.json()
@@ -629,4 +641,15 @@ def data_deletion(request: Request):
 
 @router.get("/health")
 def health():
+    """Used by an external uptime check: 503 when the database does not answer or the queue is stuck (a due job waiting > 5 min)."""
+    from sqlalchemy import text
+
+    try:
+        with session_scope() as s:
+            s.execute(text("SELECT 1"))
+            late = s.execute(select(func.count(Job.id)).where(Job.status == "pending", Job.run_at < utcnow() - timedelta(minutes=5))).scalar_one()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "database"}, 503)
+    if late:
+        return JSONResponse({"ok": False, "error": "queue", "late_jobs": late}, 503)
     return {"ok": True}

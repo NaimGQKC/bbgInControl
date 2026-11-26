@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta
 from typing import Callable
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 
 from .db import is_postgres, session_scope, utcnow
@@ -59,8 +60,12 @@ def schedule(
                 return existing
             return None
     job = Job(type=job_type, run_at=run_at, lead_id=lead_id, account_id=account_id, dedupe_key=dedupe_key, payload=payload or {})
-    s.add(job)
-    s.flush()
+    try:
+        with s.begin_nested():  # two workers scheduling the same key at once: the loser must not break its caller (and drop a message)
+            s.add(job)
+            s.flush()
+    except IntegrityError:
+        return s.execute(select(Job).where(Job.dedupe_key == dedupe_key)).scalar_one_or_none() if dedupe_key else None
     return job
 
 

@@ -13,9 +13,15 @@ TOOLS = [
         "name": "get_free_slots",
         "description": (
             "Devuelve huecos libres reales del calendario del agente para la valoración. "
-            "Solo puedes ofrecer huecos que devuelva esta herramienta. Ofrece 2 al lead, no todos."
+            "Solo puedes ofrecer huecos que devuelva esta herramienta. Ofrece 2 al lead, no todos. "
+            "Si el lead pide un día, una parte del día o una hora concretos, llámala con esos filtros; "
+            "solo di que no hay hueco si esa consulta vuelve vacía."
         ),
-        "input_schema": {"type": "object", "properties": {}},
+        "input_schema": {"type": "object", "properties": {
+            "date": {"type": "string", "description": "Día pedido, formato AAAA-MM-DD"},
+            "part_of_day": {"type": "string", "enum": ["morning", "afternoon"], "description": "Mañana (antes de las 14:00) o tarde"},
+            "near_time": {"type": "string", "description": "Hora aproximada pedida, formato HH:MM"},
+        }},
     },
     {
         "name": "book_slot",

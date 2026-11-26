@@ -54,6 +54,7 @@
 
     <div class="card">
       <h2>3 · Lead de prueba</h2>
+      <form method="post" action="/admin/accounts/{{ a.id }}/check_payment" class="small"><button class="btn secondary">Comprobar método de pago en Meta</button></form>
       <p class="small muted">Simula un lead nuevo de Lystos. Usa un móvil verificado como destinatario de prueba.</p>
       <form method="post" action="/admin/accounts/{{ a.id }}/test_lead" style="display:grid; gap:8px">
         <input name="name" placeholder="Nombre" required>
