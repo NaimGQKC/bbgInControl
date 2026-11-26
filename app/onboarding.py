@@ -300,12 +300,12 @@ def check_meta_payment(s, account: Account, *, token: str | None = None, waba_id
     ext = dict(integ.external or {})
     if get_settings().whatsapp_mode == "fake":
         from .whatsapp import FakeWhatsApp
-        state = FakeWhatsApp.payment_state
+        state, detail = FakeWhatsApp.payment_state, ""
     else:
         tok = token if token is not None else (decrypt(integ.token_enc) if integ.token_enc else "")
-        state = waba_payment_state(waba_id or ext.get("waba_id") or "", tok) if tok else "unknown"
+        state, detail = waba_payment_state(waba_id or ext.get("waba_id") or "", tok) if tok else ("unknown", "no token")
     before = ext.get("payment_state")
-    integ.external = {**ext, "payment_state": state, "payment_checked_at": utcnow().isoformat()}
+    integ.external = {**ext, "payment_state": state, "payment_detail": detail, "payment_checked_at": utcnow().isoformat()}
     log_event(s, "meta_payment_checked", account.id, state=state)
     if state == "missing" and before != "missing":
         alert_ops(s, account, T.OPS_NEEDS_HELP, [account.agent_name or f"cuenta {account.id}", "pago de Meta", account.personal_whatsapp or "-",

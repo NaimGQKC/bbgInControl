@@ -14,7 +14,7 @@ from .config import get_settings
 from .db import session_scope, utcnow
 from .engine import agent_wa, do_handoff, ingest_lead, log_event, sparrow_wa
 from .guards import normalize_phone
-from .models import Account, Event, Job, Lead, LlmTurn, Meeting, Message
+from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Message
 from .web import templates as jinja
 from .whatsapp import WhatsAppError
 
@@ -123,7 +123,9 @@ def check_payment(account_id: int):
         if acc is None:
             raise HTTPException(404)
         state = onboarding.check_meta_payment(s, acc)
-    return _back(f"/admin/accounts/{account_id}", {"ok": "Pago de Meta: OK", "missing": "Pago de Meta: FALTA el método de pago", "unknown": "Pago de Meta: no se pudo comprobar"}[state])
+        detail = ((s.execute(select(Integration).where(Integration.account_id == account_id, Integration.provider == "meta")).scalar_one_or_none() or Integration()).external or {}).get("payment_detail", "")
+    return _back(f"/admin/accounts/{account_id}", {"ok": "Pago de Meta: OK", "missing": "Pago de Meta: FALTA el método de pago",
+                                                   "unknown": "Pago de Meta: no se pudo comprobar" + (f" ({detail})" if detail else "")}[state])
 
 
 @router.post("/accounts/{account_id}/test_lead")
