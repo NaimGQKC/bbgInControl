@@ -31,7 +31,7 @@ Adding a language later: texts in `lang.py`, bodies in each template's `texts`, 
 - The LLM never writes lead state; only tools and code do. LLM/tool error → handoff (fail closed).
 - Webhooks and intake are idempotent (unique `wa_message_id`, `dedupe_key`, unique (account, phone)).
 - Never read or answer chats with contacts that aren't leads (G1). Once the agent writes after the lead replied, the AI stops for that lead until resumed (G8).
-- The AI always introduces itself as "el asistente virtual de {agente}" and never claims to be human (G13).
+- The AI always says it is an AI and never claims to be human (G13): the first message carries a one-line footer ("Soy IA. ... STOP"; Sparrow's, never removable even when agents can edit the rest of the message); when the agent writes first, the AI's first reply says "Soy el asistente de inteligencia artificial de {agente}" (added by code if the model forgets). The agent decides everything else (text, hours, prospecting): Lucía recommends and explains the risks.
 - Log every message and every LLM turn.
 - AI usage is capped (`ai_max_*` settings in `app/config.py`): at the per-lead cap the chat is handed to the agent and the model is not called; long lead messages are cut before the model. Never remove these caps.
 - Keep the pilot lean: no dashboards, settings pages, Google Ads intake or new CRMs until the core loop is proven.

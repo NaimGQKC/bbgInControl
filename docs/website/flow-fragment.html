@@ -1,0 +1,305 @@
+<title>Sparrow en acción</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&family=Instrument+Serif&display=swap">
+<style>
+/* Layout: a ledger. Left a phone that plays one real-looking conversation; right two columns, "Sparrow" (full, automatic) and "Tú" (empty until the meeting). */
+:root {
+  --bg: #F6F2EA; --card: #FFFDF8; --ink: #1C2433; --muted: #596073; --line: #E1D8C8;
+  --accent: #B4553A; --on-accent: #FFFFFF; --soft: #F1E3DA; --bubble-in: #FFFFFF; --bubble-out: #F3DDD3; --ok: #2F7A4F;
+  --f-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --f-body: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #13171E; --card: #1B212B; --ink: #EDE8DF; --muted: #A3AAB8; --line: #2B3340;
+  --accent: #E58565; --on-accent: #1A1410; --soft: #3A2A25; --bubble-in: #232B37; --bubble-out: #4A2F27; --ok: #6CC391; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #13171E; --card: #1B212B; --ink: #EDE8DF; --muted: #A3AAB8; --line: #2B3340;
+  --accent: #E58565; --on-accent: #1A1410; --soft: #3A2A25; --bubble-in: #232B37; --bubble-out: #4A2F27; --ok: #6CC391; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--f-body); -webkit-font-smoothing: antialiased;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+.wrap { max-width: 1080px; margin: 0 auto; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.brand { font-family: var(--f-display); font-size: 26px; letter-spacing: -.01em; }
+.lang { display: flex; gap: 4px; }
+.lang button { background: none; border: 1px solid transparent; padding: 6px 10px; min-height: 36px; border-radius: 999px; font: 500 12px var(--f-mono); letter-spacing: .06em; color: var(--muted); cursor: pointer; }
+.lang button[aria-pressed="true"] { border-color: var(--line); color: var(--ink); background: var(--card); }
+
+.hero { padding-block: 28px 8px; max-width: 760px; }
+.eyebrow { font: 500 12px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin: 0 0 12px; }
+h1 { font: 400 clamp(34px, 6.2vw, 60px)/1.04 var(--f-display); letter-spacing: -.02em; margin: 0 0 14px; text-wrap: balance; }
+h1 em { font-style: normal; color: var(--accent); }
+.lede { color: var(--muted); font-size: 18px; margin: 0; max-width: 60ch; }
+
+.controls { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 22px 0 18px; }
+.play { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 999px; border: 0; background: var(--accent); color: var(--on-accent); font-weight: 600; cursor: pointer; }
+.dots { display: flex; gap: 6px; }
+.dots button { width: 44px; height: 44px; border: 0; background: none; cursor: pointer; display: grid; place-items: center; }
+.dots button::before { content: ""; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--muted); background: transparent; transition: .25s; }
+.dots button[aria-current="step"]::before { background: var(--accent); border-color: var(--accent); width: 14px; height: 14px; }
+.dots button.seen::before { border-color: var(--accent); }
+
+.stage { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 32px; align-items: start; }
+@media (max-width: 860px) { .stage { grid-template-columns: minmax(0, 1fr); } .phone-col { justify-self: center; width: 100%; max-width: 340px; } }
+
+/* phone */
+.phone { background: var(--card); border: 1px solid var(--line); border-radius: 34px; padding: 10px; box-shadow: 0 18px 40px -22px rgba(20, 25, 35, .45); }
+.screen { background: var(--bg); border-radius: 26px; height: 560px; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.chat-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--line); background: var(--card); }
+.avatar { width: 34px; height: 34px; border-radius: 50%; background: var(--soft); color: var(--accent); display: grid; place-items: center; font-weight: 600; font-size: 14px; }
+.chat-head b { display: block; font-size: 14px; line-height: 1.2; }
+.chat-head span { font: 400 11px var(--f-mono); color: var(--muted); }
+.thread { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 12px; transition: padding .3s;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 30px); mask-image: linear-gradient(to bottom, transparent 0, #000 30px); }
+.screen.cal-on .thread { padding-bottom: 104px; }
+.msg { max-width: 86%; padding: 8px 11px; border-radius: 14px; font-size: 13.5px; line-height: 1.38; overflow-wrap: anywhere; display: none; }
+.msg.on { display: block; animation: rise .35s ease both; }
+.msg.in { align-self: flex-start; background: var(--bubble-in); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.msg.out { align-self: flex-end; background: var(--bubble-out); border-bottom-right-radius: 4px; }
+.msg small { display: block; margin-top: 5px; font-size: 11px; color: var(--muted); }
+.typing { align-self: flex-end; display: none; gap: 4px; padding: 11px 13px; border-radius: 14px; background: var(--bubble-out); }
+.typing.on { display: flex; }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1s infinite; }
+.typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+.toast { position: absolute; left: 12px; right: 12px; top: 64px; background: var(--ink); color: var(--bg); border-radius: 14px; padding: 10px 12px; font-size: 13px; display: none; z-index: 2; }
+.toast.on { display: block; animation: drop .4s ease both; }
+.toast b { font-weight: 600; } .toast span { display: block; font: 400 11px var(--f-mono); opacity: .8; margin-top: 2px; }
+.cal { position: absolute; left: 12px; right: 12px; bottom: 12px; background: var(--card); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: 12px; padding: 10px 12px; display: none; z-index: 2; box-shadow: 0 8px 20px -12px rgba(0,0,0,.4); }
+.cal.on { display: block; animation: rise .4s ease both; }
+.cal .k { font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.cal b { display: block; font-size: 14px; margin: 2px 0; } .cal p { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+/* ledger */
+.ledger { margin: 0; padding: 0; list-style: none; }
+.cols { display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; padding: 0 0 10px; font: 500 11px var(--f-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.cols .you { color: var(--accent); }
+.row { display: grid; grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; padding: 14px 0; border-top: 1px solid var(--line); opacity: .5; transition: opacity .4s; }
+.row.done, .row.active { opacity: 1; }
+.row .t { font: 500 12px var(--f-mono); color: var(--muted); padding-top: 3px; }
+.row .s { font-size: 15px; min-width: 0; }
+.row .s b { display: block; font-weight: 600; }
+.row .s span { display: block; color: var(--muted); font-size: 13.5px; margin-top: 2px; }
+.row .y { min-width: 0; color: var(--muted); font-size: 14px; border-left: 1px dashed var(--line); padding-left: 16px; display: flex; align-items: flex-start; }
+.row .y.me { border-left: 3px solid var(--accent); background: var(--soft); border-radius: 0 12px 12px 0; padding: 10px 12px 10px 13px; color: var(--ink); flex-direction: column; }
+.row .y.me b { font-weight: 600; font-size: 15px; }
+.row .y.me span { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.row.active .s b::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: 1px; animation: blink 1.4s infinite; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.chip { font: 400 11.5px var(--f-mono); padding: 3px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); background: var(--card); }
+.chip.fact { color: var(--ink); }
+.notes { margin: 18px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); font-size: 14px; color: var(--muted); }
+.notes b { color: var(--ink); }
+.skip { text-decoration: line-through; text-decoration-color: var(--accent); }
+.foot { margin-top: 28px; color: var(--muted); font-size: 13px; max-width: 70ch; }
+
+@media (max-width: 600px) {
+  .cols { display: none; }
+  .row { grid-template-columns: 1fr; gap: 6px; }
+  .row .y { border-left: 0; padding-left: 0; }
+  .row .y.me { padding-left: 13px; border-left: 3px solid var(--accent); }
+  .row .y:not(.me)::before { content: attr(data-you) " "; font: 500 11px var(--f-mono); letter-spacing: .06em; text-transform: uppercase; margin-right: 6px; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes drop { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+@keyframes blink { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <span class="brand">Sparrow AI</span>
+    <div class="lang" role="group" aria-label="Idioma / Language"><button type="button" data-l="es" aria-pressed="true">ES</button><button type="button" data-l="en" aria-pressed="false">EN</button><button type="button" data-l="fr" aria-pressed="false">FR</button></div>
+  </header>
+
+  <section class="hero">
+    <p class="eyebrow" id="eyebrow"></p>
+    <h1 id="h1"></h1>
+    <p class="lede" id="lede"></p>
+    <div class="controls">
+      <button class="play" id="play" type="button"></button>
+      <div class="dots" id="dots" role="group"></div>
+    </div>
+  </section>
+
+  <section class="stage" aria-live="polite">
+    <div class="phone-col">
+      <div class="phone"><div class="screen">
+        <div class="chat-head"><div class="avatar">L</div><div><b id="who"></b><span id="whoSub"></span></div></div>
+        <div class="toast" id="toast"></div>
+        <div class="thread" id="thread"></div>
+        <div class="cal" id="cal"></div>
+      </div></div>
+    </div>
+    <div>
+      <div class="cols"><span></span><span id="colS"></span><span class="you" id="colY"></span></div>
+      <ol class="ledger" id="ledger"></ol>
+      <p class="notes" id="notes"></p>
+    </div>
+  </section>
+  <p class="foot" id="foot"></p>
+</div>
+
+<script>
+const TXT = {
+  es: {
+    eyebrow: "Ejemplo · así fluye un lead", h1: "El lead entra. Sparrow hace el resto. <em>Tú vas a la cita.</em>",
+    lede: "Sparrow escribe al propietario en 30 segundos desde tu número, conversa, resuelve dudas y agenda la valoración en tu Google Calendar. Solo pagas por cita agendada.",
+    play: "Reproducir", pause: "Pausar", step: "Paso", colS: "Sparrow · automático", colY: "Tú", you: "Tú",
+    who: "Laura · RE/MAX", whoSub: "desde tu número de WhatsApp",
+    toast: ["Nuevo lead", "Marta Gómez · piso · Delicias"],
+    rows: [
+      ["09:41", "Entra un lead", "Marta Gómez, piso en Delicias.", ["Formulario o CRM conectado", "Propietarios particulares de tu zona (opcional)"]],
+      ["09:41 + 30 s", "Primer WhatsApp desde tu número", "Sin que tengas que acordarte de escribir.", []],
+      ["09:44", "Conversa y resuelve dudas", "Una pregunta cada vez. Anota lo importante.", ["Vende en 3 meses", "Reformada", "95 m²"]],
+      ["09:52", "Mira tu calendario y propone dos huecos", "Solo huecos que de verdad tienes libres.", []],
+      ["09:53", "Cita agendada", "Recordatorios programados para Marta.", []],
+      ["Mar 18:00", "Marta llega preparada", "El estudio de precios de la zona, listo.", []]
+    ],
+    me: ["Valoración con Marta", "Vende en 3 meses · piso reformado · 95 m²"],
+    notes: "<b>Mientras tanto, tú no haces nada.</b> <span class='skip'>Contactar</span> · <span class='skip'>Seguir</span> · <span class='skip'>Preguntar</span> · <span class='skip'>Agendar</span> · <span class='skip'>Recordar</span>. Solo te avisa por WhatsApp si un lead necesita a una persona.",
+    foot: "Ejemplo ilustrativo con datos inventados. Los mensajes reales los escribe el asistente con lo que tú le pides en la configuración.",
+    chat: [
+      [1, "out", "Hola Marta, te escribo de parte de Laura (RE/MAX Confort), que te ofrece, sin coste ni compromiso, un estudio de mercado con los precios a los que se han vendido viviendas parecidas a la tuya en Delicias. ¿Sigues pensando en venderla?", "Soy IA. Respeto tu tiempo: si prefieres que no te escriba, respóndeme STOP y no te molesto más."],
+      [2, "in", "Sí, la quiero vender en unos 3 meses."],
+      [2, "out", "Gracias, Marta. ¿Está reformada o para actualizar?"],
+      [3, "in", "Reformada hace 3 años, 95 m²."],
+      [3, "out", "Perfecto. Laura puede pasar el martes a las 18:00 o el miércoles a las 12:30. ¿Cuál te viene mejor?"],
+      [3, "in", "El martes."],
+      [4, "out", "Hecho ✅ Martes a las 18:00 en Calle Delicias 12. Laura te llevará un estudio de precios de tu zona."]
+    ],
+    cal: ["Google Calendar · tu agenda", "Valoración · Marta Gómez", "Martes 18:00 · Calle Delicias 12"]
+  },
+  en: {
+    eyebrow: "Example · how a lead flows", h1: "The lead comes in. Sparrow does the rest. <em>You go to the meeting.</em>",
+    lede: "Sparrow messages the owner within 30 seconds from your own number, chats, answers questions and books the valuation in your Google Calendar. You only pay per booked meeting.",
+    play: "Play", pause: "Pause", step: "Step", colS: "Sparrow · automatic", colY: "You", you: "You",
+    who: "Laura · RE/MAX", whoSub: "from your WhatsApp number",
+    toast: ["New lead", "Marta Gómez · flat · Delicias"],
+    rows: [
+      ["09:41", "A lead comes in", "Marta Gómez, flat in Delicias.", ["Form or connected CRM", "Private owners in your area (optional)"]],
+      ["09:41 + 30 s", "First WhatsApp from your number", "No need to remember to write.", []],
+      ["09:44", "Chats and answers questions", "One question at a time. Notes what matters.", ["Sells in 3 months", "Renovated", "95 m²"]],
+      ["09:52", "Checks your calendar and offers two slots", "Only slots you really have free.", []],
+      ["09:53", "Meeting booked", "Reminders scheduled for Marta.", []],
+      ["Tue 18:00", "Marta arrives prepared", "The local price study is ready.", []]
+    ],
+    me: ["Valuation with Marta", "Sells in 3 months · renovated flat · 95 m²"],
+    notes: "<b>Meanwhile, you do nothing.</b> <span class='skip'>Reach out</span> · <span class='skip'>Follow up</span> · <span class='skip'>Ask</span> · <span class='skip'>Schedule</span> · <span class='skip'>Remind</span>. It only alerts you on WhatsApp if a lead needs a person.",
+    foot: "Illustrative example with made-up data. Real messages are written by the assistant following what you set up with it.",
+    chat: [
+      [1, "out", "Hi Marta, I'm writing on behalf of Laura (RE/MAX Confort), who offers you, at no cost and with no commitment, a market study with the prices similar homes to yours have sold for in Delicias. Are you still thinking of selling?", "I'm an AI. I respect your time: if you'd rather I didn't write, reply STOP and I won't bother you again."],
+      [2, "in", "Yes, I want to sell in about 3 months."],
+      [2, "out", "Thanks, Marta. Is it renovated or does it need updating?"],
+      [3, "in", "Renovated 3 years ago, 95 m²."],
+      [3, "out", "Great. Laura can come on Tuesday at 18:00 or Wednesday at 12:30. Which suits you better?"],
+      [3, "in", "Tuesday."],
+      [4, "out", "Done ✅ Tuesday at 18:00 at Calle Delicias 12. Laura will bring a price study of your area."]
+    ],
+    cal: ["Google Calendar · your agenda", "Valuation · Marta Gómez", "Tuesday 18:00 · Calle Delicias 12"]
+  },
+  fr: {
+    eyebrow: "Exemple · le parcours d'un lead", h1: "Le lead arrive. Sparrow fait le reste. <em>Vous allez au rendez-vous.</em>",
+    lede: "Sparrow écrit au propriétaire en 30 secondes depuis votre numéro, discute, répond aux questions et planifie l'estimation dans votre Google Calendar. Vous ne payez que par rendez-vous planifié.",
+    play: "Lecture", pause: "Pause", step: "Étape", colS: "Sparrow · automatique", colY: "Vous", you: "Vous",
+    who: "Laura · RE/MAX", whoSub: "depuis votre numéro WhatsApp",
+    toast: ["Nouveau lead", "Marie Gómez · appartement · Delicias"],
+    rows: [
+      ["09:41", "Un lead arrive", "Marie Gómez, appartement à Delicias.", ["Formulaire ou CRM connecté", "Propriétaires particuliers de votre zone (option)"]],
+      ["09:41 + 30 s", "Premier WhatsApp depuis votre numéro", "Sans avoir à y penser.", []],
+      ["09:44", "Discute et répond aux questions", "Une question à la fois. Note l'essentiel.", ["Vend dans 3 mois", "Rénové", "95 m²"]],
+      ["09:52", "Regarde votre agenda et propose deux créneaux", "Seulement des créneaux vraiment libres.", []],
+      ["09:53", "Rendez-vous planifié", "Rappels programmés pour Marie.", []],
+      ["Mar 18:00", "Marie arrive préparée", "L'étude de prix du secteur est prête.", []]
+    ],
+    me: ["Estimation avec Marie", "Vend dans 3 mois · appartement rénové · 95 m²"],
+    notes: "<b>Pendant ce temps, vous ne faites rien.</b> <span class='skip'>Contacter</span> · <span class='skip'>Relancer</span> · <span class='skip'>Questionner</span> · <span class='skip'>Planifier</span> · <span class='skip'>Rappeler</span>. Il ne vous prévient sur WhatsApp que si un lead a besoin d'une personne.",
+    foot: "Exemple illustratif avec des données inventées. Les vrais messages sont rédigés par l'assistant selon ce que vous réglez avec lui.",
+    chat: [
+      [1, "out", "Bonjour Marie, je vous écris de la part de Laura (RE/MAX Confort), qui vous propose, sans frais ni engagement, une étude de marché avec les prix auxquels des biens similaires au vôtre se sont vendus à Delicias. Envisagez-vous toujours de vendre ?", "Je suis une IA. Je respecte votre temps : si vous préférez que je ne vous écrive pas, répondez STOP et je ne vous dérangerai plus."],
+      [2, "in", "Oui, je veux vendre dans environ 3 mois."],
+      [2, "out", "Merci, Marie. Le bien est-il rénové ou à rafraîchir ?"],
+      [3, "in", "Rénové il y a 3 ans, 95 m²."],
+      [3, "out", "Parfait. Laura peut passer mardi à 18h00 ou mercredi à 12h30. Lequel vous convient le mieux ?"],
+      [3, "in", "Mardi."],
+      [4, "out", "C'est noté ✅ mardi à 18h00 au 12 calle Delicias. Laura viendra avec une étude de prix de votre secteur."]
+    ],
+    cal: ["Google Calendar · votre agenda", "Estimation · Marie Gómez", "Mardi 18:00 · Calle Delicias 12"]
+  }
+};
+
+const $ = (id) => document.getElementById(id);
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const STEPS = 6, STEP_MS = 5200, HOLD_MS = 7000;
+let lang = "es", step = STEPS - 1, playing = false, timer = null, timeouts = [];
+
+function later(fn, ms) { timeouts.push(setTimeout(fn, ms)); }
+function clearLater() { timeouts.forEach(clearTimeout); timeouts = []; if (timer) { clearTimeout(timer); timer = null; } }
+
+function build() {
+  const T = TXT[lang];
+  document.documentElement.lang = lang;
+  $("eyebrow").textContent = T.eyebrow; $("h1").innerHTML = T.h1; $("lede").textContent = T.lede;
+  $("who").textContent = T.who; $("whoSub").textContent = T.whoSub;
+  $("colS").textContent = T.colS; $("colY").textContent = T.colY;
+  $("notes").innerHTML = T.notes; $("foot").textContent = T.foot;
+  $("toast").innerHTML = `<b>${T.toast[0]}</b><span>${T.toast[1]}</span>`;
+  $("cal").innerHTML = `<span class="k">${T.cal[0]}</span><b>${T.cal[1]}</b><p>${T.cal[2]}</p>`;
+  $("ledger").innerHTML = T.rows.map((r, i) => {
+    const chips = r[3].map((c, k) => `<span class="chip ${i === 2 ? "fact" : ""}">${c}</span>`).join("");
+    const you = i === STEPS - 1 ? `<div class="y me" data-you="${T.you}"><b>${T.me[0]}</b><span>${T.me[1]}</span></div>` : `<div class="y" data-you="${T.you}">—</div>`;
+    return `<li class="row" data-i="${i}"><div class="t">${r[0]}</div><div class="s"><b>${r[1]}</b><span>${r[2]}</span>${chips ? `<div class="chips">${chips}</div>` : ""}</div>${you}</li>`;
+  }).join("");
+  $("thread").innerHTML = T.chat.map((m) => `<div class="msg ${m[1]}" data-s="${m[0]}">${m[2]}${m[3] ? `<small>${m[3]}</small>` : ""}</div>`).join("") + `<div class="typing" id="typing"><i></i><i></i><i></i></div>`;
+  $("dots").setAttribute("aria-label", T.step);
+  $("dots").innerHTML = T.rows.map((r, i) => `<button type="button" data-i="${i}" aria-label="${T.step} ${i + 1}: ${r[1]}"></button>`).join("");
+  document.querySelectorAll(".lang button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.l === lang));
+  $("play").textContent = playing ? T.pause : T.play;
+  show(step, true);
+}
+
+// Put the page in the state of `n` (0..5). instant = no staging, everything up to n at once.
+function show(n, instant) {
+  step = n;
+  document.querySelectorAll(".row").forEach((r) => { const i = +r.dataset.i; r.classList.toggle("done", i < n); r.classList.toggle("active", i === n); });
+  document.querySelectorAll("#dots button").forEach((b) => { const i = +b.dataset.i; b.classList.toggle("seen", i < n); if (i === n) b.setAttribute("aria-current", "step"); else b.removeAttribute("aria-current"); });
+  const msgs = [...document.querySelectorAll(".msg")];
+  msgs.forEach((m) => m.classList.toggle("on", +m.dataset.s <= n));
+  $("toast").classList.toggle("on", n === 0);
+  $("cal").classList.toggle("on", n >= 4);
+  document.querySelector(".screen").classList.toggle("cal-on", n >= 4);
+  $("typing").classList.remove("on");
+  if (instant) return;
+  // stage the messages of this step one after another, with a typing bubble before each assistant message
+  const mine = msgs.filter((m) => +m.dataset.s === n);
+  mine.forEach((m) => m.classList.remove("on"));
+  let t = 500;
+  mine.forEach((m) => {
+    if (m.classList.contains("out") && n > 1) { later(() => $("typing").classList.add("on"), t); t += 900; }
+    later(() => { $("typing").classList.remove("on"); m.classList.add("on"); }, t);
+    t += 1100;
+  });
+}
+
+function advance() {
+  if (!playing) return;
+  const last = step >= STEPS - 1;
+  timer = setTimeout(() => { if (last) { show(0); } else { show(step + 1); } advance(); }, last ? HOLD_MS : STEP_MS);
+}
+function setPlaying(on) {
+  playing = on; $("play").textContent = on ? TXT[lang].pause : TXT[lang].play;
+  clearLater();
+  if (on) { show(0); advance(); }
+}
+
+$("play").addEventListener("click", () => setPlaying(!playing));
+$("dots").addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; playing = false; $("play").textContent = TXT[lang].play; clearLater(); show(+b.dataset.i, true); });
+document.querySelectorAll(".lang button").forEach((b) => b.addEventListener("click", () => { lang = b.dataset.l; const was = playing; playing = false; clearLater(); build(); if (was) setPlaying(true); }));
+
+build();                                   // first frame: the finished story, nothing hidden
+if (!reduce) setTimeout(() => setPlaying(true), 1200);   // then it plays from the start
+</script>
