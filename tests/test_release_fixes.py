@@ -237,3 +237,17 @@ def test_a_reply_that_never_arrived_hands_the_chat_to_the_agent(clock, account):
     assert lead.status == "handoff" and lead.human_owned
     alert = [m for m in sent() if m["from"] == "sparrow"][-1]
     assert "Sí, vendo" in alert["text"] and "24 h" in alert["text"]
+
+
+def test_agency_and_zones_are_one_clean_line_for_the_whatsapp_template():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as c:
+        tok = c.post("/start", follow_redirects=False).headers["location"].split("/")[-1]
+        r = c.post(f"/api/o/{tok}/answers", json={"agency": "RE/MAX\nConfort\tSur   " + "x" * 300, "zones": "Delicias\nActur"})
+        assert r.status_code == 200
+        assert c.post(f"/api/o/{tok}/answers", content=b"{not json", headers={"content-type": "application/json"}).status_code == 400
+    with db.session_scope() as s:
+        acc = s.execute(select(Account).order_by(Account.id.desc())).scalars().first()
+        assert "\n" not in acc.agency and "\t" not in acc.agency and len(acc.agency) <= 120
+        assert acc.zones == "Delicias Actur"
