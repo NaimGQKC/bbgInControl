@@ -57,6 +57,28 @@ LEAD_FIRST_CONTACT = Template(
     },
 )
 
+LEAD_FIRST_CONTACT_V3 = Template(
+    name="lead_first_contact_v3",
+    category="MARKETING",
+    body=(
+        "Hola {{1}}, te escribo de parte de {{2}} ({{3}}), que te ofrece, sin coste ni compromiso, un estudio de mercado "
+        "con los precios a los que se han vendido viviendas parecidas a la tuya en {{4}}. ¿Sigues pensando en venderla?\n\n"
+        "Respeto tu tiempo: si prefieres que no te escriba, respóndeme STOP y no te molesto más."
+    ),
+    params=("lead_name", "agent_first_name", "agency", "zone"),
+    example=("Marta", "Laura", "RE/MAX Zaragoza", "Delicias"),
+    texts={
+        "fr": ("Bonjour {{1}}, je vous écris de la part de {{2}} ({{3}}), qui vous propose, sans frais ni engagement, une étude de marché "
+               "avec les prix auxquels des biens similaires au vôtre se sont vendus à {{4}}. Envisagez-vous toujours de vendre ?\n\n"
+               "Je respecte votre temps : si vous préférez que je ne vous écrive pas, répondez STOP et je ne vous dérangerai plus.",
+               ("Marie", "Laura", "Agence Soleil", "Lyon 3e")),
+        "en": ("Hi {{1}}, I'm writing on behalf of {{2}} ({{3}}), who offers you, at no cost and with no commitment, a market study "
+               "with the prices similar homes to yours have sold for in {{4}}. Are you still thinking of selling?\n\n"
+               "I respect your time: if you'd rather I didn't write, reply STOP and I won't bother you again.",
+               ("Marta", "Laura", "Sunrise Realty", "Delicias")),
+    },
+)
+
 LEAD_FOLLOWUP_1 = Template(
     name="lead_followup_1_v1",
     category="MARKETING",
@@ -220,7 +242,7 @@ def cold_first_contact(version: int, lang: str, body: str, privacy_url: str) -> 
 
 
 AGENT_TEMPLATES = [
-    LEAD_FIRST_CONTACT,
+    LEAD_FIRST_CONTACT_V3,
     LEAD_FOLLOWUP_1,
     LEAD_FOLLOWUP_2,
     MEETING_CONFIRMATION,
@@ -228,7 +250,7 @@ AGENT_TEMPLATES = [
     MEETING_REMINDER_2H,
 ]
 SPARROW_TEMPLATES = [AGENT_NEEDS_YOU, AGENT_ACTION_REQUIRED, AGENT_PHONE_INACTIVE, AGENT_ONBOARDING_NUDGE, AGENT_LIVE, OPS_NEEDS_HELP]
-ALL = {t.name: t for t in AGENT_TEMPLATES + SPARROW_TEMPLATES}
+ALL = {t.name: t for t in AGENT_TEMPLATES + SPARROW_TEMPLATES + [LEAD_FIRST_CONTACT]}  # v2 stays known: accounts that already have it keep using it until v3 is approved
 
 # Free-form texts (only inside the 24h window), in the lead's language: see app/lang.py (`text(key, lang)`).
 # Spanish versions kept under their old names for anything that still imports them.

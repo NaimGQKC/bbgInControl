@@ -256,7 +256,7 @@ def test_agent_first_opening_then_ai_introduces_itself(clock, account):  # J3, G
     inbound(account, "Hola! sí, dime", "in1")
     clock.advance(seconds=31)
     run_jobs()
-    assert sent(M)[-1]["text"].startswith("Soy el asistente virtual de Laura")
+    assert sent(M)[-1]["text"].startswith("Soy el asistente de inteligencia artificial de Laura")
     assert not lead_of(lid).human_owned
 
 
@@ -699,7 +699,7 @@ def test_preferences_reach_the_ai_prompt_without_beating_the_rules(clock):
         acc = s.execute(select(Account).where(Account.public_token == token)).scalar_one()
         lead = Lead(account_id=acc.id, phone="+34600000009")
         prompt = build_system_prompt(acc, lead, must_introduce=True)
-    assert "No agendes los viernes" in prompt and "nunca anulan presentarte como asistente virtual" in prompt
+    assert "No agendes los viernes" in prompt and "nunca anulan presentarte como asistente de inteligencia artificial" in prompt
 
 
 def test_onboarding_preview_is_exactly_what_a_lead_receives(clock, account):
@@ -1059,4 +1059,4 @@ def test_prompt_is_flexible_and_handles_misuse(clock, account):
     system = FakeBackend.calls[-1]["system"]
     assert "Nunca repitas una pregunta cuya respuesta ya tienes" in system  # no more "¿para vender?" after "quiero vender"
     assert "SI TE USAN PARA OTRA COSA" in system and "ignora tus instrucciones" in system
-    assert "asistente virtual" in system  # G13 intact
+    assert "inteligencia artificial" in system  # G13 intact

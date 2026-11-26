@@ -256,6 +256,16 @@ def _at_local(account: Account, base_utc: datetime, days: int, hhmm: str = "10:0
     return next_allowed_time(account, to_utc_naive(datetime.combine(d, parse_hm(hhmm), tzinfo=tz)))
 
 
+def first_contact_template(s, account: Account) -> T.Template:
+    """The newest first message Meta has approved for this agent in their language (v3), else the previous one (v2).
+    A template that Meta has not approved yet must never be sent (it would fail with 'template does not exist')."""
+    integ = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+    st = ((integ.external or {}).get("tpl_status") or {}) if integ else {}
+    if st.get(f"{T.LEAD_FIRST_CONTACT_V3.name}:{L.lead_lang(account)}") == "APPROVED":
+        return T.LEAD_FIRST_CONTACT_V3
+    return T.LEAD_FIRST_CONTACT
+
+
 def first_contact_values(account: Account, lead_name: str, zone: str) -> list[str]:
     lang = L.lead_lang(account)
     return [
@@ -364,7 +374,9 @@ def job_first_contact(s, job):
         return
     if s.execute(select(Message.id).where(Message.lead_id == lead.id, Message.direction == "out", Message.sender == "ai", Message.status != "failed")).first():
         lead.status = "contacted"  # a first message already left (the job was re-run after a crash or a timeout): never send it twice
-        lead.introduced = True
+        sent_text = s.execute(select(Message.text).where(Message.lead_id == lead.id, Message.direction == "out", Message.sender == "ai",
+                                                         Message.status != "failed").order_by(Message.id)).scalars().first() or ""
+        lead.introduced = L.has_intro(sent_text, L.lead_lang(account))
         _schedule_after_first_message(s, account, lead)
         return
     ok, why = can_contact(account, lead, kind="first")
@@ -380,9 +392,11 @@ def job_first_contact(s, job):
     if is_cold(lead):
         _cold_first_contact(s, account, lead)
         return
-    if send_to_lead(s, account, lead, kind="first", template=T.LEAD_FIRST_CONTACT, values=first_contact_values(account, lead.name, lead.zone)):
+    tpl = first_contact_template(s, account)
+    values = first_contact_values(account, lead.name, lead.zone)
+    if send_to_lead(s, account, lead, kind="first", template=tpl, values=values):
         lead.status = "contacted"
-        lead.introduced = True
+        lead.introduced = L.has_intro(tpl.render(values, L.lead_lang(account)), L.lead_lang(account))  # v3 does not say it: the AI's first reply does (G13)
         latency = (utcnow() - lead.created_at).total_seconds()
         log_event(s, "first_message_sent", account.id, lead.id, seconds_after_lead=round(latency))
         _schedule_after_first_message(s, account, lead)
@@ -408,7 +422,7 @@ def _cold_first_contact(s, account: Account, lead: Lead) -> None:
         lang = L.lead_lang(account)
         lead.status = "contacted"
         # G13 safety net: if the agent's text doesn't say it, the AI introduces itself in its first reply
-        lead.introduced = L.text("intro_marker", lang) in tpl.render(values, lang).lower()
+        lead.introduced = L.has_intro(tpl.render(values, lang), lang)
         log_event(s, "first_message_sent", account.id, lead.id, seconds_after_lead=round((utcnow() - lead.created_at).total_seconds()),
                   template=tpl.name)
         # The owner never asked us: one message, no follow-ups (they read as pressure and hurt the agent's number).
@@ -1286,7 +1300,7 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         return "second_pitch_blocked"
     lang = L.lead_lang(account)
     agent_first = first_name(account.agent_name) or L.text("your_agent", lang)
-    if not lead.introduced and L.text("intro_marker", lang) not in reply.lower():  # G13
+    if not lead.introduced and not L.has_intro(reply, lang):  # G13
         reply = L.text("intro_phrase", lang, agent_first=agent_first) + reply
     parts = [p.strip() for p in re.split(r"\n\s*\n", reply) if p.strip()][:2]
     try:

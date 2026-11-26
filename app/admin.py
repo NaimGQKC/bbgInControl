@@ -1,6 +1,7 @@
 """Internal ops console (/admin). Also what you record for Meta App Review:
 video 1 = send a message from here and show it arriving in WhatsApp; video 2 = create a template from here."""
 import html
+from datetime import timedelta
 import secrets
 from collections import Counter
 
@@ -99,6 +100,7 @@ def account_action(account_id: int, action: str = Form(...)):
                 res = onboarding.submit_templates(s, acc, agent_wa(s, acc))
             except WhatsAppError as e:
                 return _back(url, f"Error: {e}")
+            jobmod.schedule(s, "check_templates", utcnow() + timedelta(minutes=1), account_id=acc.id, dedupe_key=f"check_templates:{acc.id}", reuse=True)
             ok = sum(1 for r in res if r["ok"])
             errs = "; ".join(f"{r['name']}: {r['error']}" for r in res if not r["ok"])[:300]
             return _back(url, f"Plantillas enviadas a Meta: {ok}/{len(res)} {errs}")

@@ -88,8 +88,8 @@ TEXTS: dict[str, dict[str, str]] = {
     "conversation_start": {"es": "[Inicio de la conversación]", "fr": "[Début de la conversation]", "en": "[Start of the conversation]"},
     "agent_wrote": {"es": "[Mensaje escrito en persona por {agent_first}, no por ti]", "fr": "[Message écrit en personne par {agent_first}, pas par vous]", "en": "[Message written in person by {agent_first}, not by you]"},
     "msg_clipped": {"es": "… [mensaje recortado]", "fr": "… [message tronqué]", "en": "… [message cut]"},
-    "intro_phrase": {"es": "Soy el asistente virtual de {agent_first}. ", "fr": "Je suis l'assistant virtuel de {agent_first}. ", "en": "I'm the virtual assistant of {agent_first}. "},
-    "intro_marker": {"es": "asistente virtual", "fr": "assistant virtuel", "en": "virtual assistant"},
+    "intro_phrase": {"es": "Soy el asistente de inteligencia artificial de {agent_first}. ", "fr": "Je suis l'assistant IA de {agent_first}. ", "en": "I'm {agent_first}'s AI assistant. "},
+    "intro_marker": {"es": "inteligencia artificial", "fr": "assistant ia", "en": "ai assistant"},
     "agent_hi": {"es": "hola", "fr": "bonjour", "en": "hello"},
     "resume_ambiguous": {"es": "No he encontrado a una sola persona con ese nombre. Conversaciones en pausa: {names}", "fr": "Je n'ai pas trouvé une seule personne avec ce nom. Conversations en pause : {names}", "en": "I didn't find exactly one person with that name. Paused conversations: {names}"},
     "resume_none": {"es": "ninguna", "fr": "aucune", "en": "none"},
@@ -184,3 +184,16 @@ def property_word(ptype: str | None, lang: str) -> str:
 def text(key: str, lang: str, **kw) -> str:
     s = TEXTS[key].get(lang) or TEXTS[key]["es"]
     return s.format(**kw) if kw else s
+
+
+# Any of these in a text counts as "the assistant said what it is" (G13): the new wording and the older "virtual assistant" one
+INTRO_MARKERS = {
+    "es": ("inteligencia artificial", "asistente virtual", "asistente de ia", "asistente ia"),
+    "fr": ("intelligence artificielle", "assistant virtuel", "assistant ia", "assistant d'ia"),
+    "en": ("artificial intelligence", "virtual assistant", "ai assistant", "assistant is an ai"),
+}
+
+
+def has_intro(text: str, lang: str) -> bool:
+    t = (text or "").lower()
+    return any(m in t for m in INTRO_MARKERS.get(lang, INTRO_MARKERS["es"]))
