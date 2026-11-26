@@ -20,6 +20,11 @@ class WhatsAppError(Exception):
         self.payload = payload or {}
 
 
+class AmbiguousSend(WhatsAppError):
+    """The request went out but no answer came back (read timeout, dropped connection): Meta may or may not have the message.
+    Retrying could send it twice, so callers record it as 'unknown' and do not retry."""
+
+
 def _graph(path: str) -> str:
     return f"https://graph.facebook.com/{get_settings().graph_version}/{path.lstrip('/')}"
 
@@ -47,7 +52,12 @@ class WhatsAppClient:
 
     def _post_message(self, body: dict) -> str:
         body = {"messaging_product": "whatsapp", "recipient_type": "individual", **body}
-        r = httpx.post(_graph(f"{self.phone_number_id}/messages"), json=body, headers=self._headers, timeout=20)
+        try:
+            r = httpx.post(_graph(f"{self.phone_number_id}/messages"), json=body, headers=self._headers, timeout=20)
+        except (httpx.ConnectError, httpx.ConnectTimeout, httpx.PoolTimeout) as e:  # it never left: safe to retry
+            raise WhatsAppError(f"connection failed before sending ({type(e).__name__})") from e
+        except httpx.HTTPError as e:  # it may have left: never retry blindly
+            raise AmbiguousSend(f"no answer from WhatsApp ({type(e).__name__})") from e
         data = _check(r)
         return data["messages"][0]["id"]
 

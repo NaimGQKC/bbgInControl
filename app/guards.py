@@ -66,9 +66,9 @@ def cold_hard_stop(text: str | None) -> str | None:
 
 DEFAULT_SETTINGS = {
     # Allowed hours for first contact / follow-ups (local time). Days: 0=Monday ... 6=Sunday
-    "contact_days": [0, 1, 2, 3, 4, 5],
-    "contact_start": "09:00",
-    "contact_end": "21:00",
+    "contact_days": [0, 1, 2, 3, 4, 5, 6],
+    "contact_start": "08:00",
+    "contact_end": "22:00",
     # Valuation slots
     "slot_windows": [["10:00", "13:30"], ["16:30", "20:00"]],
     "slot_days": [0, 1, 2, 3, 4, 5],
@@ -135,6 +135,14 @@ _OPT_PHRASES = re.compile(
 _OPT_BLOCK = {"precio", "precios", "prix", "price", "prices"}  # "baja el precio" is about the price, not an opt-out
 
 
+# "no me llames por la mañana, prefiero por la tarde" is a scheduling preference, not an opt-out; "lo di de baja" is about their listing.
+_OPT_PREFERENCE = re.compile(
+    r"\b(por la (manana|tarde|noche)|en horario|horario|antes de|despues de|hasta las|a partir de|fines? de semana|mientras (trabajo|estoy)|durante|"
+    r"escribidme|escribeme|escribenos|por whatsapp|por escrito|mejor por|prefiero|prefiere)\b")
+_OPT_STRONG = re.compile(r"\b(mas|nunca|jamas|dejad?|dejen|stop|baja|arretez?|plus)\b")
+_OPT_LISTING_BAJA = re.compile(r"\b(di|dado|dio|dimos|he dado|quite|retire|retirado)\b.*\bbaja\b")
+
+
 def _plain(text: str) -> str:
     import unicodedata
     s = unicodedata.normalize("NFKD", (text or "").lower())
@@ -149,8 +157,11 @@ def is_opt_out_text(text: str) -> bool:
     words = plain.split()
     if not words or len(words) > 60:
         return False
+    if _OPT_LISTING_BAJA.search(plain) and "me" not in words:
+        return False  # "lo di de baja": about their listing
     if _OPT_PHRASES.search(plain):
-        return True
+        # a preference about WHEN or HOW to contact them is not an opt-out unless they also say "no more" / stop in some form
+        return not (_OPT_PREFERENCE.search(plain) and not _OPT_STRONG.search(plain))
     plain_opt = {_plain(w).strip() for w in OPT_OUT_WORDS}
     return len(words) <= 5 and bool(plain_opt & set(words)) and not (_OPT_BLOCK & set(words))
 
@@ -173,26 +184,32 @@ def to_utc_naive(dt_local: datetime) -> datetime:
     return dt_local.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
 
 
-def in_allowed_hours(account: Account, when_utc: datetime | None = None) -> bool:
+# Hard limits by kind of contact. The agent's settings can narrow the window, never widen it.
+WARM_LIMITS = (time(8, 0), time(22, 0), {0, 1, 2, 3, 4, 5, 6})  # the owner asked us (form, portal request): speed is the product
+COLD_LIMITS = (time(9, 0), time(21, 0), {0, 1, 2, 3, 4, 5})  # we wrote first (prospecting): Mon-Sat 09-21 only
+
+
+def _window(account: Account, cold: bool) -> tuple[time, time, set]:
     s = settings_for(account)
+    lo, hi, days = COLD_LIMITS if cold else WARM_LIMITS
+    return max(parse_hm(s["contact_start"]), lo), min(parse_hm(s["contact_end"]), hi), set(s["contact_days"]) & days
+
+
+def in_allowed_hours(account: Account, when_utc: datetime | None = None, *, cold: bool = False) -> bool:
+    start_t, end_t, days = _window(account, cold)
     local = to_local(when_utc or utcnow(), account.timezone)
-    if local.weekday() not in s["contact_days"]:
-        return False
-    # same window as next_allowed_time: never wider than 09:00-21:00 whatever the settings say
-    return max(parse_hm(s["contact_start"]), time(9, 0)) <= local.time() < min(parse_hm(s["contact_end"]), time(21, 0))
+    return local.weekday() in days and start_t <= local.time() < end_t
 
 
-def next_allowed_time(account: Account, after_utc: datetime) -> datetime:
-    """First moment >= after_utc inside allowed hours (naive UTC). Capped to 09:00-21:00 whatever the settings."""
-    s = settings_for(account)
+def next_allowed_time(account: Account, after_utc: datetime, *, cold: bool = False) -> datetime:
+    """First moment >= after_utc inside the allowed hours (naive UTC)."""
+    start_t, end_t, days = _window(account, cold)
     tz = ZoneInfo(account.timezone)
-    start_t = max(parse_hm(s["contact_start"]), time(9, 0))
-    end_t = min(parse_hm(s["contact_end"]), time(21, 0))
     local = to_local(after_utc, account.timezone)
     for _ in range(15):
         day_start = datetime.combine(local.date(), start_t, tzinfo=tz)
         day_end = datetime.combine(local.date(), end_t, tzinfo=tz)
-        if local.weekday() in s["contact_days"]:
+        if local.weekday() in days:
             if local < day_start:
                 return to_utc_naive(day_start)
             if local < day_end:
@@ -229,6 +246,6 @@ def can_contact(account: Account, lead: Lead, *, kind: str) -> tuple[bool, str]:
         return False, "hot_stage"
     if kind in ("first", "followup") and lead.lead_type == "buyer":
         return False, "buyer"  # G14
-    if kind in ("first", "followup") and not in_allowed_hours(account) and not (lead.is_test and (lead.facts or {}).get("_any_hour")):
+    if kind in ("first", "followup") and not in_allowed_hours(account, cold=is_cold(lead)) and not (lead.is_test and (lead.facts or {}).get("_any_hour")):
         return False, "outside_hours"  # G9 (the one exception: a TEST lead the operator created with "any hour")
     return True, "ok"

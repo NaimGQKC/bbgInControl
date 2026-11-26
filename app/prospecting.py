@@ -456,7 +456,7 @@ def schedule_prospecting(s) -> int:
         last = s.execute(select(Event.at).where(Event.account_id == a.id, Event.name == "prospect_run").order_by(Event.at.desc(), Event.id.desc()).limit(1)).scalar_one_or_none()
         if last and now - last < poll - timedelta(minutes=5):  # a little slack: the scan itself drifts by minutes
             continue
-        run_at = next_allowed_time(a, now)
+        run_at = next_allowed_time(a, now, cold=True)
         key = f"prospect:{a.id}:{run_at:%Y-%m-%dT%H}"
         if s.execute(select(Job.id).where(Job.dedupe_key == key)).first() is None:
             jobs.schedule(s, "prospect", run_at, account_id=a.id, dedupe_key=key)
@@ -490,9 +490,9 @@ def job_prospect(s, job):
     account = s.get(Account, job.account_id)
     if account is None:
         return
-    if not in_allowed_hours(account):  # fetch only when the first message can follow right away
+    if not in_allowed_hours(account, cold=True):  # fetch only when the first message can follow right away
         job.status = "pending"
-        job.run_at = next_allowed_time(account, utcnow())
+        job.run_at = next_allowed_time(account, utcnow(), cold=True)
         return
     try:
         run_for_account(s, account)

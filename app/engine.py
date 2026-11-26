@@ -38,7 +38,7 @@ from .models import Account, Event, Integration, Job, Lead, LlmTurn, Meeting, Me
 from .prompt import build_system_prompt
 from .transcribe import transcribe
 from . import lang as L
-from .whatsapp import FakeWhatsApp, WhatsAppClient, WhatsAppError
+from .whatsapp import AmbiguousSend, FakeWhatsApp, WhatsAppClient, WhatsAppError
 
 log = logging.getLogger("sparrow.engine")
 _booking_locks: dict[int, threading.Lock] = {}
@@ -119,6 +119,13 @@ def send_to_lead(s, account: Account, lead: Lead, *, kind: str, text: str | None
             wid = wa.send_text(lead.phone, text)
             _store_out(s, account, lead, sender=sender, type_="text", text=text, wa_id=wid)
         s.commit()  # the message is out: never lose its record (and never resend it on a retry)
+    except AmbiguousSend as e:  # Meta may have it: record it, tell nobody it failed, never send it again on a retry
+        _store_out(s, account, lead, sender=sender, type_="template" if template else "text",
+                   text=template.render(values or [], lang) if template else text or "", template_name=template.name if template else "",
+                   status="unknown", error=str(e))
+        log_event(s, "send_unknown", account.id, lead.id, error=str(e))
+        s.commit()
+        return True
     except WhatsAppError as e:
         _store_out(s, account, lead, sender=sender, type_="template" if template else "text",
                    text=template.render(values or [], lang) if template else text or "", template_name=template.name if template else "",
@@ -227,7 +234,7 @@ def ingest_lead(s, account: Account, data: dict, *, is_test: bool = False, any_h
         log_event(s, "lead_skipped", account.id, lead.id, reason=skip)
         return lead, f"skipped:{skip}"
 
-    run_at = next_allowed_time(account, utcnow() + timedelta(seconds=get_settings().first_message_delay))
+    run_at = next_allowed_time(account, utcnow() + timedelta(seconds=get_settings().first_message_delay), cold=is_cold(lead))
     if is_test and any_hour:  # admin-only rehearsal switch: a TEST lead the operator ticked "any hour" skips the 09-21 window (never a real owner)
         lead.facts = {**(lead.facts or {}), "_any_hour": True}
         run_at = utcnow() + timedelta(seconds=get_settings().first_message_delay)
@@ -328,7 +335,7 @@ def release_cold_queue(s, account: Account) -> int:
     """The cold template was just approved: re-arm the first message of cold leads that were waiting for it
     (spaced 2 minutes apart, inside allowed hours; can_contact still decides at send time)."""
     waiting = [l for l in s.execute(select(Lead).where(Lead.account_id == account.id, Lead.status == "queued")).scalars() if is_cold(l)]
-    start = next_allowed_time(account, utcnow())
+    start = next_allowed_time(account, utcnow(), cold=True)
     for i, lead in enumerate(waiting):
         jobs.schedule(s, "first_contact", start + timedelta(minutes=2 * i), lead_id=lead.id, account_id=account.id,
                       dedupe_key=f"first:{lead.id}", reuse=True)
@@ -355,10 +362,13 @@ def job_first_contact(s, job):
     account, lead = _load(s, job)
     if lead.status not in ("queued", "new"):
         return
+    if s.execute(select(Message.id).where(Message.lead_id == lead.id, Message.direction == "out", Message.sender == "ai", Message.status != "failed")).first():
+        lead.status = "contacted"  # a first message already left (the job was re-run after a crash or a timeout): never send it twice
+        return
     ok, why = can_contact(account, lead, kind="first")
     if why == "outside_hours":
         job.status = "pending"
-        job.run_at = next_allowed_time(account, utcnow())
+        job.run_at = next_allowed_time(account, utcnow(), cold=is_cold(lead))
         return
     if not ok:
         if why != "account_not_live":  # a not-yet-live account keeps the lead queued; any other block is final
@@ -478,7 +488,8 @@ def job_reminder(s, job):
 def job_ai_turn_failed(s, job):  # G10: fail closed
     account, lead = _load(s, job)
     if lead.status not in ("handoff", "opted_out"):
-        do_handoff(s, account, lead, L.text("why_tech_error", L.lead_lang(account)), notify_lead=False)
+        log_event(s, "ai_unavailable", account.id, lead.id, error=(job.last_error or "")[:300])
+        do_handoff(s, account, lead, L.text("why_ai_unavailable", L.lead_lang(account)))
 
 
 @jobs.handler("first_contact:failed")
@@ -492,6 +503,43 @@ def job_first_contact_failed(s, job):
     undeliverable = "131026" in (job.last_error or "")  # Meta: the number cannot receive WhatsApp
     why = L.text("why_first_failed" if undeliverable else "why_first_failed_tech", L.lead_lang(account))
     alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), why])
+
+
+@jobs.handler("watchdog")
+def job_watchdog(s, job):
+    """Every 5 minutes: tells the operator on WhatsApp when production is not healthy (failed or late jobs, webhook events that
+    could not be processed, sends with no answer from Meta, the AI down). One message per change, or every 2 hours while it lasts."""
+    now = utcnow()
+    nxt = now + timedelta(minutes=5)
+    jobs.schedule(s, "watchdog", nxt, dedupe_key=f"watchdog:{nxt:%Y-%m-%d-%H-%M}")
+    day, hour = now - timedelta(hours=24), now - timedelta(hours=1)
+    problems = {}
+    failed = s.execute(select(func.count(Job.id)).where(Job.status == "failed", Job.run_at > day)).scalar_one()
+    late = s.execute(select(func.count(Job.id)).where(Job.status == "pending", Job.run_at < now - timedelta(minutes=5))).scalar_one()
+    from .models import WebhookEvent  # local: models is imported above, this keeps the block readable
+
+    stuck_events = s.execute(select(func.count(WebhookEvent.id)).where(
+        WebhookEvent.processed_at.is_(None), WebhookEvent.received_at > day,
+        WebhookEvent.error.startswith("[3]") | (WebhookEvent.received_at < now - timedelta(minutes=5)))).scalar_one()
+    noisy = {name: n for name, n in s.execute(select(Event.name, func.count(Event.id)).where(
+        Event.name.in_(["send_unknown", "alert_failed", "alert_not_sent", "ai_unavailable", "send_failed"]), Event.at > hour).group_by(Event.name)).all()}
+    if failed:
+        problems["jobs_failed_24h"] = failed
+    if late:
+        problems["jobs_late"] = late
+    if stuck_events:
+        problems["webhook_events_stuck"] = stuck_events
+    problems.update({k: v for k, v in noisy.items() if v})
+    if not problems:
+        return
+    signature = ",".join(f"{k}={v}" for k, v in sorted(problems.items()))
+    last = s.execute(select(Event).where(Event.name == "watchdog_alert").order_by(Event.id.desc())).scalars().first()
+    if last and last.data.get("signature") == signature and last.at > now - timedelta(hours=2):
+        return
+    account = s.execute(select(Account).order_by(Account.id)).scalars().first()
+    log_event(s, "watchdog_alert", None, None, signature=signature)
+    if account is not None:
+        alert_ops(s, account, T.OPS_NEEDS_HELP, ["Sparrow watchdog", "producción", "-", signature[:150]])
 
 
 @jobs.handler("google_check")
@@ -1029,6 +1077,18 @@ def _ai_over_limit(s, account: Account, lead: Lead) -> str | None:
     return None
 
 
+def _is_transient(e: Exception) -> bool:
+    """A timeout, a dropped connection, a rate limit or a 5xx from the model provider: worth trying again in a minute."""
+    import httpx
+
+    if isinstance(e, (TimeoutError, ConnectionError, httpx.TransportError)):
+        return True
+    if type(e).__name__ in {"APITimeoutError", "APIConnectionError", "RateLimitError", "InternalServerError"}:
+        return True
+    code = getattr(e, "status_code", None) or getattr(getattr(e, "response", None), "status_code", None)
+    return code in (408, 409, 425, 429, 500, 502, 503, 504)
+
+
 def run_ai_turn(s, account: Account, lead: Lead) -> str:
     ok, why = can_contact(account, lead, kind="ai_reply")
     if not ok:
@@ -1046,6 +1106,10 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         if full.startswith("lead"):
             do_handoff(s, account, lead, L.text("why_limit", L.lead_lang(account)))
             return "limit_handoff"
+        today = utcnow() - timedelta(hours=24)  # one alert a day for the whole agent (not one per owner): the chats stay visible in their own WhatsApp Business app
+        if not s.execute(select(Event.id).where(Event.name == "ai_account_cap_alert", Event.account_id == account.id, Event.at > today)).first():
+            log_event(s, "ai_account_cap_alert", account.id, lead.id)
+            alert_agent(s, account, T.AGENT_NEEDS_YOU, [L.agent_hi(account), lead_summary(lead), L.text("why_account_cap", L.lead_lang(account))])
         return "account_budget"
 
     started = utcnow()
@@ -1084,6 +1148,9 @@ def run_ai_turn(s, account: Account, lead: Lead) -> str:
         reply, transcript, model = run_tool_loop(system, messages, execute, stop_after=lambda: state["terminal"] is not None)
         turn.transcript, turn.reply, turn.model = transcript, reply, model
     except Exception as e:  # G10: never guess, hand over
+        if _is_transient(e):
+            log.warning("LLM turn for lead %s hit a temporary error (%r): the job will retry", lead.id, e)
+            raise  # jobs.run_job retries up to 3 times; ai_turn:failed then hands over and tells the agent
         log.exception("LLM turn failed for lead %s", lead.id)
         turn.error = repr(e)[:2000]
         turn.latency_ms = int((time.time() - t0) * 1000)

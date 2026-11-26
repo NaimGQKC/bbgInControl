@@ -123,14 +123,15 @@ def process_event(event_id: int) -> None:
             log.exception("webhook processing failed")
             s.rollback()
             ev = s.get(WebhookEvent, event_id)
-            ev.error = repr(e)[:2000]
+            tries = (int(ev.error[1]) if ev.error[:1] == "[" and ev.error[1:2].isdigit() else 0) + 1
+            ev.error = f"[{tries}] {repr(e)}"[:2000]  # the sweep retries it until tries reaches 3; the watchdog reports the ones that stay broken
 
 
 def sweep_unprocessed() -> int:
     """Worker safety net: events received but never processed (e.g. a deploy right after answering 200)."""
     with session_scope() as s:
         ids = [i for (i,) in s.execute(select(WebhookEvent.id).where(
-            WebhookEvent.processed_at.is_(None), WebhookEvent.error == "",
+            WebhookEvent.processed_at.is_(None), WebhookEvent.error.in_(["", "[1]", "[2]"]) | WebhookEvent.error.startswith("[1]") | WebhookEvent.error.startswith("[2]"),
             WebhookEvent.received_at < utcnow() - timedelta(seconds=60)).limit(20)).all()]
     for i in ids:
         process_event(i)

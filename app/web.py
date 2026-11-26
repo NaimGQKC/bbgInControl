@@ -6,10 +6,12 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
+from datetime import timedelta
+
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from . import casafari, coldmsg, gcal, i18n, i18n_onb, lang as L, onboarding, templates as T
 from .gcal import CalendarError
@@ -18,7 +20,7 @@ from .db import session_scope, utcnow
 from .engine import compute_free_slots, first_contact_values, ingest_lead, log_event
 from .guards import normalize_phone, tidy_name
 from .intake import from_lystos, normalize
-from .models import Account, Integration
+from .models import Account, Integration, Job
 
 log = logging.getLogger("sparrow.web")
 router = APIRouter()
@@ -629,4 +631,15 @@ def data_deletion(request: Request):
 
 @router.get("/health")
 def health():
+    """Used by an external uptime check: 503 when the database does not answer or the queue is stuck (a due job waiting > 5 min)."""
+    from sqlalchemy import text
+
+    try:
+        with session_scope() as s:
+            s.execute(text("SELECT 1"))
+            late = s.execute(select(func.count(Job.id)).where(Job.status == "pending", Job.run_at < utcnow() - timedelta(minutes=5))).scalar_one()
+    except Exception:
+        return JSONResponse({"ok": False, "error": "database"}, 503)
+    if late:
+        return JSONResponse({"ok": False, "error": "queue", "late_jobs": late}, 503)
     return {"ok": True}
