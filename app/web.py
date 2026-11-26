@@ -96,7 +96,7 @@ async def start(request: Request):
         form = await request.form()
     except Exception:
         form = {}
-    clean = lambda k, n=200: str(form.get(k, "") or "").strip()[:n]
+    clean = lambda k, n=200: " ".join(str(form.get(k, "") or "").split())[:n]  # one line: these end up in WhatsApp template parameters
     with session_scope() as s:
         acc = Account()
         s.add(acc)
@@ -152,12 +152,19 @@ def api_state(token: str):
 
 @router.post("/api/o/{token}/answers")
 async def api_answers(token: str, request: Request):
-    data = await request.json()
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "Petición no válida."}, 400)
     with session_scope() as s:
         acc = _account_by_token(s, token)
         for f in ("agent_name", "agency", "zones", "email", "extra_context"):
             if f in data:
                 v = _nobrackets(str(data[f]).strip()[:500])
+                if f != "extra_context":  # these go into WhatsApp template parameters: Meta rejects newlines and tabs there
+                    v = " ".join(v.split())[: 120 if f == "agency" else 500]
                 setattr(acc, f, tidy_name(v) if f == "agent_name" else v)
         if data.get("lead_lang") in L.LANGS and data["lead_lang"] != L.lead_lang(acc):
             onboarding.change_lead_lang(s, acc, data["lead_lang"])

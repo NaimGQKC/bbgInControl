@@ -134,7 +134,7 @@ TEXTS: dict[str, dict[str, str]] = {
     "why_delivery_failed": {"es": "WhatsApp no entregó el mensaje: {cause}. Escríbele o llámale tú", "fr": "WhatsApp n'a pas livré le message : {cause}. Écrivez-lui ou appelez-le vous-même", "en": "WhatsApp did not deliver the message: {cause}. Please write or call them yourself"},
     "cause_no_whatsapp": {"es": "el número no tiene WhatsApp o es fijo", "fr": "le numéro n'a pas WhatsApp ou est un fixe", "en": "the number has no WhatsApp or is a landline"},
     "cause_window": {"es": "pasaron más de 24 h desde su último mensaje", "fr": "plus de 24 h depuis son dernier message", "en": "more than 24 h since their last message"},
-    "cause_payment": {"es": "problema de pago en la cuenta de WhatsApp (lo revisamos)", "fr": "problème de paiement sur le compte WhatsApp (nous vérifions)", "en": "payment problem on the WhatsApp account (we are checking)"},
+    "cause_payment": {"es": "a tu cuenta de WhatsApp Business le falta un método de pago (WhatsApp Manager → Métodos de pago): añádelo y vuelve a intentarlo", "fr": "il manque un moyen de paiement sur ton compte WhatsApp Business (WhatsApp Manager → Moyens de paiement) : ajoute-le et réessaie", "en": "your WhatsApp Business account has no payment method (WhatsApp Manager → Payment methods): add one and try again"},
     "cause_other": {"es": "fallo técnico (código {code})", "fr": "problème technique (code {code})", "en": "technical problem (code {code})"},
     "booked_fallback": {
         "es": "Perfecto {name}, tu cita con {agent} queda confirmada para el {when}. Si necesitas cambiarla, escríbeme por aquí.",
