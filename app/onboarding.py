@@ -339,6 +339,10 @@ def job_check_templates(s, job):
     except WhatsAppError as e:
         status, reasons, err = {}, {}, str(e)
         log.warning("template check failed: %s", err)
+    lang = L.lead_lang(account)
+    integ_row = s.execute(select(Integration).where(Integration.account_id == account.id, Integration.provider == "meta")).scalar_one_or_none()
+    if integ_row is not None and status:  # remembered so the first message can use the newest approved text (engine.first_contact_template)
+        integ_row.external = {**(integ_row.external or {}), "tpl_status": {f"{n}:{lg}": st for (n, lg), st in status.items() if n.startswith("lead_first_contact")}}
     cold = refresh_cold_status(s, account, status, reasons)
     since = job.created_at
     try:
@@ -346,7 +350,11 @@ def job_check_templates(s, job):
     except ValueError:
         pass
     keep_checking = utcnow() - since < timedelta(days=3)
-    first = status.get((T.LEAD_FIRST_CONTACT.name, L.lead_lang(account)))
+    v3 = status.get((T.LEAD_FIRST_CONTACT_V3.name, lang))
+    v2 = status.get((T.LEAD_FIRST_CONTACT.name, lang))
+    known = [x for x in (v3, v2) if x]
+    first = "APPROVED" if "APPROVED" in known else ("REJECTED" if known and all(x == "REJECTED" for x in known) else None)
+    v3_waiting = v3 not in (None, "APPROVED", "REJECTED")  # still with Meta: keep checking so the newer text is used as soon as it is approved
     if first == "APPROVED":
         if account.status == "onboarding":
             account.status = "live"
@@ -357,7 +365,7 @@ def job_check_templates(s, job):
             from .engine import rearm_queued_leads
             prospecting.activate_if_requested(s, account)
             rearm_queued_leads(s, account)
-        again = cold == "pending"  # only the agent's cold template is still waiting for Meta
+        again = cold == "pending" or v3_waiting  # only the newer first message or the agent's cold template is still waiting for Meta
     elif first == "REJECTED":
         log_event(s, "template_rejected", account.id, template=T.LEAD_FIRST_CONTACT.name)
         alert_agent(s, account, T.AGENT_ACTION_REQUIRED, [L.agent_hi(account), L.text("alert_template_rejected", L.lead_lang(account))])

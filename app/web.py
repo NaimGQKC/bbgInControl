@@ -13,6 +13,7 @@ from fastapi.templating import Jinja2Templates
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import func, select
 
+from .engine import first_contact_template as engine_first_template
 from . import casafari, coldmsg, gcal, i18n, i18n_onb, lang as L, onboarding, templates as T
 from .gcal import CalendarError
 from .config import get_settings
@@ -73,7 +74,7 @@ def _state(s, acc: Account) -> dict:
         "lead_lang_set": "lang" in (acc.settings or {}),
         "cc": L.cc_for(acc),
         # what a new owner will receive from their number, with a made-up lead name
-        "first_message": T.LEAD_FIRST_CONTACT.render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
+        "first_message": (engine_first_template(s, acc) if acc.status == "live" else T.LEAD_FIRST_CONTACT_V3).render(first_contact_values(acc, {"es": "Marta", "fr": "Marie", "en": "Emma"}[L.lead_lang(acc)], ""), L.lead_lang(acc)) if acc.agent_name else "",
         "prospecting": _prospecting_state(acc) if _prospecting_offered(acc) else None,  # hidden until the feature is switched on (Spain only)
         "integrations": integrations,
         "meta_payment": (integrations.get("meta") or {}).get("payment_state", ""),  # ok | missing | unknown | "" (not checked yet)

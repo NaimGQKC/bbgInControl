@@ -83,7 +83,7 @@ def test_the_ai_speaks_french_and_introduces_itself_in_french(clock, fr_account)
         from app.prompt import build_system_prompt
 
         prompt = build_system_prompt(a, s.get(Lead, lid), must_introduce=True)
-    assert "assistant virtuel" in prompt and "Vouvoiement" in prompt and "heure de France" in prompt and "STOP" in prompt
+    assert "assistant IA" in prompt and "Vouvoiement" in prompt and "heure de France" in prompt and "STOP" in prompt
 
 
 def test_g13_french_intro_is_added_when_the_model_forgets(clock, fr_account):
@@ -96,7 +96,7 @@ def test_g13_french_intro_is_added_when_the_model_forgets(clock, fr_account):
     inbound(fr_account, "Bonjour", "in1", phone=P)
     clock.advance(seconds=31)
     run_jobs()
-    assert sent(P)[-1]["text"].startswith("Je suis l'assistant virtuel de Laura. ")
+    assert sent(P)[-1]["text"].startswith("Je suis l'assistant IA de Laura. ")
 
 
 def test_slots_dates_and_the_calendar_event_are_in_french(clock, fr_account):
@@ -203,7 +203,7 @@ def test_onboarding_picks_the_owners_language_and_country(clock):
         assert st["lead_lang"] == "fr" and st["cc"] == "33"
         assert c.post(f"/api/o/{token}/answers", json={"personal_whatsapp": "06 12 34 56 78"}).json()["answers"]["personal_whatsapp"] == "+33612345678"
         r = c.post(f"/api/o/{token}/answers", json={"agent_name": "Laura Martin", "lead_lang": "en"}).json()
-        assert r["lead_lang"] == "en" and r["first_message"].startswith("Hi Emma, I'm the virtual assistant of Laura")
+        assert r["lead_lang"] == "en" and r["first_message"].startswith("Hi Emma, I'm writing on behalf of Laura")
         assert c.post(f"/api/o/{token}/answers", json={"lead_lang": "xx"}).json()["lead_lang"] == "en"  # unknown languages are ignored
 
 

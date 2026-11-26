@@ -536,3 +536,40 @@ def test_the_first_message_guard_still_schedules_the_follow_ups(clock, account):
         engine.job_first_contact(s, job)
         s.flush()
         assert len(s.execute(select(Job).where(Job.lead_id == lid, Job.type == "followup")).scalars().all()) == 2
+
+
+def _approve_v3(account):
+    from app.models import Integration
+    with db.session_scope() as s:
+        integ = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "meta")).scalar_one()
+        integ.external = {**integ.external, "tpl_status": {"lead_first_contact_v3:es": "APPROVED", "lead_first_contact_v2:es": "APPROVED"}}
+
+
+def test_new_first_message_does_not_mention_the_ai_but_the_first_reply_always_does(clock, account):
+    _approve_v3(account)
+    lid, _ = ingest(account)
+    clock.advance(seconds=31)
+    run_jobs()
+    first = sent(M)[0]
+    assert first["template"] == "lead_first_contact_v3"
+    assert first["text"].startswith("Hola Marta, te escribo de parte de Laura (RE/MAX Confort)")
+    assert "asistente" not in first["text"].lower() and "STOP" in first["text"]
+    assert lead_of(lid).introduced is False  # the disclosure is still owed
+    FakeBackend.push({"text": "Perfecto, gracias. ¿Lo tienes reformado o para actualizar?"})  # the model forgets to say what it is
+    inbound(account, "Sí, sigo pensando en venderlo", "in1")
+    clock.advance(seconds=31)
+    run_jobs()
+    assert sent(M)[-1]["text"].startswith("Soy el asistente de inteligencia artificial de Laura. ")  # added by code: agents cannot remove it
+    assert lead_of(lid).introduced is True
+
+
+def test_until_meta_approves_v3_the_previous_first_message_is_used(clock, account):
+    from app.models import Integration
+    with db.session_scope() as s:
+        integ = s.execute(select(Integration).where(Integration.account_id == account, Integration.provider == "meta")).scalar_one()
+        integ.external = {**integ.external, "tpl_status": {"lead_first_contact_v3:es": "PENDING", "lead_first_contact_v2:es": "APPROVED"}}
+    lid, _ = ingest(account)
+    clock.advance(seconds=31)
+    run_jobs()
+    assert sent(M)[0]["template"] == "lead_first_contact_v2"  # a template Meta has not approved is never sent
+    assert lead_of(lid).introduced is True  # v2 says "asistente virtual" itself

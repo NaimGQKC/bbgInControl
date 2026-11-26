@@ -122,7 +122,7 @@ def test_go_live_does_not_wait_for_the_cold_template_and_rejection_alerts(accoun
     with db.session_scope() as s:
         onboarding.connect_meta(s, s.get(Account, account), code="c", waba_id="w1")
     names = [t["name"] for t in FakeWhatsApp.created_templates]
-    assert "cold_first_contact_v1" in names and T.LEAD_FIRST_CONTACT.name in names
+    assert "cold_first_contact_v1" in names and T.LEAD_FIRST_CONTACT_V3.name in names
     verdict = {"cold_first_contact_v1": "PENDING"}
     monkeypatch.setattr(FakeWhatsApp, "list_templates", lambda self: [
         {"name": t["name"], "language": t["language"], "category": t["category"], "status": verdict.get(t["name"], "APPROVED"),
@@ -214,7 +214,7 @@ def test_preview_is_the_sample_with_the_footer(account):
 
 def test_cold_prompt_in_three_languages_keeps_g13_and_hides_the_source(account):
     lead_id = add_cold_lead(account)
-    marker = {"es": "asistente virtual de Laura", "fr": "assistant virtuel de Laura", "en": "virtual assistant of Laura"}
+    marker = {"es": "asistente de inteligencia artificial de Laura", "fr": "assistant IA de Laura", "en": "AI assistant of Laura"}
     header = {"es": "CONTACTADO EN FRÍO", "fr": "CONTACTÉ À FROID", "en": "CONTACTED COLD"}
     for lang in ("es", "fr", "en"):
         with db.session_scope() as s:
